@@ -262,25 +262,29 @@ def main(
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter(log_format))
 
-        # Root logger
+        # Root logger - set to WARNING to suppress third-party library noise
         root_logger = logging.getLogger()
-        root_logger.setLevel(logging.DEBUG)
-        root_logger.addHandler(file_handler)
+        root_logger.setLevel(logging.WARNING)
+
+        # Enable DEBUG for our package only
+        claude_logger = logging.getLogger('claude_code')
+        claude_logger.setLevel(logging.DEBUG)
+        claude_logger.addHandler(file_handler)
 
         if debug:
             # Also log to console if --debug
             console_handler = logging.StreamHandler()
             console_handler.setLevel(logging.DEBUG)
             console_handler.setFormatter(logging.Formatter(log_format))
-            root_logger.addHandler(console_handler)
+            claude_logger.addHandler(console_handler)
 
         click.echo(click.style(f"Debug logging to: {log_path}", fg="yellow"))
     elif debug:
-        # Console only
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format=log_format
-        )
+        # Console only - suppress third-party noise
+        logging.basicConfig(level=logging.WARNING, format=log_format)
+        claude_logger = logging.getLogger('claude_code')
+        claude_logger.setLevel(logging.DEBUG)
+        claude_logger.addHandler(logging.StreamHandler())
         click.echo(click.style("Debug logging enabled", fg="yellow"))
 
     # Load environment variables
