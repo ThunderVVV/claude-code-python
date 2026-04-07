@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Dict, List, Optional, Callable
+
+logger = logging.getLogger(__name__)
 
 from claude_code.core.messages import (
     ContentBlock,
@@ -268,6 +271,11 @@ class QueryEngine:
                 tool_use_blocks = self._client.tool_calls_to_content_blocks(accumulated_tool_calls)
                 content_blocks.extend(tool_use_blocks)
 
+                # Debug logging
+                logger.debug(f"Stream completed: stop_reason={stop_reason}, text_len={len(current_text)}, tool_calls={len(tool_use_blocks)}")
+                for tc in accumulated_tool_calls:
+                    logger.debug(f"  Tool call delta: id={tc.id}, name={tc.name}, args_len={len(tc.arguments)}")
+
                 # Create assistant message
                 assistant_message = Message.assistant_message(
                     content_blocks,
@@ -279,12 +287,15 @@ class QueryEngine:
                 # Check if we have tool calls to execute
                 if not tool_use_blocks:
                     # No tool calls - we're done
+                    logger.debug(f"No tool calls, ending turn with stop_reason={stop_reason}")
                     yield TurnCompleteEvent(
                         turn=self.state.current_turn + 1,
                         has_more_turns=False,
                         stop_reason=stop_reason,
                     )
                     return
+
+                logger.debug(f"Executing {len(tool_use_blocks)} tool calls")
 
                 # Execute tool calls
                 tool_results: List[tuple] = []
@@ -342,6 +353,8 @@ class QueryEngine:
                 # Check if we should continue
                 has_more = self.state.current_turn < self.config.max_turns
 
+                logger.debug(f"Turn {self.state.current_turn} complete, has_more={has_more}, messages_count={len(self.state.messages)}")
+
                 yield TurnCompleteEvent(
                     turn=self.state.current_turn,
                     has_more_turns=has_more,
@@ -349,6 +362,7 @@ class QueryEngine:
                 )
 
                 if not has_more:
+                    logger.debug("Max turns reached, ending query")
                     return
 
             except APINetworkError as e:
