@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
+from datetime import datetime
 from typing import Optional
 
 import click
@@ -215,7 +217,13 @@ async def run_cli_mode(
 @click.option(
     "--debug",
     is_flag=True,
-    help="Enable debug logging",
+    help="Enable debug logging to console",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(),
+    default=None,
+    help="Path to write debug log file (default: claude-code-debug.log in current directory if --debug or --tui)",
 )
 @click.version_option(version="0.1.0", prog_name="claude-code-python")
 def main(
@@ -227,18 +235,51 @@ def main(
     env_file: Optional[str],
     max_turns: int,
     debug: bool,
+    log_file: Optional[str],
 ) -> None:
     """Claude Code Python - AI programming assistant
 
     A Python implementation of Claude Code that helps with software engineering tasks.
     Uses OpenAI-compatible APIs to connect to various LLM providers.
     """
-    # Enable debug logging if requested
-    if debug:
-        import logging
+    # Set up logging
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    # Determine log file path
+    if log_file:
+        log_path = log_file
+    elif debug or tui:
+        # Default log file for TUI or debug mode
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_path = f"claude-code-debug-{timestamp}.log"
+    else:
+        log_path = None
+
+    # Configure logging
+    if log_path:
+        # File handler for debug logging
+        file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter(log_format))
+
+        # Root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.DEBUG)
+        root_logger.addHandler(file_handler)
+
+        if debug:
+            # Also log to console if --debug
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.DEBUG)
+            console_handler.setFormatter(logging.Formatter(log_format))
+            root_logger.addHandler(console_handler)
+
+        click.echo(click.style(f"Debug logging to: {log_path}", fg="yellow"))
+    elif debug:
+        # Console only
         logging.basicConfig(
             level=logging.DEBUG,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            format=log_format
         )
         click.echo(click.style("Debug logging enabled", fg="yellow"))
 
