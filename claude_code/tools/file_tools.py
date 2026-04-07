@@ -67,8 +67,7 @@ Usage:
 - By default, it reads up to 2000 lines starting from the beginning of the file
 - You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
 - Results are returned using cat -n format, with line numbers starting at 1
-- This tool can only read files, not directories. To read a directory, use an ls command via the Bash tool.
-- You will regularly be asked to read screenshots. If the user provides a path to a screenshot, ALWAYS use this tool to view the file at the path. This tool will work with all temporary file paths.
+- This tool can only read text files, not directories, images, PDFs, or binary files. To read a directory, use an ls command via the Bash tool.
 - If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents."""
     input_schema = ToolInputSchema(
         properties={
