@@ -1,0 +1,454 @@
+
+"""Core query engine and execution logic - aligned with TypeScript query.ts and QueryEngine.ts"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import uuid
+from dataclasses import dataclass, field
+from typing import Any, AsyncGenerator, Dict, List, Optional, Callable
+
+from claude_code.core.messages import (
+    ContentBlock,
+    Message,
+    MessageRole,
+    QueryState,
+    QueryEvent,
+    TextContent,
+    ToolResultContent,
+    ToolUseContent,
+    Usage,
+    TextEvent,
+    ToolUseEvent,
+    ToolResultEvent,
+    MessageCompleteEvent,
+    TurnCompleteEvent,
+    RequestStartEvent,
+    ErrorEvent,
+    generate_uuid,
+)
+from claude_code.core.tools import ToolContext, ToolRegistry, find_tool_by_name
+from claude_code.services.openai_client import (
+    OpenAIClient,
+    OpenAIClientConfig,
+    ToolCallDelta,
+    create_default_system_prompt,
+    build_context_message,
+    APIError,
+    APINetworkError,
+)
+
+
+@dataclass
+class QueryConfig:
+    """Configuration for the query engine"""
+    max_turns: int = 20
+    stream: bool = True
+    system_prompt: str = ""
+    working_directory: str = ""
+
+
+@dataclass
+class QueryResult:
+    """Result of a query execution"""
+    success: bool = True
+    text: str = ""
+    stop_reason: str = "end_turn"
+    num_turns: int = 0
+    error: Optional[str] = None
+    usage: Optional[Usage] = None
+
+
+class QueryEngine:
+    """
+    Core query engine that handles the conversation loop.
+
+    Aligned with TypeScript QueryEngine class in QueryEngine.ts.
+    One QueryEngine per conversation. Each submit_message() call starts a new
+    turn within the same conversation. State (messages, usage, etc.) persists
+    across turns.
+    """
+
+    def __init__(
+        self,
+        client_config: OpenAIClientConfig,
+        tool_registry: ToolRegistry,
+        config: Optional[QueryConfig] = None,
+    ):
+        self.client_config = client_config
+        self.tool_registry = tool_registry
+        self.config = config or QueryConfig()
+
+        # Mutable state
+        self.state = QueryState()
+        self._client: Optional[OpenAIClient] = None
+        self._session_id = generate_uuid()
+        self._is_initialized = False
+
+        # Working directory
+        self._cwd = self.config.working_directory or os.getcwd()
+
+    async def initialize(self) -> None:
+        """Initialize the engine (create HTTP client)"""
+        if not self._is_initialized:
+            self._client = OpenAIClient(self.client_config)
+            self._is_initialized = True
+
+    async def close(self) -> None:
+        """Close the engine and release resources"""
+        if self._client:
+            await self._client.close()
+            self._client = None
+        self._is_initialized = False
+
+    async def __aenter__(self) -> "QueryEngine":
+        """Async context manager entry"""
+        await self.initialize()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit"""
+        # Don't close - keep client alive for reuse
+        pass
+
+    def get_session_id(self) -> str:
+        """Get the session ID"""
+        return self._session_id
+
+    def get_messages(self) -> List[Message]:
+        """Get all messages in the conversation"""
+        return self.state.messages
+
+    def _get_tool_context(self) -> ToolContext:
+        """Get tool execution context"""
+        return ToolContext(
+            working_directory=self._cwd,
+            project_root=self._cwd,
+            session_id=self._session_id,
+        )
+
+    def _build_system_prompt(self) -> str:
+        """Build the system prompt"""
+        parts = []
+
+        # Default system prompt
+        parts.append(create_default_system_prompt())
+
+        # Context message
+        parts.append(build_context_message(self._cwd))
+
+        # Custom system prompt if provided
+        if self.config.system_prompt:
+            parts.append(self.config.system_prompt)
+
+        return "\n\n".join(parts)
+
+    def clear(self) -> None:
+        """Clear the query state"""
+        self.state.clear()
+
+    async def submit_message(
+        self,
+        user_text: str,
+    ) -> AsyncGenerator[QueryEvent, None]:
+        """
+        Submit a user message and run the query loop.
+
+        This is the main entry point for processing user input.
+
+        Yields events as the conversation progresses:
+        - TextEvent: Streaming text from the assistant
+        - ToolUseEvent: When a tool starts executing
+        - ToolResultEvent: When a tool finishes executing
+        - MessageCompleteEvent: When a message is complete
+        - TurnCompleteEvent: When a turn is complete
+        - ErrorEvent: When an error occurs
+        """
+        # Auto-initialize if needed
+        if not self._is_initialized:
+            await self.initialize()
+
+        # Create and add user message
+        user_message = Message.user_message(user_text)
+        self.state.add_message(user_message)
+        yield MessageCompleteEvent(message=user_message)
+
+        # Run the query loop
+        async for event in self._query_loop():
+            yield event
+
+    async def _query_loop(self) -> AsyncGenerator[QueryEvent, None]:
+        """
+        Internal query loop - aligned with query() in TypeScript query.ts
+
+        This is the core execution loop that:
+        1. Calls the API
+        2. Processes the response
+        3. Executes any tool calls
+        4. Continues until done or max turns reached
+        """
+        if not self._is_initialized or not self._client:
+            raise RuntimeError("QueryEngine not initialized. Call initialize() first.")
+
+        system_prompt = self._build_system_prompt()
+
+        while self.state.current_turn < self.config.max_turns:
+            self.state.is_streaming = True
+            self.state.current_streaming_text = ""
+
+            # Track accumulated content for this turn
+            current_text = ""
+            accumulated_tool_calls: List[ToolCallDelta] = []
+            stop_reason = "end_turn"
+
+            try:
+                # Yield request start event
+                yield RequestStartEvent()
+
+                # Call the API
+                async for chunk in self._client.chat_completion(
+                    self.state.messages,
+                    self.tool_registry,
+                    stream=self.config.stream,
+                    system_prompt=system_prompt,
+                ):
+                    if self.config.stream:
+                        # Parse streaming chunk
+                        text_delta, tool_call_deltas = self._client.parse_stream_chunk(chunk)
+
+                        # Accumulate text
+                        if text_delta:
+                            current_text += text_delta
+                            self.state.current_streaming_text = current_text
+                            yield TextEvent(text=text_delta)
+
+                        # Accumulate tool calls
+                        if tool_call_deltas:
+                            accumulated_tool_calls = self._client.accumulate_tool_calls(
+                                accumulated_tool_calls,
+                                tool_call_deltas,
+                            )
+
+                        # Check for finish reason
+                        choices = chunk.get("choices", [])
+                        if choices:
+                            finish_reason = choices[0].get("finish_reason")
+                            if finish_reason:
+                                stop_reason = finish_reason
+                    else:
+                        # Non-streaming response
+                        text, tool_uses, usage = self._client.parse_non_stream_response(chunk)
+                        current_text = text
+                        accumulated_tool_calls = []
+
+                        # Convert tool uses to deltas
+                        for tu in tool_uses:
+                            accumulated_tool_calls.append(ToolCallDelta(
+                                id=tu.id,
+                                name=tu.name,
+                                arguments=json.dumps(tu.input),
+                            ))
+
+                        if text:
+                            yield TextEvent(text=text)
+
+                        if usage:
+                            self.state.total_usage = usage
+
+                        stop_reason = choices[0].get("finish_reason", "stop") if choices else "stop"
+
+                # Build content blocks
+                content_blocks: List[ContentBlock] = []
+
+                if current_text:
+                    content_blocks.append(TextContent(text=current_text))
+
+                # Convert accumulated tool calls to content blocks
+                tool_use_blocks = self._client.tool_calls_to_content_blocks(accumulated_tool_calls)
+                content_blocks.extend(tool_use_blocks)
+
+                # Create assistant message
+                assistant_message = Message.assistant_message(
+                    content_blocks,
+                    stop_reason=stop_reason,
+                )
+                self.state.add_message(assistant_message)
+                yield MessageCompleteEvent(message=assistant_message)
+
+                # Check if we have tool calls to execute
+                if not tool_use_blocks:
+                    # No tool calls - we're done
+                    yield TurnCompleteEvent(
+                        turn=self.state.current_turn + 1,
+                        has_more_turns=False,
+                        stop_reason=stop_reason,
+                    )
+                    return
+
+                # Execute tool calls
+                tool_results: List[tuple] = []
+
+                for tool_use in tool_use_blocks:
+                    if not tool_use.id or not tool_use.name:
+                        continue
+
+                    # Emit tool use event
+                    yield ToolUseEvent(
+                        tool_use_id=tool_use.id,
+                        tool_name=tool_use.name,
+                        input=tool_use.input,
+                    )
+
+                    # Find and execute the tool
+                    tool = self.tool_registry.get(tool_use.name)
+                    if not tool:
+                        error_msg = f"Tool not found: {tool_use.name}"
+                        yield ToolResultEvent(
+                            tool_use_id=tool_use.id,
+                            result=error_msg,
+                            is_error=True,
+                        )
+                        tool_results.append((tool_use.id, error_msg, True))
+                        continue
+
+                    try:
+                        # Execute tool
+                        result = await tool.call(tool_use.input, self._get_tool_context())
+                        yield ToolResultEvent(
+                            tool_use_id=tool_use.id,
+                            result=result,
+                            is_error=False,
+                        )
+                        tool_results.append((tool_use.id, result, False))
+                    except Exception as e:
+                        error_msg = f"Tool execution failed: {str(e)}"
+                        yield ToolResultEvent(
+                            tool_use_id=tool_use.id,
+                            result=error_msg,
+                            is_error=True,
+                        )
+                        tool_results.append((tool_use.id, error_msg, True))
+
+                # Add tool result messages
+                for tool_use_id, result, is_error in tool_results:
+                    tool_msg = Message.tool_result_message(tool_use_id, result, is_error)
+                    self.state.add_message(tool_msg)
+                    yield MessageCompleteEvent(message=tool_msg)
+
+                # Increment turn counter
+                self.state.current_turn += 1
+
+                # Check if we should continue
+                has_more = self.state.current_turn < self.config.max_turns
+
+                yield TurnCompleteEvent(
+                    turn=self.state.current_turn,
+                    has_more_turns=has_more,
+                    stop_reason=stop_reason,
+                )
+
+                if not has_more:
+                    return
+
+            except APINetworkError as e:
+                error_msg = f"Network error: {str(e)}"
+                yield ErrorEvent(error=error_msg, is_fatal=True)
+                return
+            except APIError as e:
+                error_msg = f"API error: {str(e)}"
+                yield ErrorEvent(error=error_msg, is_fatal=True)
+                return
+            except Exception as e:
+                error_msg = f"Query failed: {str(e)}"
+                yield ErrorEvent(error=error_msg, is_fatal=True)
+                return
+
+            finally:
+                self.state.is_streaming = False
+                self.state.current_streaming_text = ""
+
+    async def run(
+        self,
+        user_text: str,
+        on_text: Optional[Callable[[str], None]] = None,
+        on_tool_start: Optional[Callable[[str, str, Dict], None]] = None,
+        on_tool_end: Optional[Callable[[str, str, bool], None]] = None,
+        on_message: Optional[Callable[[Message], None]] = None,
+        on_turn: Optional[Callable[[int, bool], None]] = None,
+    ) -> QueryResult:
+        """
+        Run a query with optional callbacks.
+
+        This is a convenience method that handles the event stream.
+        """
+        result = QueryResult()
+
+        try:
+            async for event in self.submit_message(user_text):
+                if isinstance(event, TextEvent):
+                    if on_text:
+                        on_text(event.text)
+
+                elif isinstance(event, ToolUseEvent):
+                    if on_tool_start:
+                        on_tool_start(event.tool_use_id, event.tool_name, event.input)
+
+                elif isinstance(event, ToolResultEvent):
+                    if on_tool_end:
+                        on_tool_end(event.tool_use_id, event.result, event.is_error)
+
+                elif isinstance(event, MessageCompleteEvent):
+                    if on_message and event.message:
+                        on_message(event.message)
+
+                elif isinstance(event, TurnCompleteEvent):
+                    result.num_turns = event.turn
+                    if on_turn:
+                        on_turn(event.turn, event.has_more_turns)
+                    if event.stop_reason:
+                        result.stop_reason = event.stop_reason
+
+                elif isinstance(event, ErrorEvent):
+                    result.success = False
+                    result.error = event.error
+
+        except Exception as e:
+            result.success = False
+            result.error = str(e)
+
+        # Get final text from last assistant message
+        for msg in reversed(self.state.messages):
+            if msg.type == MessageRole.ASSISTANT:
+                text = msg.get_text()
+                if text:
+                    result.text = text
+                    break
+
+        result.usage = self.state.total_usage
+
+        return result
+
+
+async def ask(
+    prompt: str,
+    client_config: OpenAIClientConfig,
+    tool_registry: ToolRegistry,
+    max_turns: int = 20,
+    working_directory: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+) -> QueryResult:
+    """
+    Convenience function for one-shot queries.
+
+    Aligned with ask() in TypeScript QueryEngine.ts.
+    """
+    config = QueryConfig(
+        max_turns=max_turns,
+        system_prompt=system_prompt or "",
+        working_directory=working_directory or os.getcwd(),
+    )
+
+    async with QueryEngine(client_config, tool_registry, config) as engine:
+        return await engine.run(prompt)
