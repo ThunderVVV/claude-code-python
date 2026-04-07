@@ -30,12 +30,11 @@ from claude_code.core.messages import (
     generate_uuid,
 )
 from claude_code.core.tools import ToolContext, ToolRegistry, find_tool_by_name
+from claude_code.core.prompts import create_default_system_prompt, build_context_message
 from claude_code.services.openai_client import (
     OpenAIClient,
     OpenAIClientConfig,
     ToolCallDelta,
-    create_default_system_prompt,
-    build_context_message,
     APIError,
     APINetworkError,
 )
@@ -133,11 +132,11 @@ class QueryEngine:
         """Build the system prompt"""
         parts = []
 
-        # Default system prompt
-        parts.append(create_default_system_prompt())
-
-        # Context message
-        parts.append(build_context_message(self._cwd))
+        # Default system prompt with cwd and model name
+        parts.append(create_default_system_prompt(
+            cwd=self._cwd,
+            model_name=self.client_config.model_name,
+        ))
 
         # Custom system prompt if provided
         if self.config.system_prompt:

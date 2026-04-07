@@ -23,6 +23,7 @@ from claude_code.core.messages import (
     generate_uuid,
 )
 from claude_code.core.tools import ToolRegistry
+from claude_code.core.prompts import create_default_system_prompt, build_context_message
 
 logger = logging.getLogger(__name__)
 
@@ -445,30 +446,6 @@ class OpenAIClient:
                     input=args,
                 ))
         return blocks
-
-
-def create_default_system_prompt() -> str:
-    """Create the default system prompt for the assistant"""
-    return """You are Claude Code, Anthropic's official CLI for Claude. You are an interactive CLI tool that helps users with software engineering tasks.
-
-When using tools, follow these rules:
-- Always use the Read tool to read files before editing them
-- Use the Glob tool to find files by pattern
-- Use the Grep tool to search for content in files
-- Use the Edit tool for targeted edits
-- Use the Write tool to create new files or completely rewrite existing files
-- Use the Bash tool to execute shell commands
-
-Be thorough, accurate, and helpful. Explain your reasoning when making changes.
-
-IMPORTANT: Always use absolute paths when referencing files."""
-
-
-def build_context_message(cwd: str) -> str:
-    """Build context message with current working directory info"""
-    return f"""Current working directory: {cwd}
-
-The user is working in a software development environment. Help them with their tasks by using the appropriate tools."""
 
 
 class APIError(Exception):
