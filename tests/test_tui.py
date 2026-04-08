@@ -29,6 +29,7 @@ from claude_code.core.messages import (
     Usage,
 )
 from claude_code.ui.app import ClaudeCodeApp
+from claude_code.ui.diff_view import DiffView
 from claude_code.ui.message_widgets import (
     AssistantMessageWidget,
     MessageList,
@@ -551,6 +552,7 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
                 if str(tool_toggle.title) == "Write: demo.txt":
                     break
             self.assertEqual(str(tool_toggle.title), "Write: demo.txt")
+            self.assertFalse(tool_toggle.collapsed)
             self.assertEqual(len(list(screen.query(ToolUseWidget))), 1)
 
             final_screenshot = app.export_screenshot(simplify=True).replace(
@@ -874,14 +876,170 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.2)
 
             tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertEqual(str(tool_toggle.title), "[OK] Glob found 3 files matching '*.md'")
+
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertIn("[OK] Glob found 3 files matching", screenshot)
+            self.assertNotIn("&#x27;*.md&#x27;:", screenshot)
+
+    async def test_grep_tool_summary_title_includes_pattern_and_tool_name(self) -> None:
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Grep",
+                    input={
+                        "pattern": "Read.*Tool|read.*tool",
+                        "path": "/tmp/project",
+                        "output_mode": "files_with_matches",
+                    },
+                ),
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Found 122 files\nREADME.md\nsrc/read_tool.py\n",
+                    is_error=False,
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(100, 18)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "grep it"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
             self.assertEqual(
                 str(tool_toggle.title),
-                "[OK] Found 3 files matching '*.md'",
+                "[OK] Grep found 122 files matching 'Read.*Tool|read.*tool'",
             )
 
             screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
-            self.assertIn("[OK] Found 3 files matching", screenshot)
-            self.assertNotIn("&#x27;*.md&#x27;:", screenshot)
+            self.assertIn("[OK] Grep found 122 files matching", screenshot)
+
+    async def test_edit_tool_result_renders_diff_view_instead_of_raw_replacement_text(
+        self,
+    ) -> None:
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Edit",
+                    input={
+                        "file_path": "/tmp/demo.py",
+                        "old_string": "print('old value')",
+                        "new_string": "print('new value')",
+                    },
+                ),
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Successfully edited /tmp/demo.py (replaced 1 occurrence)",
+                    is_error=False,
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(100, 22)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "edit it"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertFalse(tool_toggle.collapsed)
+            self.assertEqual(
+                str(tool_toggle.title),
+                "[OK] Successfully edited demo.py (replaced 1 occurrence)",
+            )
+
+            self.assertEqual(len(list(tool_toggle.query(DiffView))), 1)
+
+            detail_contents = [
+                str(widget.content)
+                for widget in tool_toggle.query(".tool-param")
+                if hasattr(widget, "content")
+            ]
+            joined_details = "\n".join(detail_contents)
+            self.assertIn("file_path: /tmp/demo.py", joined_details)
+            self.assertNotIn("old_string:", joined_details)
+            self.assertNotIn("new_string:", joined_details)
+
+            expanded_contents = [
+                str(widget.content)
+                for widget in tool_toggle.query(".tool-output-label, .tool-result-preview")
+                if hasattr(widget, "content")
+            ]
+            self.assertEqual(expanded_contents, [])
+
+    async def test_write_tool_result_renders_diff_view_instead_of_raw_content(
+        self,
+    ) -> None:
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Write",
+                    input={
+                        "file_path": "/tmp/read-tool-comparison.md",
+                        "content": "# Python vs TypeScript\n\n## Overview\n",
+                    },
+                ),
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Successfully wrote to /tmp/read-tool-comparison.md (3 lines, 36 bytes)",
+                    is_error=False,
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(100, 22)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "write it"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertFalse(tool_toggle.collapsed)
+            self.assertEqual(
+                str(tool_toggle.title),
+                "[OK] Successfully wrote to read-tool-comparison.md (3 lines, 36 bytes)",
+            )
+
+            self.assertEqual(len(list(tool_toggle.query(DiffView))), 1)
+
+            detail_contents = [
+                str(widget.content)
+                for widget in tool_toggle.query(".tool-param")
+                if hasattr(widget, "content")
+            ]
+            joined_details = "\n".join(detail_contents)
+            self.assertIn("file_path: /tmp/read-tool-comparison.md", joined_details)
+            self.assertNotIn("content:", joined_details)
+
+            expanded_contents = [
+                str(widget.content)
+                for widget in tool_toggle.query(".tool-output-label, .tool-result-preview")
+                if hasattr(widget, "content")
+            ]
+            self.assertEqual(expanded_contents, [])
 
     async def test_thinking_collapsible_focus_keeps_background_unchanged(self) -> None:
         def event_factory(user_text: str):
@@ -1068,6 +1226,46 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             span_styles = [str(span.style) for span in fence._highlighted_code.spans]
 
             self.assertEqual(span_styles, ["$text"])
+
+    async def test_markdown_code_fence_has_spacing_before_and_after(self) -> None:
+        markdown_text = "before\n\n```python\nprint('hi')\n```\n\nafter\n"
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                MessageCompleteEvent(
+                    message=Message.assistant_message([TextContent(text=markdown_text)]),
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 20)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "show fence spacing"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            paragraphs = list(screen.query(textual_markdown.MarkdownParagraph))
+            fence = screen.query_one(textual_markdown.MarkdownFence)
+
+            self.assertGreaterEqual(len(paragraphs), 2)
+
+            before_paragraph = paragraphs[0]
+            after_paragraph = paragraphs[-1]
+            gap_before = fence.region.y - (
+                before_paragraph.region.y + before_paragraph.region.height
+            )
+            gap_after = after_paragraph.region.y - (
+                fence.region.y + fence.region.height
+            )
+
+            self.assertGreaterEqual(gap_before, 1)
+            self.assertGreaterEqual(gap_after, 1)
 
     async def test_tool_output_strips_terminal_control_sequences(self) -> None:
         def event_factory(user_text: str):

@@ -20,6 +20,7 @@ from claude_code.core.messages import (
     ToolUseContent,
     ToolResultContent,
 )
+from claude_code.ui.diff_view import DiffView
 from claude_code.ui.utils import (
     sanitize_terminal_text,
     summarize_tool_result,
@@ -252,6 +253,7 @@ class ToolUseWidget(VerticalGroup):
         self.tool_name = tool_name
         self.tool_input = tool_input
         self.tool_use_id = tool_use_id
+        self._did_auto_expand = False
         self._result_summary: Optional[str] = None
         self._result_output_lines: List[str] = []
         self._result_is_error = False
@@ -262,7 +264,7 @@ class ToolUseWidget(VerticalGroup):
     def compose(self) -> ComposeResult:
         with Collapsible(
             title=self._collapsible_title(),
-            collapsed=True,
+            collapsed=not self._should_auto_expand(),
             collapsed_symbol=">",
             expanded_symbol="v",
             classes="tool-collapsible tool-use-details",
@@ -283,6 +285,7 @@ class ToolUseWidget(VerticalGroup):
         )
         if self._details_collapsible:
             self._details_collapsible.title = self._collapsible_title()
+            self._maybe_auto_expand()
         if self._details_container and self._details_container.is_mounted:
             self._render_detail_widgets()
 
@@ -292,6 +295,7 @@ class ToolUseWidget(VerticalGroup):
         self.tool_input = tool_input
         if self._details_collapsible:
             self._details_collapsible.title = self._collapsible_title()
+            self._maybe_auto_expand()
         if self._details_container and self._details_container.is_mounted:
             self._render_detail_widgets()
 
@@ -299,6 +303,7 @@ class ToolUseWidget(VerticalGroup):
         """Refresh the single collapsible after mount in case results arrived early."""
         if self._details_collapsible:
             self._details_collapsible.title = self._collapsible_title()
+            self._maybe_auto_expand()
         if self._details_container and self._details_container.is_mounted:
             self._render_detail_widgets()
 
@@ -318,20 +323,85 @@ class ToolUseWidget(VerticalGroup):
         )
 
     def _compose_detail_widgets(self) -> ComposeResult:
-        detail_lines = format_tool_input_details(self.tool_input)
+        detail_lines = format_tool_input_details(
+            self.tool_input,
+            exclude_keys=self._detail_input_exclusions(),
+        )
         if detail_lines:
             for line in detail_lines:
                 yield Static(line, classes="tool-param", markup=False)
         elif self._result_summary is None:
             yield Static("No input parameters", classes="tool-param", markup=False)
 
-        if self._result_summary is not None:
+        diff_view = self._build_diff_view()
+        if diff_view is not None:
+            yield diff_view
+        elif self._result_summary is not None:
             yield Static("Output:", classes="tool-output-label", markup=False)
             if self._result_output_lines:
                 for line in self._result_output_lines:
                     yield Static(line, classes="tool-result-preview", markup=False)
             else:
                 yield Static("(no output)", classes="tool-result-preview", markup=False)
+
+    def _detail_input_exclusions(self) -> set[str]:
+        """Hide raw diff payloads once a diff view is available."""
+        diff_view = self._build_diff_view()
+        if diff_view is None:
+            return set()
+        if self.tool_name == "Edit":
+            return {"old_string", "new_string"}
+        if self.tool_name == "Write":
+            return {"content"}
+        return set()
+
+    def _should_auto_expand(self) -> bool:
+        """Return True when this tool block should start expanded."""
+        return self.tool_name in {"Edit", "Write"}
+
+    def _maybe_auto_expand(self) -> None:
+        """Expand Edit blocks once without overriding later manual collapse."""
+        if self._did_auto_expand or not self._should_auto_expand():
+            return
+        if self._details_collapsible:
+            self._details_collapsible.collapsed = False
+            self._did_auto_expand = True
+
+    def _build_diff_view(self) -> DiffView | None:
+        """Build an inline diff widget for successful file-editing tool calls."""
+        if self._result_summary is None or self._result_is_error:
+            return None
+
+        file_path = str(self.tool_input.get("file_path", "")).strip()
+        if not file_path:
+            return None
+
+        old_text: str
+        new_text: str
+
+        if self.tool_name == "Edit":
+            old_string = self.tool_input.get("old_string")
+            new_string = self.tool_input.get("new_string")
+            if not isinstance(old_string, str) or not isinstance(new_string, str):
+                return None
+            old_text = old_string
+            new_text = new_string
+        elif self.tool_name == "Write":
+            content = self.tool_input.get("content")
+            if not isinstance(content, str):
+                return None
+            old_text = ""
+            new_text = content
+        else:
+            return None
+
+        return DiffView(
+            file_path,
+            file_path,
+            sanitize_terminal_text(old_text),
+            sanitize_terminal_text(new_text),
+            classes="tool-edit-diff",
+        )
 
     def _render_detail_widgets(self) -> None:
         if not self._details_container:

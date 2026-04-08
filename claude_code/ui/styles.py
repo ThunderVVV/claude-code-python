@@ -315,7 +315,7 @@ MarkdownBlockQuote > BlockQuote {
 }
 
 MarkdownFence {
-    margin: 0 0 1 0;
+    margin: 1 0 1 0;
 }
 
 MarkdownFence > Label {

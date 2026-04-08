@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added - 2026-04-09
 
+#### TUI Context And Diff Presentation
+- Added a context usage line beneath the TUI input showing used tokens / configured max context / percentage
+- Added `claude_code/ui/diff_view.py`, adapted from Toad, for inline file diff rendering in the TUI
+- `Edit` and `Write` tool results now render inline diffs instead of raw replacement/content payload previews
+- Added headless TUI regression coverage for context usage, diff rendering, auto-expand behavior, and markdown fence spacing
+
 #### Reasoning/Thinking Content Support
 - Added support for displaying model reasoning/thinking content (chain-of-thought)
 - Added `ThinkingContent` dataclass for reasoning content blocks
@@ -21,6 +27,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added test `test_query_engine_streams_thinking_before_text` for thinking event flow
 
 ### Changed - 2026-04-08
+
+#### TUI Tool Result Summaries
+- Tool result titles now collapse file paths to basenames while keeping full paths in the expanded details
+- `Write` tool blocks now auto-expand on success, matching `Edit`
+- `Glob` and `Grep` result summaries now use tool-specific wording; `Grep` summaries preserve the search pattern when available
 
 #### Bash Tool Parameter Description Enhancement
 - Updated `description` parameter description in BashTool to align with TypeScript version

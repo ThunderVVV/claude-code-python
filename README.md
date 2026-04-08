@@ -1,6 +1,8 @@
 
 # Claude Code Python
 
+Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
+
 `claude-code-python` 是对官方 TypeScript 版 Claude Code 的 Python 3.12 重写，当前聚焦核心 agent 能力：CLI/TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义。
 
 ![Claude Code Python TUI](docs/assets/tui.png)
@@ -76,7 +78,8 @@ TUI 中工具结果的显示规则：
 
 - 每个工具调用只占一行标题，并使用单个折叠块承载参数和输出。
 - 工具执行完成后，标题会从调用摘要直接更新为结果摘要，例如 `Bash: ls -la` 更新为 `[OK] Ran: ls -la`。
-- 展开后先显示工具参数，再显示 `Output:` 和裁剪后的输出内容。
+- `Edit` 和 `Write` 成功后会优先显示内联 diff，隐藏原始 `old_string` / `new_string` / `content` 大字段；普通工具仍显示 `Output:` 和裁剪后的输出内容。
+- `Edit` 和 `Write` 结果默认自动展开，搜索类工具标题会区分 `Glob` / `Grep` 并尽量保留匹配模式。
 
 ## 调试脚本
 
