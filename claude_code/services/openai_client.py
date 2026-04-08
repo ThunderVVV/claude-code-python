@@ -71,8 +71,7 @@ class OpenAIClient:
         """Convert internal message format to OpenAI format"""
         openai_messages = []
 
-        logger.debug(f"Converting {len(messages)} messages to OpenAI format")
-        for i, msg in enumerate(messages):
+        for msg in messages:
             if msg.type == MessageRole.SYSTEM:
                 openai_messages.append({
                     "role": "system",
@@ -107,7 +106,6 @@ class OpenAIClient:
                         "content": msg.get_text() or None,
                         "tool_calls": tool_calls,
                     })
-                    logger.debug(f"  Message {i}: assistant with {len(tool_uses)} tool calls")
                 else:
                     # Simple text message
                     text = msg.get_text()
@@ -115,7 +113,6 @@ class OpenAIClient:
                         "role": "assistant",
                         "content": text,
                     })
-                    logger.debug(f"  Message {i}: assistant text ({len(text)} chars)")
 
             elif msg.type == MessageRole.TOOL:
                 # Tool result message
@@ -126,9 +123,7 @@ class OpenAIClient:
                             "tool_call_id": block.tool_use_id,
                             "content": block.content,
                         })
-                        logger.debug(f"  Message {i}: tool result for {block.tool_use_id}")
 
-        logger.debug(f"Converted to {len(openai_messages)} OpenAI messages")
         return openai_messages
 
     async def chat_completion(
@@ -179,7 +174,6 @@ class OpenAIClient:
                 async for chunk in stream_response:
                     chunk_index += 1
                     chunk_dict = chunk.model_dump()
-                    self._log_stream_chunk(chunk_index, chunk_dict)
                     yield chunk_dict
             else:
                 # Non-streaming request using SDK
@@ -225,12 +219,10 @@ class OpenAIClient:
                 # Update tool call delta
                 if "id" in tc:
                     tool_calls[idx].id = tc["id"]
-                    logger.debug(f"Tool call chunk: idx={idx}, id={tc['id']}")
                 if "function" in tc:
                     func = tc["function"]
                     if "name" in func:
                         tool_calls[idx].name = func["name"]
-                        logger.debug(f"Tool call chunk: idx={idx}, name={func['name']}")
                     if "arguments" in func:
                         tool_calls[idx].arguments += func["arguments"]
 
@@ -314,9 +306,7 @@ class OpenAIClient:
     ) -> List[ToolUseContent]:
         """Convert accumulated tool call deltas to content blocks"""
         blocks = []
-        logger.debug(f"Converting {len(tool_calls)} tool call deltas to content blocks")
         for tc in tool_calls:
-            logger.debug(f"  Delta: id={tc.id}, name={tc.name}, args_len={len(tc.arguments)}")
             if tc.id and tc.name:
                 try:
                     args = self._parse_tool_call_arguments(
@@ -324,17 +314,17 @@ class OpenAIClient:
                         allow_partial=allow_partial,
                     )
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse tool call arguments: {e}, arguments: {tc.arguments}")
+                    logger.warning(f"Failed to parse tool call arguments: {e}")
                     args = {}
 
-                logger.debug(f"  Tool call: {tc.name}, id: {tc.id}, args: {args}")
+                logger.debug(f"Tool call parsed: {tc.name}, id: {tc.id}")
                 blocks.append(ToolUseContent(
                     id=tc.id,
                     name=tc.name,
                     input=args,
                 ))
             else:
-                logger.warning(f"  Skipping incomplete tool call: id={tc.id}, name={tc.name}")
+                logger.warning(f"Skipping incomplete tool call: id={tc.id}, name={tc.name}")
         return blocks
 
     def _parse_tool_call_arguments(
@@ -389,47 +379,6 @@ class OpenAIClient:
             except json.JSONDecodeError:
                 continue
         return partial
-
-    def _log_stream_chunk(self, chunk_index: int, chunk: Dict[str, Any]) -> None:
-        """Emit compact DEBUG logs for streamed chunks."""
-        if not logger.isEnabledFor(logging.DEBUG):
-            return
-
-        choices = chunk.get("choices", [])
-        if not choices:
-            logger.debug("OpenAI stream chunk #%s: empty choices", chunk_index)
-            return
-
-        choice = choices[0]
-        delta = choice.get("delta", {})
-        text_delta = delta.get("content")
-        tool_calls = delta.get("tool_calls") or []
-        finish_reason = choice.get("finish_reason")
-
-        tool_summaries: List[str] = []
-        for tc in tool_calls:
-            func = tc.get("function", {})
-            arg_fragment = func.get("arguments", "")
-            tool_summaries.append(
-                "idx={idx} id={id} name={name} arg_fragment_len={arg_len} "
-                "arg_fragment_preview={preview}".format(
-                    idx=tc.get("index", 0),
-                    id=tc.get("id", ""),
-                    name=func.get("name", ""),
-                    arg_len=len(arg_fragment),
-                    preview=repr(arg_fragment[:80]),
-                )
-            )
-
-        logger.debug(
-            "OpenAI stream chunk #%s: text_len=%s tool_call_count=%s "
-            "finish_reason=%s tool_calls=[%s]",
-            chunk_index,
-            len(text_delta or ""),
-            len(tool_calls),
-            finish_reason,
-            "; ".join(tool_summaries),
-        )
 
 
 class APIError(Exception):

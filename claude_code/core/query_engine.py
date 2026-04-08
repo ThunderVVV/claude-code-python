@@ -238,31 +238,13 @@ class QueryEngine:
                                 accumulated_tool_calls,
                                 tool_call_deltas,
                             )
-                            logger.debug(
-                                "Query loop received tool deltas: chunk_count=%s "
-                                "accumulated_count=%s",
-                                len(tool_call_deltas),
-                                len(accumulated_tool_calls),
-                            )
                             preview_tool_uses = self._client.partial_tool_calls_to_content_blocks(
                                 accumulated_tool_calls
                             )
-                            if not preview_tool_uses:
-                                logger.debug(
-                                    "Tool deltas arrived but no preview blocks are "
-                                    "ready yet"
-                                )
                             for tool_use in preview_tool_uses:
                                 if tool_use.id in previewed_tool_use_ids:
                                     continue
                                 previewed_tool_use_ids.add(tool_use.id)
-                                logger.debug(
-                                    "Emitting preview ToolUseEvent: id=%s name=%s "
-                                    "input_keys=%s",
-                                    tool_use.id,
-                                    tool_use.name,
-                                    sorted(tool_use.input.keys()),
-                                )
                                 yield ToolUseEvent(
                                     tool_use_id=tool_use.id,
                                     tool_name=tool_use.name,
@@ -317,15 +299,6 @@ class QueryEngine:
                 )
                 content_blocks.extend(tool_use_blocks)
 
-                # Debug logging
-                logger.debug(
-                    f"Stream completed: stop_reason={stop_reason}, text_len={len(current_text)}, tool_calls={len(tool_use_blocks)}"
-                )
-                for tc in accumulated_tool_calls:
-                    logger.debug(
-                        f"  Tool call delta: id={tc.id}, name={tc.name}, args_len={len(tc.arguments)}"
-                    )
-
                 # Create assistant message
                 assistant_message = Message.assistant_message(
                     content_blocks,
@@ -337,9 +310,6 @@ class QueryEngine:
                 # Check if we have tool calls to execute
                 if not tool_use_blocks:
                     # No tool calls - we're done
-                    logger.debug(
-                        f"No tool calls, ending turn with stop_reason={stop_reason}"
-                    )
                     yield TurnCompleteEvent(
                         turn=self.state.current_turn + 1,
                         has_more_turns=False,
@@ -347,9 +317,8 @@ class QueryEngine:
                     )
                     return
 
-                logger.debug(f"Executing {len(tool_use_blocks)} tool calls")
-
                 # Execute tool calls
+                logger.debug(f"Executing {len(tool_use_blocks)} tool calls")
                 tool_results: List[tuple] = []
 
                 for tool_use in tool_use_blocks:
@@ -358,13 +327,6 @@ class QueryEngine:
 
                     # Emit tool use event
                     if tool_use.id not in previewed_tool_use_ids:
-                        logger.debug(
-                            "Emitting final ToolUseEvent without prior preview: "
-                            "id=%s name=%s input_keys=%s",
-                            tool_use.id,
-                            tool_use.name,
-                            sorted(tool_use.input.keys()),
-                        )
                         yield ToolUseEvent(
                             tool_use_id=tool_use.id,
                             tool_name=tool_use.name,
@@ -416,10 +378,6 @@ class QueryEngine:
 
                 # Check if we should continue
                 has_more = self.state.current_turn < self.config.max_turns
-
-                logger.debug(
-                    f"Turn {self.state.current_turn} complete, has_more={has_more}, messages_count={len(self.state.messages)}"
-                )
 
                 yield TurnCompleteEvent(
                     turn=self.state.current_turn,
