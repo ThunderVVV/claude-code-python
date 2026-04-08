@@ -239,7 +239,7 @@ WelcomeWidget:focus {
 }
 
 .tool-use-details CollapsibleTitle {
-    color: $secondary;
+    color: $foreground;
 }
 
 .tool-result {

@@ -62,6 +62,13 @@ Usage:
             return f"Writing {os.path.basename(path)}"
         return "Writing file"
 
+    def is_error_result(
+        self,
+        result: str,
+        input: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        return result.startswith("Error")
+
     async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
         file_path = input.get("file_path", "")
         if not file_path:
@@ -88,4 +95,3 @@ Usage:
             return f"Error: Permission denied writing to file: {full_path}"
         except Exception as e:
             return f"Error writing file: {str(e)}"
-

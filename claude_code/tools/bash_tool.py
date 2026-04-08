@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import shlex
 import shutil
 from typing import Any, Dict, List, Optional
@@ -221,6 +222,18 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
         if base:
             return f"{base} command"
         return self.name
+
+    def is_error_result(
+        self,
+        result: str,
+        input: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        if result.startswith("Error") or result.startswith("Command timed out after"):
+            return True
+
+        first_line = result.splitlines()[0] if result else ""
+        match = re.match(r"Exit code:\s*(-?\d+)", first_line)
+        return bool(match and int(match.group(1)) != 0)
 
     async def validate_input(
         self,

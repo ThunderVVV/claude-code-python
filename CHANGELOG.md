@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-09
+
+#### Tool Error Status In Transcript
+- Fixed `ToolResultEvent.is_error` propagation so tool-specific failures no longer render with a success indicator in the TUI or CLI
+- Added per-tool error classification for `Bash`, `Read`, `Write`, `Edit`, `Glob`, and `Grep`
+- `Bash` tool now treats non-zero exit codes and timeouts as errors for transcript rendering, even when the shell command returns structured stdout/stderr text
+- TUI tool titles now use colored status dots (`●`) instead of textual `[OK]` / `[ERR]` prefixes, while keeping the summary text in the normal foreground color
+- Failed tool titles now use action-oriented summaries such as `Failed to run ...` / `Failed to read ...` instead of showing a raw error code or error line as the title
+- Added regression coverage for tool error classification in both `QueryEngine` and the TUI
+
 ### Changed - 2026-04-09
 
 #### Default TUI Mode and Logging Behavior

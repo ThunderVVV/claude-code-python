@@ -11,6 +11,7 @@ from claude_code.core.messages import (
     TextEvent,
     ThinkingContent,
     ThinkingEvent,
+    ToolResultEvent,
     ToolUseEvent,
     ToolUseContent,
     ToolResultContent,
@@ -19,6 +20,7 @@ from claude_code.core.messages import (
 )
 from claude_code.core.query_engine import QueryConfig, QueryEngine
 from claude_code.core.tools import (
+    BaseTool,
     ToolRegistry,
     ToolContext,
     ToolInputSchema,
@@ -222,6 +224,41 @@ class TestFileTools:
         assert tool.name == "Grep"
         assert tool.is_read_only({}) is True
 
+    def test_file_and_search_tools_classify_error_results(self):
+        """Read/Write/Edit/Glob/Grep should expose consistent error classification."""
+        assert ReadTool().is_error_result("Error: File does not exist: /tmp/missing.txt")
+        assert not ReadTool().is_error_result(
+            "File: /tmp/demo.txt\nLines: 1-1 of 1\n\n     1\thello"
+        )
+
+        assert WriteTool().is_error_result("Error writing file: disk full")
+        assert not WriteTool().is_error_result(
+            "Successfully wrote to /tmp/demo.txt (1 lines, 5 bytes)"
+        )
+
+        assert EditTool().is_error_result("Error: Could not find the specified text in /tmp/demo.py")
+        assert not EditTool().is_error_result(
+            "Successfully edited /tmp/demo.py (replaced 1 occurrence)"
+        )
+
+        assert GlobTool().is_error_result("Error searching files: permission denied")
+        assert not GlobTool().is_error_result("No files found matching pattern: *.py")
+        assert not GlobTool().is_error_result("Found 2 files matching '*.py':\nmain.py\napp.py")
+
+        grep_tool = GrepTool()
+        assert grep_tool.is_error_result(
+            "Error searching content: ripgrep failed",
+            {"output_mode": "files_with_matches"},
+        )
+        assert not grep_tool.is_error_result(
+            "Found 2 files\nREADME.md\nsrc/app.py",
+            {"output_mode": "files_with_matches"},
+        )
+        assert not grep_tool.is_error_result(
+            "src/app.py:12:Error: expected config",
+            {"output_mode": "content"},
+        )
+
 
 class TestBashTool:
     """Test Bash tool"""
@@ -247,6 +284,31 @@ class TestBashTool:
         assert is_search_command("grep pattern file") is True
         assert is_search_command("find . -name '*.py'") is True
         assert is_search_command("cat file") is False
+
+    def test_bash_tool_classifies_nonzero_exit_as_error(self):
+        """Non-zero exit codes and timeouts should render as errors."""
+        tool = BashTool()
+        assert tool.is_error_result("Exit code: 127\n\n[stderr]\n/bin/bash: conda: command not found")
+        assert tool.is_error_result("Command timed out after 2.0 seconds\n\nCommand: sleep 10")
+        assert tool.is_error_result("Error executing command: boom")
+        assert not tool.is_error_result("Done")
+        assert not tool.is_error_result("(No output)")
+        assert not tool.is_error_result("[stderr]\nwarning only")
+
+
+class ErrorReportingTool(BaseTool):
+    """Minimal tool used to verify QueryEngine propagates tool error flags."""
+
+    name = "Explode"
+    description = "Synthetic failing tool"
+    input_schema = ToolInputSchema()
+    aliases = []
+
+    async def call(self, input, context) -> str:
+        return "synthetic failure"
+
+    def is_error_result(self, result: str, input=None) -> bool:
+        return result == "synthetic failure"
 
 
 class TestToolInputSchema:
@@ -479,6 +541,67 @@ def test_query_engine_streams_thinking_before_text():
     assert thinking_blocks[0].thinking == "Let me think... step by step."
     assert len(text_blocks) == 1
     assert text_blocks[0].text == "The answer is 42."
+
+
+def test_query_engine_marks_tool_results_as_errors_when_tool_reports_failure():
+    """ToolResultEvent and stored tool messages should preserve tool-level failures."""
+
+    async def run_test():
+        registry = ToolRegistry()
+        registry.register(ErrorReportingTool())
+
+        chunks = [
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "tool-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "Explode",
+                                        "arguments": "{}",
+                                    },
+                                }
+                            ]
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            }
+        ]
+
+        engine = QueryEngine(
+            OpenAIClientConfig(
+                api_url="http://localhost/v1",
+                api_key="test-key",
+                model_name="test-model",
+            ),
+            registry,
+            QueryConfig(max_turns=1, stream=True),
+        )
+        engine._client = FakeStreamingClient(chunks)
+        engine._is_initialized = True
+        return [event async for event in engine.submit_message("run it")]
+
+    events = asyncio.run(run_test())
+
+    tool_result_event = next(event for event in events if isinstance(event, ToolResultEvent))
+    assert tool_result_event.result == "synthetic failure"
+    assert tool_result_event.is_error is True
+
+    tool_message_event = next(
+        event
+        for event in events
+        if isinstance(event, MessageCompleteEvent)
+        and event.message
+        and event.message.type == MessageRole.TOOL
+    )
+    tool_result_block = tool_message_event.message.content[0]
+    assert isinstance(tool_result_block, ToolResultContent)
+    assert tool_result_block.is_error is True
 
 
 if __name__ == "__main__":

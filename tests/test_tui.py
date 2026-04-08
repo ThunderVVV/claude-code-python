@@ -29,6 +29,7 @@ from claude_code.core.messages import (
     Usage,
 )
 from claude_code.ui.app import ClaudeCodeApp
+from textual.content import Span
 from claude_code.ui.diff_view import DiffView
 from claude_code.ui.message_widgets import (
     AssistantMessageWidget,
@@ -144,7 +145,7 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(processing_indicator.display)
             self.assertTrue(processing_label.display)
 
-            await pilot.pause(0.15)
+            await pilot.pause(0.2)
             self.assertFalse(input_widget.disabled)
             self.assertFalse(processing_row.display)
 
@@ -390,11 +391,17 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
 
             input_widget.text = "first"
             input_widget._on_submit(input_widget.text)
-            await pilot.pause(0.08)
+            for _ in range(10):
+                await pilot.pause(0.02)
+                if not input_widget.disabled:
+                    break
 
             input_widget.text = "second"
             input_widget._on_submit(input_widget.text)
-            await pilot.pause(0.08)
+            for _ in range(10):
+                await pilot.pause(0.02)
+                if not input_widget.disabled:
+                    break
 
             input_widget.text = "draft"
             await pilot.press("up")
@@ -819,10 +826,11 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
 
             tool_toggle = screen.query_one(".tool-use-details", Collapsible)
             self.assertTrue(tool_toggle.collapsed)
-            self.assertEqual(str(tool_toggle.title), "[OK] Ran: rg --files | head")
+            self.assertEqual(str(tool_toggle.title), "● Ran: rg --files | head")
+            self.assertEqual(tool_toggle.title.spans, [Span(0, 1, "$success")])
 
             screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
-            self.assertIn("[OK] Ran: rg --files |", screenshot)
+            self.assertIn("Ran: rg --files |", screenshot)
             self.assertNotIn("Bash: rg --files | head", screenshot)
             self.assertNotIn("Output Preview", screenshot)
             self.assertNotIn("README.md", screenshot)
@@ -876,10 +884,11 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.2)
 
             tool_toggle = screen.query_one(".tool-use-details", Collapsible)
-            self.assertEqual(str(tool_toggle.title), "[OK] Glob found 3 files matching '*.md'")
+            self.assertEqual(str(tool_toggle.title), "● Glob found 3 files matching '*.md'")
+            self.assertEqual(tool_toggle.title.spans, [Span(0, 1, "$success")])
 
             screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
-            self.assertIn("[OK] Glob found 3 files matching", screenshot)
+            self.assertIn("Glob found 3 files matching", screenshot)
             self.assertNotIn("&#x27;*.md&#x27;:", screenshot)
 
     async def test_grep_tool_summary_title_includes_pattern_and_tool_name(self) -> None:
@@ -917,11 +926,12 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             tool_toggle = screen.query_one(".tool-use-details", Collapsible)
             self.assertEqual(
                 str(tool_toggle.title),
-                "[OK] Grep found 122 files matching 'Read.*Tool|read.*tool'",
+                "● Grep found 122 files matching 'Read.*Tool|read.*tool'",
             )
+            self.assertEqual(tool_toggle.title.spans, [Span(0, 1, "$success")])
 
             screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
-            self.assertIn("[OK] Grep found 122 files matching", screenshot)
+            self.assertIn("Grep found 122 files", screenshot)
 
     async def test_edit_tool_result_renders_diff_view_instead_of_raw_replacement_text(
         self,
@@ -961,8 +971,9 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(tool_toggle.collapsed)
             self.assertEqual(
                 str(tool_toggle.title),
-                "[OK] Successfully edited demo.py (replaced 1 occurrence)",
+                "● Successfully edited demo.py (replaced 1 occurrence)",
             )
+            self.assertEqual(tool_toggle.title.spans, [Span(0, 1, "$success")])
 
             self.assertEqual(len(list(tool_toggle.query(DiffView))), 1)
 
@@ -1020,8 +1031,9 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(tool_toggle.collapsed)
             self.assertEqual(
                 str(tool_toggle.title),
-                "[OK] Successfully wrote to read-tool-comparison.md (3 lines, 36 bytes)",
+                "● Successfully wrote to read-tool-comparison.md (3 lines, 36 bytes)",
             )
+            self.assertEqual(tool_toggle.title.spans, [Span(0, 1, "$success")])
 
             self.assertEqual(len(list(tool_toggle.query(DiffView))), 1)
 
@@ -1422,6 +1434,84 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             joined = "\n".join(expanded_contents)
             self.assertIn("- item", joined)
             self.assertIn("`code`", joined)
+
+    async def test_tool_error_result_uses_error_status_dot(self) -> None:
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Bash",
+                    input={
+                        "command": "conda init",
+                        "description": "Run conda init command",
+                    },
+                ),
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Exit code: 127\n\n[stderr]\n/bin/bash: conda: command not found",
+                    is_error=True,
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "try conda"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertEqual(str(tool_toggle.title), "● Failed to run conda init")
+            self.assertEqual(tool_toggle.title.spans, [Span(0, 1, "$error")])
+
+            tool_toggle.collapsed = False
+            await pilot.pause(0.05)
+            expanded_contents = [
+                str(widget.content)
+                for widget in tool_toggle.query(".tool-output-label, .tool-result-preview")
+                if hasattr(widget, "content")
+            ]
+            joined = "\n".join(expanded_contents)
+            self.assertIn("Exit code: 127", joined)
+            self.assertIn("/bin/bash: conda: command not found", joined)
+
+    async def test_file_tool_error_result_uses_action_summary(self) -> None:
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Read",
+                    input={"file_path": "/tmp/missing.txt"},
+                ),
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Error: File does not exist: /tmp/missing.txt",
+                    is_error=True,
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "read missing"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertEqual(str(tool_toggle.title), "● Failed to read missing.txt")
+            self.assertEqual(tool_toggle.title.spans, [Span(0, 1, "$error")])
 
 
 if __name__ == "__main__":

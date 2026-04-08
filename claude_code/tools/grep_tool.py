@@ -124,6 +124,15 @@ class GrepTool(BaseTool):
     def get_path(self, input: Dict[str, Any]) -> str:
         return input.get("path") or os.getcwd()
 
+    def is_error_result(
+        self,
+        result: str,
+        input: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        return result.startswith("Error: 'pattern' parameter is required") or result.startswith(
+            "Error searching content:"
+        )
+
     async def validate_input(
         self, input: Dict[str, Any], context: ToolContext
     ) -> ValidationResult:
@@ -319,4 +328,3 @@ class GrepTool(BaseTool):
 
         except Exception as e:
             return f"Error searching content: {str(e)}"
-

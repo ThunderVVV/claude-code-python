@@ -379,12 +379,13 @@ class QueryEngine:
                         result = await tool.call(
                             tool_use.input, self._get_tool_context()
                         )
+                        is_error = tool.is_error_result(result, tool_use.input)
                         yield ToolResultEvent(
                             tool_use_id=tool_use.id,
                             result=result,
-                            is_error=False,
+                            is_error=is_error,
                         )
-                        tool_results.append((tool_use.id, result, False))
+                        tool_results.append((tool_use.id, result, is_error))
                     except Exception as e:
                         error_msg = f"Tool execution failed: {str(e)}"
                         yield ToolResultEvent(

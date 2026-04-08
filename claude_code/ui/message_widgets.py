@@ -6,7 +6,7 @@ from typing import List, Optional
 from markdown_it import MarkdownIt
 from textual.await_complete import AwaitComplete
 from textual.app import ComposeResult
-from textual.content import Content
+from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
 from textual.highlight import highlight as highlight_code
 from textual.widgets import _markdown as textual_markdown
@@ -316,10 +316,11 @@ class ToolUseWidget(VerticalGroup):
                 ),
                 markup=False,
             )
-        prefix = "[ERR]" if self._result_is_error else "[OK]"
-        return Content.from_text(
-            sanitize_terminal_text(f"{prefix} {self._result_summary}"),
-            markup=False,
+        summary = sanitize_terminal_text(self._result_summary)
+        status_style = "$error" if self._result_is_error else "$success"
+        return Content(
+            f"● {summary}",
+            spans=[Span(0, 1, status_style)],
         )
 
     def _compose_detail_widgets(self) -> ComposeResult:

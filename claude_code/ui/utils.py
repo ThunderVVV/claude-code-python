@@ -61,6 +61,13 @@ def _compact_file_path_in_summary(summary: str, tool_input: dict) -> str:
     return summary.replace(sanitized_path, file_name)
 
 
+def _basename_from_tool_input(tool_input: dict, default: str = "file") -> str:
+    """Extract a basename from tool input when available."""
+    file_path = tool_input.get("file_path", "")
+    file_name = os.path.basename(str(file_path))
+    return file_name or default
+
+
 def _quote_search_pattern(pattern: object) -> str:
     """Render a search pattern for compact UI summaries."""
     sanitized = sanitize_terminal_text(str(pattern)).strip()
@@ -135,6 +142,38 @@ def _summarize_grep_result(tool_input: dict, trimmed_lines: List[str]) -> str:
     return "Grep completed"
 
 
+def _summarize_tool_error(tool_name: str, tool_input: dict) -> str:
+    """Build an action-oriented summary for a failed tool result."""
+    if tool_name == "Bash":
+        command = sanitize_terminal_text(str(tool_input.get("command", ""))).strip()
+        if command:
+            return f"Failed to run {truncate_preview_line(command, 64)}"
+        return "Failed to run command"
+
+    if tool_name == "Read":
+        return f"Failed to read {_basename_from_tool_input(tool_input)}"
+
+    if tool_name == "Write":
+        return f"Failed to write {_basename_from_tool_input(tool_input)}"
+
+    if tool_name == "Edit":
+        return f"Failed to edit {_basename_from_tool_input(tool_input)}"
+
+    if tool_name == "Glob":
+        pattern = _quote_search_pattern(tool_input.get("pattern", ""))
+        if pattern:
+            return f"Failed to search for files matching {pattern}"
+        return "Failed to search for files"
+
+    if tool_name == "Grep":
+        pattern = _quote_search_pattern(tool_input.get("pattern", ""))
+        if pattern:
+            return f"Failed to search for {pattern}"
+        return "Failed to search"
+
+    return f"Failed to run {tool_name}"
+
+
 def summarize_tool_result(
     tool_name: str,
     tool_input: dict,
@@ -146,18 +185,13 @@ def summarize_tool_result(
     trimmed_lines = [line for line in lines if line.strip()]
 
     if is_error:
-        summary = truncate_preview_line(
-            _compact_file_path_in_summary(
-                trimmed_lines[0] if trimmed_lines else "Tool failed",
-                tool_input,
-            )
-        )
-        output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1], 4)
+        summary = truncate_preview_line(_summarize_tool_error(tool_name, tool_input))
+        output_lines = _truncate_result_lines(trimmed_lines[:4] or ["Tool failed"], 4)
         return _normalize_summary_text(summary), output_lines
 
     if tool_name == "Read":
         match = re.search(r"Lines:\s*(\d+)-(\d+)\s+of\s+(\d+)", result)
-        file_name = os.path.basename(tool_input.get("file_path", "")) or "file"
+        file_name = _basename_from_tool_input(tool_input)
         if match:
             start_line = int(match.group(1))
             end_line = int(match.group(2))

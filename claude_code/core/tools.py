@@ -142,6 +142,14 @@ class BaseTool(ABC):
         """Get present-tense activity description for spinner"""
         return None
 
+    def is_error_result(
+        self,
+        result: str,
+        input: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Check whether a tool result string should be treated as a failure."""
+        return False
+
     def to_openai_tool(self) -> Dict[str, Any]:
         """Convert to OpenAI tool format"""
         return {

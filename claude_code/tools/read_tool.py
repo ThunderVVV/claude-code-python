@@ -84,6 +84,13 @@ Usage:
             return os.path.basename(path)
         return self.name
 
+    def is_error_result(
+        self,
+        result: str,
+        input: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        return result.startswith("Error")
+
     async def validate_input(
         self,
         input: Dict[str, Any],
@@ -140,4 +147,3 @@ Usage:
             return f"Error: File appears to be binary or uses an unsupported encoding: {full_path}"
         except Exception as e:
             return f"Error reading file: {str(e)}"
-
