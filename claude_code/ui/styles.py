@@ -19,6 +19,7 @@ REPLScreen {
 #content-area {
     height: 1fr;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0 1;
 }
 
