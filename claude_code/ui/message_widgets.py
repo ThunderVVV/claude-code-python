@@ -71,7 +71,7 @@ class ThinkingBlockWidget(VerticalGroup):
 
     def compose(self) -> ComposeResult:
         with Collapsible(
-            title="💭 Thinking...",
+            title="Thinking...",
             collapsed=True,
             collapsed_symbol=">",
             expanded_symbol="v",

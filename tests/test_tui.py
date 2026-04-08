@@ -24,6 +24,7 @@ from claude_code.ui.app import ClaudeCodeApp
 from claude_code.ui.message_widgets import (
     AssistantMessageWidget,
     MessageList,
+    ThinkingBlockWidget,
     ToolUseWidget,
 )
 from claude_code.ui.widgets import WelcomeWidget, InputTextArea
@@ -802,6 +803,42 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
             self.assertIn("[OK] Found 3 files matching", screenshot)
             self.assertNotIn("&#x27;*.md&#x27;:", screenshot)
+
+    async def test_thinking_collapsible_focus_keeps_background_unchanged(self) -> None:
+        def event_factory(user_text: str):
+            return []
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(80, 12)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            message_list = screen.query_one("#message-list", MessageList)
+            await message_list.mount(ThinkingBlockWidget("Let me think"))
+            await pilot.pause(0.05)
+
+            thinking_toggle = screen.query_one(".thinking-collapsible", Collapsible)
+            thinking_title = screen.query_one(".thinking-collapsible CollapsibleTitle")
+
+            self.assertEqual(thinking_toggle.styles.border_top[0], "")
+            self.assertEqual(thinking_toggle.styles.background_tint.a, 0)
+            self.assertEqual(thinking_title.styles.background.a, 0)
+
+            thinking_title.focus()
+            await pilot.pause(0.05)
+
+            self.assertEqual(thinking_toggle.styles.border_top[0], "")
+            self.assertEqual(thinking_toggle.styles.background_tint.a, 0)
+            self.assertEqual(thinking_title.styles.background.a, 0)
+
+            thinking_toggle.collapsed = False
+            await pilot.pause(0.05)
+
+            self.assertEqual(thinking_toggle.styles.border_top[0], "")
+            self.assertEqual(thinking_toggle.styles.background_tint.a, 0)
+            self.assertEqual(thinking_title.styles.background.a, 0)
 
     async def test_tool_output_strips_terminal_control_sequences(self) -> None:
         def event_factory(user_text: str):

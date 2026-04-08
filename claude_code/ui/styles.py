@@ -126,7 +126,6 @@ WelcomeWidget:focus {
     dock: bottom;
     padding: 1 2;
     background: #1a1a1a;
-    border-top: solid rgb(215,119,87);
 }
 
 #user-input {
@@ -343,13 +342,30 @@ ToolUseWidget {
 }
 
 .thinking-collapsible {
-    background: #1a1d21;
+    background: transparent;
+    border-top: none;
     border-left: solid rgb(153,153,153);
     padding: 0;
     margin: 0;
 }
 
+.thinking-collapsible:focus-within {
+    background-tint: 0%;
+}
+
 .thinking-collapsible CollapsibleTitle {
+    color: rgb(153,153,153);
+    text-style: italic;
+    background: transparent;
+}
+
+.thinking-collapsible CollapsibleTitle:hover {
+    background: transparent;
+    color: rgb(153,153,153);
+}
+
+.thinking-collapsible CollapsibleTitle:focus {
+    background: transparent;
     color: rgb(153,153,153);
     text-style: italic;
 }
