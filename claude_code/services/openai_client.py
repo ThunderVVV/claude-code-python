@@ -1,4 +1,3 @@
-
 """OpenAI compatible API client using official OpenAI SDK"""
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from claude_code.core.messages import (
     MessageRole,
     ToolUseContent,
     ToolResultContent,
+    ThinkingContent,
     Usage,
 )
 from claude_code.core.tools import ToolRegistry
@@ -30,6 +30,7 @@ PARTIAL_JSON_STRING_FIELD_RE = re.compile(
 @dataclass
 class OpenAIClientConfig:
     """Configuration for OpenAI API client"""
+
     api_url: str
     api_key: str
     model_name: str
@@ -42,6 +43,7 @@ class OpenAIClientConfig:
 @dataclass
 class ToolCallDelta:
     """Incremental tool call data during streaming"""
+
     id: str = ""
     name: str = ""
     arguments: str = ""
@@ -73,16 +75,20 @@ class OpenAIClient:
 
         for msg in messages:
             if msg.type == MessageRole.SYSTEM:
-                openai_messages.append({
-                    "role": "system",
-                    "content": msg.get_text(),
-                })
+                openai_messages.append(
+                    {
+                        "role": "system",
+                        "content": msg.get_text(),
+                    }
+                )
 
             elif msg.type == MessageRole.USER:
-                openai_messages.append({
-                    "role": "user",
-                    "content": msg.get_text(),
-                })
+                openai_messages.append(
+                    {
+                        "role": "user",
+                        "content": msg.get_text(),
+                    }
+                )
 
             elif msg.type == MessageRole.ASSISTANT:
                 # Check if message has tool calls
@@ -92,37 +98,45 @@ class OpenAIClient:
                     # Assistant message with tool calls
                     tool_calls = []
                     for tu in tool_uses:
-                        tool_calls.append({
-                            "id": tu.id,
-                            "type": "function",
-                            "function": {
-                                "name": tu.name,
-                                "arguments": json.dumps(tu.input),
-                            },
-                        })
+                        tool_calls.append(
+                            {
+                                "id": tu.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tu.name,
+                                    "arguments": json.dumps(tu.input),
+                                },
+                            }
+                        )
 
-                    openai_messages.append({
-                        "role": "assistant",
-                        "content": msg.get_text() or None,
-                        "tool_calls": tool_calls,
-                    })
+                    openai_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": msg.get_text() or None,
+                            "tool_calls": tool_calls,
+                        }
+                    )
                 else:
                     # Simple text message
                     text = msg.get_text()
-                    openai_messages.append({
-                        "role": "assistant",
-                        "content": text,
-                    })
+                    openai_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": text,
+                        }
+                    )
 
             elif msg.type == MessageRole.TOOL:
                 # Tool result message
                 for block in msg.content:
                     if isinstance(block, ToolResultContent):
-                        openai_messages.append({
-                            "role": "tool",
-                            "tool_call_id": block.tool_use_id,
-                            "content": block.content,
-                        })
+                        openai_messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": block.tool_use_id,
+                                "content": block.content,
+                            }
+                        )
 
         return openai_messages
 
@@ -143,10 +157,12 @@ class OpenAIClient:
 
         # Add system prompt if provided
         if system_prompt:
-            openai_messages.append({
-                "role": "system",
-                "content": system_prompt,
-            })
+            openai_messages.append(
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                }
+            )
 
         # Add conversation messages
         openai_messages.extend(self._convert_messages_to_openai_format(messages))
@@ -169,7 +185,9 @@ class OpenAIClient:
         try:
             if stream:
                 # Streaming request using SDK
-                stream_response = await self._client.chat.completions.create(**request_params)
+                stream_response = await self._client.chat.completions.create(
+                    **request_params
+                )
                 chunk_index = 0
                 async for chunk in stream_response:
                     chunk_index += 1
@@ -188,20 +206,25 @@ class OpenAIClient:
     def parse_stream_chunk(
         self,
         chunk: Dict[str, Any],
-    ) -> tuple[str, List[ToolCallDelta]]:
+    ) -> tuple[str, str, List[ToolCallDelta]]:
         """
-        Parse a stream chunk into text delta and tool call deltas.
+        Parse a stream chunk into text delta, thinking delta, and tool call deltas.
 
-        Returns (text_delta, tool_call_deltas)
+        Returns (text_delta, thinking_delta, tool_call_deltas)
         """
         text = ""
+        thinking = ""
         tool_calls = []
 
         choices = chunk.get("choices", [])
         if not choices:
-            return text, tool_calls
+            return text, thinking, tool_calls
 
         delta = choices[0].get("delta", {})
+
+        # Extract reasoning_content (thinking) - for models like DeepSeek
+        if "reasoning_content" in delta and delta["reasoning_content"] is not None:
+            thinking = delta["reasoning_content"]
 
         # Extract text content
         if "content" in delta and delta["content"] is not None:
@@ -226,24 +249,59 @@ class OpenAIClient:
                     if "arguments" in func:
                         tool_calls[idx].arguments += func["arguments"]
 
-        return text, tool_calls
+        return text, thinking, tool_calls
 
     def parse_non_stream_response(
         self,
         response: Dict[str, Any],
-    ) -> tuple[str, List[ToolUseContent], Optional[Usage]]:
+    ) -> tuple[str, str, List[ToolUseContent], Optional[Usage]]:
         """
-        Parse a non-stream response into text, tool uses, and usage.
+        Parse a non-stream response into text, thinking, tool uses, and usage.
 
-        Returns (text, tool_uses, usage)
+        Returns (text, thinking, tool_uses, usage)
         """
         text = ""
+        thinking = ""
         tool_uses = []
         usage = None
 
         choices = response.get("choices", [])
         if not choices:
-            return text, tool_uses, usage
+            return text, thinking, tool_uses, usage
+
+        message = choices[0].get("message", {})
+
+        # Extract reasoning_content (thinking) - for models like DeepSeek
+        if "reasoning_content" in message and message["reasoning_content"] is not None:
+            thinking = message["reasoning_content"]
+
+        # Extract text content
+        if "content" in message and message["content"] is not None:
+            text = message["content"]
+
+        # Extract tool calls
+        if "tool_calls" in message and message["tool_calls"] is not None:
+            for tc in message["tool_calls"]:
+                try:
+                    args = json.loads(tc["function"]["arguments"])
+                    tool_uses.append(
+                        ToolUseContent(
+                            id=tc["id"],
+                            name=tc["function"]["name"],
+                            input=args,
+                        )
+                    )
+                except (KeyError, json.JSONDecodeError):
+                    continue
+
+        # Extract usage
+        if "usage" in response:
+            usage = Usage(
+                input_tokens=response["usage"].get("prompt_tokens", 0),
+                output_tokens=response["usage"].get("completion_tokens", 0),
+            )
+
+        return text, thinking, tool_uses, usage
 
         message = choices[0].get("message", {})
 
@@ -256,11 +314,13 @@ class OpenAIClient:
             for tc in message["tool_calls"]:
                 try:
                     args = json.loads(tc["function"]["arguments"])
-                    tool_uses.append(ToolUseContent(
-                        id=tc["id"],
-                        name=tc["function"]["name"],
-                        input=args,
-                    ))
+                    tool_uses.append(
+                        ToolUseContent(
+                            id=tc["id"],
+                            name=tc["function"]["name"],
+                            input=args,
+                        )
+                    )
                 except (KeyError, json.JSONDecodeError):
                     continue
 
@@ -318,13 +378,17 @@ class OpenAIClient:
                     args = {}
 
                 logger.debug(f"Tool call parsed: {tc.name}, id: {tc.id}")
-                blocks.append(ToolUseContent(
-                    id=tc.id,
-                    name=tc.name,
-                    input=args,
-                ))
+                blocks.append(
+                    ToolUseContent(
+                        id=tc.id,
+                        name=tc.name,
+                        input=args,
+                    )
+                )
             else:
-                logger.warning(f"Skipping incomplete tool call: id={tc.id}, name={tc.name}")
+                logger.warning(
+                    f"Skipping incomplete tool call: id={tc.id}, name={tc.name}"
+                )
         return blocks
 
     def _parse_tool_call_arguments(
@@ -383,9 +447,11 @@ class OpenAIClient:
 
 class APIError(Exception):
     """Base exception for API errors"""
+
     pass
 
 
 class APINetworkError(APIError):
     """Exception for network-related errors (connection, timeout, etc.)"""
+
     pass

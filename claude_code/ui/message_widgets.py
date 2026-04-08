@@ -12,6 +12,7 @@ from claude_code.core.messages import (
     Message,
     MessageRole,
     TextContent,
+    ThinkingContent,
     ToolUseContent,
     ToolResultContent,
 )
@@ -39,6 +40,51 @@ class StreamingTextWidget(Static):
         """Update the displayed text."""
         self._text = text
         self.update(sanitize_terminal_text(text))
+
+
+class ThinkingWidget(Static):
+    """Widget for displaying thinking/reasoning content in a collapsible block."""
+
+    def __init__(self, initial_thinking: str = "", **kwargs):
+        super().__init__(
+            sanitize_terminal_text(initial_thinking),
+            classes="thinking-content",
+            markup=False,
+            **kwargs,
+        )
+        self._thinking = initial_thinking
+
+    def update_thinking(self, thinking: str) -> None:
+        """Update the displayed thinking content."""
+        self._thinking = thinking
+        self.update(sanitize_terminal_text(thinking))
+
+
+class ThinkingBlockWidget(VerticalGroup):
+    """Collapsible widget for thinking/reasoning content."""
+
+    def __init__(self, initial_thinking: str = "", **kwargs):
+        super().__init__(**kwargs)
+        self._thinking = initial_thinking
+        self._thinking_widget: Optional[ThinkingWidget] = None
+        self.add_class("thinking-block")
+
+    def compose(self) -> ComposeResult:
+        with Collapsible(
+            title="💭 Thinking...",
+            collapsed=True,
+            collapsed_symbol=">",
+            expanded_symbol="v",
+            classes="thinking-collapsible",
+        ):
+            self._thinking_widget = ThinkingWidget(self._thinking)
+            yield self._thinking_widget
+
+    def update_thinking(self, thinking: str) -> None:
+        """Update the thinking content."""
+        self._thinking = thinking
+        if self._thinking_widget:
+            self._thinking_widget.update_thinking(thinking)
 
 
 class ToolUseWidget(VerticalGroup):
@@ -154,10 +200,12 @@ class AssistantMessageWidget(VerticalGroup):
 
     def __init__(self, message: Optional[Message] = None, **kwargs):
         super().__init__(**kwargs)
+        self._thinking_content: str = ""
         self._text_content: str = ""
         self._tool_uses: List[ToolUseContent] = []
         self._tool_use_ids: set[str] = set()
         self._tool_widgets_by_id: dict[str, ToolUseWidget] = {}
+        self._thinking_widget: Optional[ThinkingBlockWidget] = None
         self._streaming_widget: Optional[StreamingTextWidget] = None
         self._tool_widgets: List[ToolUseWidget] = []
         self._content_container: Optional[VerticalGroup] = None
@@ -167,9 +215,12 @@ class AssistantMessageWidget(VerticalGroup):
             self.sync_from_message(message)
 
     def compose(self) -> ComposeResult:
-        # Content container - will hold text and tool widgets
+        # Content container - will hold thinking, text and tool widgets
         with VerticalGroup(classes="message-content") as container:
             self._content_container = container
+            if self._thinking_content:
+                self._thinking_widget = ThinkingBlockWidget(self._thinking_content)
+                yield self._thinking_widget
             if self._text_content:
                 self._streaming_widget = StreamingTextWidget(self._text_content)
                 yield self._streaming_widget
@@ -183,6 +234,18 @@ class AssistantMessageWidget(VerticalGroup):
                 if tool_use.id:
                     self._tool_widgets_by_id[tool_use.id] = tool_widget
                 yield tool_widget
+
+    def update_thinking(self, thinking: str) -> None:
+        """Update the streaming thinking content"""
+        self._thinking_content = thinking
+        if self._thinking_widget:
+            self._thinking_widget.update_thinking(thinking)
+        elif thinking and self._content_container:
+            self._thinking_widget = ThinkingBlockWidget(thinking)
+            before_widget = self._streaming_widget
+            if not before_widget and self._tool_widgets:
+                before_widget = self._tool_widgets[0]
+            self._content_container.mount(self._thinking_widget, before=before_widget)
 
     def update_text(self, text: str) -> None:
         """Update the streaming text content"""
@@ -248,7 +311,9 @@ class AssistantMessageWidget(VerticalGroup):
     def sync_from_message(self, message: Message) -> None:
         """Ensure widget state matches the finalized assistant message."""
         for block in message.content:
-            if isinstance(block, TextContent):
+            if isinstance(block, ThinkingContent):
+                self.update_thinking(block.thinking)
+            elif isinstance(block, TextContent):
                 self.update_text(block.text)
             elif isinstance(block, ToolUseContent):
                 self.add_tool_use(block)
@@ -256,10 +321,13 @@ class AssistantMessageWidget(VerticalGroup):
     def get_message(self) -> Message:
         """Build the current message from accumulated content"""
         content: List = []
+        if self._thinking_content:
+            content.append(ThinkingContent(thinking=self._thinking_content))
         if self._text_content:
             content.append(TextContent(text=self._text_content))
         content.extend(self._tool_uses)
         return Message.assistant_message(content)
+
 
 class MessageWidget(VerticalGroup):
     """Widget for displaying a single message"""
@@ -279,7 +347,10 @@ class MessageWidget(VerticalGroup):
 
         # Content
         for block in self.message.content:
-            if isinstance(block, TextContent):
+            if isinstance(block, ThinkingContent):
+                if block.thinking.strip():
+                    yield ThinkingBlockWidget(block.thinking)
+            elif isinstance(block, TextContent):
                 if block.text.strip():
                     # Use StreamingTextWidget for assistant messages to allow updates
                     if self.message.type == MessageRole.ASSISTANT:
@@ -429,7 +500,9 @@ class MessageList(VerticalGroup):
         auto_follow: bool = True,
     ) -> None:
         """Add a fallback tool result using the same single-collapsible tool UI."""
-        widget = ToolUseWidget(tool_name=tool_name, tool_input=tool_input, tool_use_id="")
+        widget = ToolUseWidget(
+            tool_name=tool_name, tool_input=tool_input, tool_use_id=""
+        )
         widget.set_result(result, is_error)
         self.mount(widget)
         self._message_widgets.append(widget)

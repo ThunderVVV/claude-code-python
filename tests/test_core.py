@@ -9,6 +9,8 @@ from claude_code.core.messages import (
     MessageRole,
     TextContent,
     TextEvent,
+    ThinkingContent,
+    ThinkingEvent,
     ToolUseEvent,
     ToolUseContent,
     ToolResultContent,
@@ -111,7 +113,9 @@ class TestMessages:
         """Test message with tool uses"""
         content = [
             TextContent(text="Let me help you."),
-            ToolUseContent(id="tool-1", name="Read", input={"file_path": "/tmp/test.txt"}),
+            ToolUseContent(
+                id="tool-1", name="Read", input={"file_path": "/tmp/test.txt"}
+            ),
         ]
         msg = Message.assistant_message(content)
         assert msg.has_tool_uses()
@@ -277,6 +281,7 @@ class TestToolInputSchema:
 
 def test_query_engine_streams_tool_preview_before_large_write_finishes(tmp_path):
     """Large streamed tool inputs should surface a preview before the full tool JSON completes."""
+
     async def run_test():
         registry = ToolRegistry()
         registry.register(WriteTool())
@@ -378,6 +383,102 @@ def test_query_engine_streams_tool_preview_before_large_write_finishes(tmp_path)
     }
     assert turn_event.turn == 1
     assert output_path.read_text() == "hello world"
+
+
+def test_query_engine_streams_thinking_before_text():
+    """Test that reasoning_content is parsed and emitted as ThinkingEvent."""
+
+    async def run_test():
+        registry = ToolRegistry()
+
+        chunks = [
+            {
+                "choices": [
+                    {
+                        "delta": {"reasoning_content": "Let me think..."},
+                        "finish_reason": None,
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {"reasoning_content": " step by step."},
+                        "finish_reason": None,
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {"content": "The answer is 42."},
+                        "finish_reason": None,
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {},
+                        "finish_reason": "stop",
+                    }
+                ]
+            },
+        ]
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_path:
+            engine = QueryEngine(
+                OpenAIClientConfig(
+                    api_url="http://localhost/v1",
+                    api_key="test-key",
+                    model_name="test-model",
+                ),
+                registry,
+                QueryConfig(max_turns=1, stream=True, working_directory=tmp_path),
+            )
+            engine._client = FakeStreamingClient(chunks)
+            engine._is_initialized = True
+
+            events = [event async for event in engine.submit_message("question")]
+            return events
+
+    events = asyncio.run(run_test())
+
+    thinking_events = [event for event in events if isinstance(event, ThinkingEvent)]
+    text_events = [event for event in events if isinstance(event, TextEvent)]
+
+    assert len(thinking_events) == 2
+    assert thinking_events[0].thinking == "Let me think..."
+    assert thinking_events[1].thinking == " step by step."
+
+    assert len(text_events) == 1
+    assert text_events[0].text == "The answer is 42."
+
+    assistant_message_event = next(
+        event
+        for event in events
+        if isinstance(event, MessageCompleteEvent)
+        and event.message
+        and event.message.type == MessageRole.ASSISTANT
+    )
+
+    thinking_blocks = [
+        block
+        for block in assistant_message_event.message.content
+        if isinstance(block, ThinkingContent)
+    ]
+    text_blocks = [
+        block
+        for block in assistant_message_event.message.content
+        if isinstance(block, TextContent)
+    ]
+
+    assert len(thinking_blocks) == 1
+    assert thinking_blocks[0].thinking == "Let me think... step by step."
+    assert len(text_blocks) == 1
+    assert text_blocks[0].text == "The answer is 42."
 
 
 if __name__ == "__main__":

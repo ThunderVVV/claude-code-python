@@ -332,4 +332,37 @@ ToolUseWidget {
     width: 100%;
     height: auto;
 }
+
+/* Thinking block styling */
+.thinking-block {
+    width: 100%;
+    height: auto;
+    margin: 0 0 1 0;
+    padding: 0;
+    background: transparent;
+}
+
+.thinking-collapsible {
+    background: #1a1d21;
+    border-left: solid rgb(153,153,153);
+    padding: 0;
+    margin: 0;
+}
+
+.thinking-collapsible CollapsibleTitle {
+    color: rgb(153,153,153);
+    text-style: italic;
+}
+
+.thinking-collapsible > Contents {
+    padding: 0 1;
+}
+
+.thinking-content {
+    color: rgb(153,153,153);
+    text-style: italic;
+    padding: 0 1;
+    margin: 0;
+    background: transparent;
+}
 """

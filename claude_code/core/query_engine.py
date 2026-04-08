@@ -19,10 +19,12 @@ from claude_code.core.messages import (
     QueryState,
     QueryEvent,
     TextContent,
+    ThinkingContent,
     ToolResultContent,
     ToolUseContent,
     Usage,
     TextEvent,
+    ThinkingEvent,
     ToolUseEvent,
     ToolResultEvent,
     MessageCompleteEvent,
@@ -205,6 +207,7 @@ class QueryEngine:
 
             # Track accumulated content for this turn
             current_text = ""
+            current_thinking = ""
             accumulated_tool_calls: List[ToolCallDelta] = []
             previewed_tool_use_ids: set[str] = set()
             stop_reason = "end_turn"
@@ -222,9 +225,14 @@ class QueryEngine:
                 ):
                     if self.config.stream:
                         # Parse streaming chunk
-                        text_delta, tool_call_deltas = self._client.parse_stream_chunk(
-                            chunk
+                        text_delta, thinking_delta, tool_call_deltas = (
+                            self._client.parse_stream_chunk(chunk)
                         )
+
+                        # Accumulate thinking
+                        if thinking_delta:
+                            current_thinking += thinking_delta
+                            yield ThinkingEvent(thinking=thinking_delta)
 
                         # Accumulate text
                         if text_delta:
@@ -238,8 +246,10 @@ class QueryEngine:
                                 accumulated_tool_calls,
                                 tool_call_deltas,
                             )
-                            preview_tool_uses = self._client.partial_tool_calls_to_content_blocks(
-                                accumulated_tool_calls
+                            preview_tool_uses = (
+                                self._client.partial_tool_calls_to_content_blocks(
+                                    accumulated_tool_calls
+                                )
                             )
                             for tool_use in preview_tool_uses:
                                 if tool_use.id in previewed_tool_use_ids:
@@ -259,10 +269,11 @@ class QueryEngine:
                                 stop_reason = finish_reason
                     else:
                         # Non-streaming response
-                        text, tool_uses, usage = self._client.parse_non_stream_response(
-                            chunk
+                        text, thinking, tool_uses, usage = (
+                            self._client.parse_non_stream_response(chunk)
                         )
                         current_text = text
+                        current_thinking = thinking
                         accumulated_tool_calls = []
 
                         # Convert tool uses to deltas
@@ -274,6 +285,9 @@ class QueryEngine:
                                     arguments=json.dumps(tu.input),
                                 )
                             )
+
+                        if thinking:
+                            yield ThinkingEvent(thinking=thinking)
 
                         if text:
                             yield TextEvent(text=text)
@@ -289,6 +303,9 @@ class QueryEngine:
 
                 # Build content blocks
                 content_blocks: List[ContentBlock] = []
+
+                if current_thinking:
+                    content_blocks.append(ThinkingContent(thinking=current_thinking))
 
                 if current_text:
                     content_blocks.append(TextContent(text=current_text))

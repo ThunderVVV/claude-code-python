@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-09
+
+#### Reasoning/Thinking Content Support
+- Added support for displaying model reasoning/thinking content (chain-of-thought)
+- Added `ThinkingContent` dataclass for reasoning content blocks
+- Added `ThinkingEvent` for streaming thinking content during responses
+- Updated `OpenAIClient.parse_stream_chunk()` to extract `reasoning_content` field (for models like DeepSeek)
+- Updated `OpenAIClient.parse_non_stream_response()` to handle thinking content in non-streaming responses
+- Added `ThinkingBlockWidget` with collapsible UI for thinking display
+- Added CSS styles for thinking blocks (gray italic text, left border)
+- Thinking content appears before text/tool output in the transcript
+- Thinking block is collapsed by default to keep transcript clean
+- Added test `test_query_engine_streams_thinking_before_text` for thinking event flow
+
 ### Changed - 2026-04-08
 
 #### Bash Tool Parameter Description Enhancement

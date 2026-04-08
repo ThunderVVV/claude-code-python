@@ -18,9 +18,11 @@ from claude_code.core.messages import (
     Message,
     MessageRole,
     TextContent,
+    ThinkingContent,
     ToolUseContent,
     QueryEvent,
     TextEvent,
+    ThinkingEvent,
     ToolUseEvent,
     ToolResultEvent,
     MessageCompleteEvent,
@@ -51,6 +53,7 @@ class REPLScreen(Screen):
         self.model_name = model_name
         self._is_processing = False
         self._current_assistant_widget: Optional[AssistantMessageWidget] = None
+        self._current_thinking = ""
         self._current_text = ""
         self._show_welcome = True
         self._tool_use_context: dict[str, ToolUseContent] = {}
@@ -194,7 +197,7 @@ class REPLScreen(Screen):
         else:
             # Reset height to auto when processing completes
             input_widget.set_styles("height: auto;")
-        
+
         input_widget.refresh()
 
         input_widget.placeholder = (
@@ -212,6 +215,7 @@ class REPLScreen(Screen):
 
     def _reset_streaming_state(self) -> None:
         """Prepare for a fresh assistant response."""
+        self._current_thinking = ""
         self._current_text = ""
         self._current_assistant_widget = None
 
@@ -297,7 +301,22 @@ class REPLScreen(Screen):
         Key difference from before: we use AssistantMessageWidget which allows
         incremental updates without recreating the entire widget.
         """
-        if isinstance(event, TextEvent):
+        if isinstance(event, ThinkingEvent):
+            auto_follow = message_list.should_auto_follow_output()
+            # Accumulate thinking
+            self._current_thinking += event.thinking
+
+            # Create assistant widget on first thinking if not exists
+            assistant_widget = self._ensure_assistant_widget(
+                message_list,
+                auto_follow=auto_follow,
+            )
+
+            # Update the thinking in the existing widget (no recreation)
+            assistant_widget.update_thinking(self._current_thinking)
+            message_list.schedule_scroll_to_latest(auto_follow)
+
+        elif isinstance(event, TextEvent):
             auto_follow = message_list.should_auto_follow_output()
             # Accumulate text
             self._current_text += event.text

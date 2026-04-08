@@ -30,6 +30,22 @@ class TextContent:
 
 
 @dataclass
+class ThinkingContent:
+    """Thinking/reasoning content block - for models that support chain-of-thought"""
+
+    type: str = field(default="thinking", init=False)
+    thinking: str = ""
+    signature: str = ""
+
+    def to_api_format(self) -> Dict[str, Any]:
+        return {
+            "type": "thinking",
+            "thinking": self.thinking,
+            "signature": self.signature,
+        }
+
+
+@dataclass
 class ToolUseContent:
     """Tool use content block"""
 
@@ -66,7 +82,7 @@ class ToolResultContent:
 
 
 # Content block union type
-ContentBlock = Union[TextContent, ToolUseContent, ToolResultContent]
+ContentBlock = Union[TextContent, ThinkingContent, ToolUseContent, ToolResultContent]
 
 
 def generate_uuid() -> str:
@@ -372,6 +388,13 @@ class TextEvent(QueryEvent):
     """Event for streaming text content"""
 
     text: str = ""
+
+
+@dataclass
+class ThinkingEvent(QueryEvent):
+    """Event for streaming thinking/reasoning content"""
+
+    thinking: str = ""
 
 
 @dataclass
