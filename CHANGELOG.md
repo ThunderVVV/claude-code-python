@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-08
+
+#### Bash Tool Parameter Description Enhancement
+- Updated `description` parameter description in BashTool to align with TypeScript version
+- Added detailed guidance for writing command descriptions:
+  - Simple commands: brief descriptions (5-10 words)
+  - Complex commands: add context for clarity
+  - Examples provided for both cases
+- Description length increased from ~50 to ~730 characters
+- No functional changes - only parameter documentation improvement
+
 ### Removed - 2026-04-08
 
 #### Duplicate Tool Definitions Cleanup
