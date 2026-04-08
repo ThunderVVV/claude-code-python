@@ -89,6 +89,15 @@ class ToolUseWidget(VerticalGroup):
         if self._details_container and self._details_container.is_mounted:
             self._render_detail_widgets()
 
+    def update_tool_input(self, tool_name: str, tool_input: dict) -> None:
+        """Refresh the tool summary/details when fuller input arrives later."""
+        self.tool_name = tool_name
+        self.tool_input = tool_input
+        if self._details_collapsible:
+            self._details_collapsible.title = self._collapsible_title()
+        if self._details_container and self._details_container.is_mounted:
+            self._render_detail_widgets()
+
     def on_mount(self) -> None:
         """Refresh the single collapsible after mount in case results arrived early."""
         if self._details_collapsible:
@@ -188,6 +197,7 @@ class AssistantMessageWidget(VerticalGroup):
     def add_tool_use(self, tool_use: ToolUseContent) -> Optional[ToolUseWidget]:
         """Add a tool use to the message and return its widget."""
         if tool_use.id and tool_use.id in self._tool_use_ids:
+            self._update_tool_use(tool_use)
             return self._tool_widgets_by_id.get(tool_use.id)
         self._tool_uses.append(tool_use)
         if tool_use.id:
@@ -204,6 +214,19 @@ class AssistantMessageWidget(VerticalGroup):
                 self._tool_widgets_by_id[tool_use.id] = tool_widget
             return tool_widget
         return None
+
+    def _update_tool_use(self, tool_use: ToolUseContent) -> None:
+        """Apply fuller tool metadata to an existing streamed tool block."""
+        if not tool_use.id:
+            return
+        for existing_tool_use in self._tool_uses:
+            if existing_tool_use.id == tool_use.id:
+                existing_tool_use.name = tool_use.name
+                existing_tool_use.input = tool_use.input
+                break
+        tool_widget = self._tool_widgets_by_id.get(tool_use.id)
+        if tool_widget:
+            tool_widget.update_tool_input(tool_use.name, tool_use.input)
 
     def add_tool_result(
         self,

@@ -412,6 +412,73 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertGreater(content_area.max_scroll_y, 0)
             self.assertEqual(content_area.scroll_y, content_area.max_scroll_y)
 
+    async def test_streaming_tool_preview_backfills_into_single_tool_block(self) -> None:
+        finalized_tool = ToolUseContent(
+            id="tool-1",
+            name="Write",
+            input={
+                "file_path": "/tmp/demo.txt",
+                "content": "hello world",
+            },
+        )
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                0.01,
+                TextEvent(text="I am "),
+                0.01,
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Write",
+                    input={},
+                ),
+                0.12,
+                TextEvent(text="writing the file"),
+                0.01,
+                MessageCompleteEvent(
+                    message=Message.assistant_message(
+                        [
+                            TextContent(text="I am writing the file"),
+                            finalized_tool,
+                        ],
+                    ),
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "write it"
+            input_widget._on_submit(input_widget.text)
+
+            await pilot.pause(0.06)
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertEqual(str(tool_toggle.title), "Write")
+
+            mid_stream_screenshot = app.export_screenshot(simplify=True).replace(
+                "&#160;", " "
+            )
+            self.assertIn("I am", mid_stream_screenshot)
+            self.assertIn("Write", mid_stream_screenshot)
+            self.assertNotIn("demo.txt", mid_stream_screenshot)
+
+            await pilot.pause(0.16)
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertEqual(str(tool_toggle.title), "Write: demo.txt")
+            self.assertEqual(len(list(screen.query(ToolUseWidget))), 1)
+
+            final_screenshot = app.export_screenshot(simplify=True).replace(
+                "&#160;", " "
+            )
+            self.assertIn("I am writing the file", final_screenshot)
+            self.assertIn("Write: demo.txt", final_screenshot)
+
     async def test_manual_scroll_up_during_stream_does_not_snap_back(self) -> None:
         first_chunk = "\n".join(f"line {index}" for index in range(12))
         second_chunk = "\n".join(f"next {index}" for index in range(12))

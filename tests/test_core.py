@@ -1,19 +1,27 @@
 """Tests for core functionality"""
 
+import asyncio
+
 import pytest
 from claude_code.core.messages import (
     Message,
+    MessageCompleteEvent,
     MessageRole,
     TextContent,
+    TextEvent,
+    ToolUseEvent,
     ToolUseContent,
     ToolResultContent,
+    TurnCompleteEvent,
     generate_uuid,
 )
+from claude_code.core.query_engine import QueryConfig, QueryEngine
 from claude_code.core.tools import (
     ToolRegistry,
     ToolContext,
     ToolInputSchema,
 )
+from claude_code.services.openai_client import OpenAIClientConfig
 from claude_code.tools import (
     ReadTool,
     WriteTool,
@@ -22,6 +30,58 @@ from claude_code.tools import (
     GrepTool,
 )
 from claude_code.tools.bash_tool import BashTool
+
+
+class FakeStreamingClient:
+    """Minimal streaming client that reuses the production chunk parsers."""
+
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    async def close(self) -> None:
+        """Match the real client interface."""
+
+    async def chat_completion(self, *_args, **_kwargs):
+        for chunk in self._chunks:
+            yield chunk
+
+    def parse_stream_chunk(self, chunk):
+        from claude_code.services.openai_client import OpenAIClient
+
+        return OpenAIClient.parse_stream_chunk(self, chunk)
+
+    def accumulate_tool_calls(self, accumulated, new_deltas):
+        from claude_code.services.openai_client import OpenAIClient
+
+        return OpenAIClient.accumulate_tool_calls(self, accumulated, new_deltas)
+
+    def tool_calls_to_content_blocks(self, tool_calls, allow_partial=False):
+        from claude_code.services.openai_client import OpenAIClient
+
+        return OpenAIClient.tool_calls_to_content_blocks(
+            self,
+            tool_calls,
+            allow_partial=allow_partial,
+        )
+
+    def partial_tool_calls_to_content_blocks(self, tool_calls):
+        from claude_code.services.openai_client import OpenAIClient
+
+        return OpenAIClient.partial_tool_calls_to_content_blocks(self, tool_calls)
+
+    def _parse_tool_call_arguments(self, arguments, allow_partial=False):
+        from claude_code.services.openai_client import OpenAIClient
+
+        return OpenAIClient._parse_tool_call_arguments(
+            self,
+            arguments,
+            allow_partial=allow_partial,
+        )
+
+    def _extract_partial_string_fields(self, arguments):
+        from claude_code.services.openai_client import OpenAIClient
+
+        return OpenAIClient._extract_partial_string_fields(self, arguments)
 
 
 class TestMessages:
@@ -213,6 +273,111 @@ class TestToolInputSchema:
         assert d["type"] == "object"
         assert "properties" in d
         assert "required" in d
+
+
+def test_query_engine_streams_tool_preview_before_large_write_finishes(tmp_path):
+    """Large streamed tool inputs should surface a preview before the full tool JSON completes."""
+    async def run_test():
+        registry = ToolRegistry()
+        registry.register(WriteTool())
+
+        output_path = tmp_path / "demo.txt"
+        output_path_json = str(output_path).replace("\\", "\\\\")
+        chunks = [
+            {
+                "choices": [
+                    {
+                        "delta": {"content": "I am "},
+                        "finish_reason": None,
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "tool-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "Write",
+                                        "arguments": (
+                                            f'{{"file_path":"{output_path_json}","content":"'
+                                        ),
+                                    },
+                                }
+                            ]
+                        },
+                        "finish_reason": None,
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {"content": "writing the file"},
+                        "finish_reason": None,
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "function": {"arguments": 'hello world"}'},
+                                }
+                            ]
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            },
+        ]
+
+        engine = QueryEngine(
+            OpenAIClientConfig(
+                api_url="http://localhost/v1",
+                api_key="test-key",
+                model_name="test-model",
+            ),
+            registry,
+            QueryConfig(max_turns=1, stream=True, working_directory=str(tmp_path)),
+        )
+        engine._client = FakeStreamingClient(chunks)
+        engine._is_initialized = True
+
+        events = [event async for event in engine.submit_message("write a file")]
+        return events, output_path
+
+    events, output_path = asyncio.run(run_test())
+
+    text_events = [event for event in events if isinstance(event, TextEvent)]
+    assert [event.text for event in text_events] == ["I am ", "writing the file"]
+
+    tool_use_event = next(event for event in events if isinstance(event, ToolUseEvent))
+    assistant_message_event = next(
+        event
+        for event in events
+        if isinstance(event, MessageCompleteEvent)
+        and event.message
+        and event.message.type == MessageRole.ASSISTANT
+    )
+    turn_event = next(event for event in events if isinstance(event, TurnCompleteEvent))
+
+    assert events.index(tool_use_event) < events.index(assistant_message_event)
+    assert tool_use_event.input == {"file_path": str(output_path)}
+    assert assistant_message_event.message.get_text() == "I am writing the file"
+    assert assistant_message_event.message.get_tool_uses()[0].input == {
+        "file_path": str(output_path),
+        "content": "hello world",
+    }
+    assert turn_event.turn == 1
+    assert output_path.read_text() == "hello world"
 
 
 if __name__ == "__main__":

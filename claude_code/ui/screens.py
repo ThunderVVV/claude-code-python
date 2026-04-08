@@ -321,10 +321,6 @@ class REPLScreen(Screen):
                 input=event.input,
             )
             self._tool_use_context[event.tool_use_id] = tool_use
-            existing_widget = self._tool_widget_context.get(event.tool_use_id)
-            if existing_widget:
-                message_list.schedule_scroll_to_latest(auto_follow)
-                return
             # Ensure we have an assistant widget
             assistant_widget = self._ensure_assistant_widget(
                 message_list,

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -20,6 +21,10 @@ from claude_code.core.messages import (
 from claude_code.core.tools import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+PARTIAL_JSON_STRING_FIELD_RE = re.compile(
+    r'"(?P<key>[^"\\]+)"\s*:\s*"(?P<value>(?:[^"\\]|\\.)*)"'
+)
 
 
 @dataclass
@@ -170,8 +175,12 @@ class OpenAIClient:
             if stream:
                 # Streaming request using SDK
                 stream_response = await self._client.chat.completions.create(**request_params)
+                chunk_index = 0
                 async for chunk in stream_response:
-                    yield chunk.model_dump()
+                    chunk_index += 1
+                    chunk_dict = chunk.model_dump()
+                    self._log_stream_chunk(chunk_index, chunk_dict)
+                    yield chunk_dict
             else:
                 # Non-streaming request using SDK
                 response = await self._client.chat.completions.create(**request_params)
@@ -301,6 +310,7 @@ class OpenAIClient:
     def tool_calls_to_content_blocks(
         self,
         tool_calls: List[ToolCallDelta],
+        allow_partial: bool = False,
     ) -> List[ToolUseContent]:
         """Convert accumulated tool call deltas to content blocks"""
         blocks = []
@@ -309,7 +319,10 @@ class OpenAIClient:
             logger.debug(f"  Delta: id={tc.id}, name={tc.name}, args_len={len(tc.arguments)}")
             if tc.id and tc.name:
                 try:
-                    args = json.loads(tc.arguments) if tc.arguments else {}
+                    args = self._parse_tool_call_arguments(
+                        tc.arguments,
+                        allow_partial=allow_partial,
+                    )
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse tool call arguments: {e}, arguments: {tc.arguments}")
                     args = {}
@@ -323,6 +336,100 @@ class OpenAIClient:
             else:
                 logger.warning(f"  Skipping incomplete tool call: id={tc.id}, name={tc.name}")
         return blocks
+
+    def _parse_tool_call_arguments(
+        self,
+        arguments: str,
+        allow_partial: bool = False,
+    ) -> Dict[str, Any]:
+        """Parse complete tool arguments, or recover stable top-level string fields."""
+        if not arguments:
+            return {}
+
+        try:
+            parsed = json.loads(arguments)
+        except json.JSONDecodeError:
+            if allow_partial:
+                return self._extract_partial_string_fields(arguments)
+            raise
+
+        if isinstance(parsed, dict):
+            return parsed
+        return {}
+
+    def partial_tool_calls_to_content_blocks(
+        self,
+        tool_calls: List[ToolCallDelta],
+    ) -> List[ToolUseContent]:
+        """Build preview tool blocks from the currently streamed tool call deltas."""
+        blocks = []
+        for tc in tool_calls:
+            if not tc.id or not tc.name:
+                continue
+            args = self._parse_tool_call_arguments(tc.arguments, allow_partial=True)
+            blocks.append(
+                ToolUseContent(
+                    id=tc.id,
+                    name=tc.name,
+                    input=args,
+                )
+            )
+        return blocks
+
+    def _extract_partial_string_fields(self, arguments: str) -> Dict[str, Any]:
+        """Recover top-level string fields whose values are already fully streamed."""
+        partial: Dict[str, Any] = {}
+        for match in PARTIAL_JSON_STRING_FIELD_RE.finditer(arguments):
+            key = match.group("key")
+            if key in partial:
+                continue
+            raw_value = match.group("value")
+            try:
+                partial[key] = json.loads(f'"{raw_value}"')
+            except json.JSONDecodeError:
+                continue
+        return partial
+
+    def _log_stream_chunk(self, chunk_index: int, chunk: Dict[str, Any]) -> None:
+        """Emit compact DEBUG logs for streamed chunks."""
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
+        choices = chunk.get("choices", [])
+        if not choices:
+            logger.debug("OpenAI stream chunk #%s: empty choices", chunk_index)
+            return
+
+        choice = choices[0]
+        delta = choice.get("delta", {})
+        text_delta = delta.get("content")
+        tool_calls = delta.get("tool_calls") or []
+        finish_reason = choice.get("finish_reason")
+
+        tool_summaries: List[str] = []
+        for tc in tool_calls:
+            func = tc.get("function", {})
+            arg_fragment = func.get("arguments", "")
+            tool_summaries.append(
+                "idx={idx} id={id} name={name} arg_fragment_len={arg_len} "
+                "arg_fragment_preview={preview}".format(
+                    idx=tc.get("index", 0),
+                    id=tc.get("id", ""),
+                    name=func.get("name", ""),
+                    arg_len=len(arg_fragment),
+                    preview=repr(arg_fragment[:80]),
+                )
+            )
+
+        logger.debug(
+            "OpenAI stream chunk #%s: text_len=%s tool_call_count=%s "
+            "finish_reason=%s tool_calls=[%s]",
+            chunk_index,
+            len(text_delta or ""),
+            len(tool_calls),
+            finish_reason,
+            "; ".join(tool_summaries),
+        )
 
 
 class APIError(Exception):

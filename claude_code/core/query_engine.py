@@ -206,6 +206,7 @@ class QueryEngine:
             # Track accumulated content for this turn
             current_text = ""
             accumulated_tool_calls: List[ToolCallDelta] = []
+            previewed_tool_use_ids: set[str] = set()
             stop_reason = "end_turn"
 
             try:
@@ -237,6 +238,36 @@ class QueryEngine:
                                 accumulated_tool_calls,
                                 tool_call_deltas,
                             )
+                            logger.debug(
+                                "Query loop received tool deltas: chunk_count=%s "
+                                "accumulated_count=%s",
+                                len(tool_call_deltas),
+                                len(accumulated_tool_calls),
+                            )
+                            preview_tool_uses = self._client.partial_tool_calls_to_content_blocks(
+                                accumulated_tool_calls
+                            )
+                            if not preview_tool_uses:
+                                logger.debug(
+                                    "Tool deltas arrived but no preview blocks are "
+                                    "ready yet"
+                                )
+                            for tool_use in preview_tool_uses:
+                                if tool_use.id in previewed_tool_use_ids:
+                                    continue
+                                previewed_tool_use_ids.add(tool_use.id)
+                                logger.debug(
+                                    "Emitting preview ToolUseEvent: id=%s name=%s "
+                                    "input_keys=%s",
+                                    tool_use.id,
+                                    tool_use.name,
+                                    sorted(tool_use.input.keys()),
+                                )
+                                yield ToolUseEvent(
+                                    tool_use_id=tool_use.id,
+                                    tool_name=tool_use.name,
+                                    input=tool_use.input,
+                                )
 
                         # Check for finish reason
                         choices = chunk.get("choices", [])
@@ -326,11 +357,19 @@ class QueryEngine:
                         continue
 
                     # Emit tool use event
-                    yield ToolUseEvent(
-                        tool_use_id=tool_use.id,
-                        tool_name=tool_use.name,
-                        input=tool_use.input,
-                    )
+                    if tool_use.id not in previewed_tool_use_ids:
+                        logger.debug(
+                            "Emitting final ToolUseEvent without prior preview: "
+                            "id=%s name=%s input_keys=%s",
+                            tool_use.id,
+                            tool_use.name,
+                            sorted(tool_use.input.keys()),
+                        )
+                        yield ToolUseEvent(
+                            tool_use_id=tool_use.id,
+                            tool_name=tool_use.name,
+                            input=tool_use.input,
+                        )
 
                     # Find and execute the tool
                     tool = self.tool_registry.get(tool_use.name)
