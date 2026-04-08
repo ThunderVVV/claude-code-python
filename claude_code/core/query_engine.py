@@ -1,4 +1,3 @@
-
 """Core query engine and execution logic - aligned with TypeScript query.ts and QueryEngine.ts"""
 
 from __future__ import annotations
@@ -46,7 +45,8 @@ from claude_code.services.openai_client import (
 @dataclass
 class QueryConfig:
     """Configuration for the query engine"""
-    max_turns: int = 20
+
+    max_turns: int = 1000000
     stream: bool = True
     system_prompt: str = ""
     working_directory: str = ""
@@ -55,6 +55,7 @@ class QueryConfig:
 @dataclass
 class QueryResult:
     """Result of a query execution"""
+
     success: bool = True
     text: str = ""
     stop_reason: str = "end_turn"
@@ -136,10 +137,12 @@ class QueryEngine:
         parts = []
 
         # Default system prompt with cwd and model name
-        parts.append(create_default_system_prompt(
-            cwd=self._cwd,
-            model_name=self.client_config.model_name,
-        ))
+        parts.append(
+            create_default_system_prompt(
+                cwd=self._cwd,
+                model_name=self.client_config.model_name,
+            )
+        )
 
         # Custom system prompt if provided
         if self.config.system_prompt:
@@ -218,7 +221,9 @@ class QueryEngine:
                 ):
                     if self.config.stream:
                         # Parse streaming chunk
-                        text_delta, tool_call_deltas = self._client.parse_stream_chunk(chunk)
+                        text_delta, tool_call_deltas = self._client.parse_stream_chunk(
+                            chunk
+                        )
 
                         # Accumulate text
                         if text_delta:
@@ -241,17 +246,21 @@ class QueryEngine:
                                 stop_reason = finish_reason
                     else:
                         # Non-streaming response
-                        text, tool_uses, usage = self._client.parse_non_stream_response(chunk)
+                        text, tool_uses, usage = self._client.parse_non_stream_response(
+                            chunk
+                        )
                         current_text = text
                         accumulated_tool_calls = []
 
                         # Convert tool uses to deltas
                         for tu in tool_uses:
-                            accumulated_tool_calls.append(ToolCallDelta(
-                                id=tu.id,
-                                name=tu.name,
-                                arguments=json.dumps(tu.input),
-                            ))
+                            accumulated_tool_calls.append(
+                                ToolCallDelta(
+                                    id=tu.id,
+                                    name=tu.name,
+                                    arguments=json.dumps(tu.input),
+                                )
+                            )
 
                         if text:
                             yield TextEvent(text=text)
@@ -259,7 +268,11 @@ class QueryEngine:
                         if usage:
                             self.state.total_usage = usage
 
-                        stop_reason = choices[0].get("finish_reason", "stop") if choices else "stop"
+                        stop_reason = (
+                            choices[0].get("finish_reason", "stop")
+                            if choices
+                            else "stop"
+                        )
 
                 # Build content blocks
                 content_blocks: List[ContentBlock] = []
@@ -268,13 +281,19 @@ class QueryEngine:
                     content_blocks.append(TextContent(text=current_text))
 
                 # Convert accumulated tool calls to content blocks
-                tool_use_blocks = self._client.tool_calls_to_content_blocks(accumulated_tool_calls)
+                tool_use_blocks = self._client.tool_calls_to_content_blocks(
+                    accumulated_tool_calls
+                )
                 content_blocks.extend(tool_use_blocks)
 
                 # Debug logging
-                logger.debug(f"Stream completed: stop_reason={stop_reason}, text_len={len(current_text)}, tool_calls={len(tool_use_blocks)}")
+                logger.debug(
+                    f"Stream completed: stop_reason={stop_reason}, text_len={len(current_text)}, tool_calls={len(tool_use_blocks)}"
+                )
                 for tc in accumulated_tool_calls:
-                    logger.debug(f"  Tool call delta: id={tc.id}, name={tc.name}, args_len={len(tc.arguments)}")
+                    logger.debug(
+                        f"  Tool call delta: id={tc.id}, name={tc.name}, args_len={len(tc.arguments)}"
+                    )
 
                 # Create assistant message
                 assistant_message = Message.assistant_message(
@@ -287,7 +306,9 @@ class QueryEngine:
                 # Check if we have tool calls to execute
                 if not tool_use_blocks:
                     # No tool calls - we're done
-                    logger.debug(f"No tool calls, ending turn with stop_reason={stop_reason}")
+                    logger.debug(
+                        f"No tool calls, ending turn with stop_reason={stop_reason}"
+                    )
                     yield TurnCompleteEvent(
                         turn=self.state.current_turn + 1,
                         has_more_turns=False,
@@ -325,7 +346,9 @@ class QueryEngine:
 
                     try:
                         # Execute tool
-                        result = await tool.call(tool_use.input, self._get_tool_context())
+                        result = await tool.call(
+                            tool_use.input, self._get_tool_context()
+                        )
                         yield ToolResultEvent(
                             tool_use_id=tool_use.id,
                             result=result,
@@ -343,7 +366,9 @@ class QueryEngine:
 
                 # Add tool result messages
                 for tool_use_id, result, is_error in tool_results:
-                    tool_msg = Message.tool_result_message(tool_use_id, result, is_error)
+                    tool_msg = Message.tool_result_message(
+                        tool_use_id, result, is_error
+                    )
                     self.state.add_message(tool_msg)
                     yield MessageCompleteEvent(message=tool_msg)
 
@@ -353,7 +378,9 @@ class QueryEngine:
                 # Check if we should continue
                 has_more = self.state.current_turn < self.config.max_turns
 
-                logger.debug(f"Turn {self.state.current_turn} complete, has_more={has_more}, messages_count={len(self.state.messages)}")
+                logger.debug(
+                    f"Turn {self.state.current_turn} complete, has_more={has_more}, messages_count={len(self.state.messages)}"
+                )
 
                 yield TurnCompleteEvent(
                     turn=self.state.current_turn,
@@ -448,7 +475,7 @@ async def ask(
     prompt: str,
     client_config: OpenAIClientConfig,
     tool_registry: ToolRegistry,
-    max_turns: int = 20,
+    max_turns: int = 1000000,
     working_directory: Optional[str] = None,
     system_prompt: Optional[str] = None,
 ) -> QueryResult:

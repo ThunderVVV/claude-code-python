@@ -1,4 +1,3 @@
-
 """Message types and data models - aligned with TypeScript version"""
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 class MessageRole(Enum):
     """Message role types"""
+
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
@@ -21,6 +21,7 @@ class MessageRole(Enum):
 @dataclass
 class TextContent:
     """Text content block"""
+
     type: str = field(default="text", init=False)
     text: str = ""
 
@@ -31,6 +32,7 @@ class TextContent:
 @dataclass
 class ToolUseContent:
     """Tool use content block"""
+
     type: str = field(default="tool_use", init=False)
     id: str = ""
     name: str = ""
@@ -48,6 +50,7 @@ class ToolUseContent:
 @dataclass
 class ToolResultContent:
     """Tool result content block"""
+
     type: str = field(default="tool_result", init=False)
     tool_use_id: str = ""
     content: str = ""
@@ -74,6 +77,7 @@ def generate_uuid() -> str:
 @dataclass
 class Usage:
     """API usage statistics"""
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_creation_input_tokens: int = 0
@@ -83,6 +87,7 @@ class Usage:
 @dataclass
 class Message:
     """Base message class - aligned with TypeScript Message type"""
+
     type: MessageRole
     content: List[ContentBlock] = field(default_factory=list)
     uuid: str = field(default_factory=generate_uuid)
@@ -151,11 +156,13 @@ class Message:
         """Create a tool result message"""
         return cls(
             type=MessageRole.TOOL,
-            content=[ToolResultContent(
-                tool_use_id=tool_use_id,
-                content=content,
-                is_error=is_error,
-            )],
+            content=[
+                ToolResultContent(
+                    tool_use_id=tool_use_id,
+                    content=content,
+                    is_error=is_error,
+                )
+            ],
             message={
                 "role": "tool",
                 "content": content,
@@ -196,12 +203,14 @@ class Message:
                     content.append({"type": "text", "text": block.text})
                 elif isinstance(block, ToolUseContent):
                     has_tool_use = True
-                    content.append({
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
-                    })
+                    content.append(
+                        {
+                            "type": "tool_use",
+                            "id": block.id,
+                            "name": block.name,
+                            "input": block.input,
+                        }
+                    )
             if not has_tool_use and len(content) == 1:
                 return {"role": "assistant", "content": content[0].get("text", "")}
             return {"role": "assistant", "content": content}
@@ -219,6 +228,7 @@ class Message:
 @dataclass
 class ToolCallState:
     """State for a tool call"""
+
     tool_use_id: str
     tool_name: str
     input: Dict[str, Any]
@@ -230,10 +240,11 @@ class ToolCallState:
 @dataclass
 class QueryState:
     """State for a query session"""
+
     messages: List[Message] = field(default_factory=list)
     tool_calls: List[ToolCallState] = field(default_factory=list)
     current_turn: int = 0
-    max_turns: int = 20
+    max_turns: int = 1000000
     is_streaming: bool = False
     current_streaming_text: str = ""
     session_id: str = field(default_factory=generate_uuid)
@@ -265,12 +276,14 @@ class QueryState:
 @dataclass
 class StreamEvent:
     """Base stream event"""
+
     type: str = "stream_event"
 
 
 @dataclass
 class TextDeltaEvent(StreamEvent):
     """Text delta event during streaming"""
+
     type: str = field(default="text_delta", init=False)
     text: str = ""
 
@@ -278,6 +291,7 @@ class TextDeltaEvent(StreamEvent):
 @dataclass
 class ToolUseStartEvent(StreamEvent):
     """Tool use start event"""
+
     type: str = field(default="tool_use_start", init=False)
     tool_use_id: str = ""
     tool_name: str = ""
@@ -287,6 +301,7 @@ class ToolUseStartEvent(StreamEvent):
 @dataclass
 class ToolUseEndEvent(StreamEvent):
     """Tool use end event"""
+
     type: str = field(default="tool_use_end", init=False)
     tool_use_id: str = ""
     result: str = ""
@@ -296,6 +311,7 @@ class ToolUseEndEvent(StreamEvent):
 @dataclass
 class MessageStartEvent(StreamEvent):
     """Message start event"""
+
     type: str = field(default="message_start", init=False)
     message_id: str = ""
     model: str = ""
@@ -304,6 +320,7 @@ class MessageStartEvent(StreamEvent):
 @dataclass
 class MessageDeltaEvent(StreamEvent):
     """Message delta event with usage"""
+
     type: str = field(default="message_delta", init=False)
     stop_reason: Optional[str] = None
     usage: Optional[Usage] = None
@@ -312,12 +329,14 @@ class MessageDeltaEvent(StreamEvent):
 @dataclass
 class MessageStopEvent(StreamEvent):
     """Message stop event"""
+
     type: str = field(default="message_stop", init=False)
 
 
 @dataclass
 class ContentBlockStartEvent(StreamEvent):
     """Content block start event"""
+
     type: str = field(default="content_block_start", init=False)
     index: int = 0
     content_block: Optional[Dict[str, Any]] = None
@@ -326,6 +345,7 @@ class ContentBlockStartEvent(StreamEvent):
 @dataclass
 class ContentBlockDeltaEvent(StreamEvent):
     """Content block delta event"""
+
     type: str = field(default="content_block_delta", init=False)
     index: int = 0
     delta: Optional[Dict[str, Any]] = None
@@ -334,6 +354,7 @@ class ContentBlockDeltaEvent(StreamEvent):
 @dataclass
 class ContentBlockStopEvent(StreamEvent):
     """Content block stop event"""
+
     type: str = field(default="content_block_stop", init=False)
     index: int = 0
 
@@ -342,18 +363,21 @@ class ContentBlockStopEvent(StreamEvent):
 @dataclass
 class QueryEvent:
     """Base query event"""
+
     pass
 
 
 @dataclass
 class TextEvent(QueryEvent):
     """Event for streaming text content"""
+
     text: str = ""
 
 
 @dataclass
 class ToolUseEvent(QueryEvent):
     """Event for tool use"""
+
     tool_use_id: str = ""
     tool_name: str = ""
     input: Dict[str, Any] = field(default_factory=dict)
@@ -362,6 +386,7 @@ class ToolUseEvent(QueryEvent):
 @dataclass
 class ToolResultEvent(QueryEvent):
     """Event for tool result"""
+
     tool_use_id: str = ""
     result: str = ""
     is_error: bool = False
@@ -370,12 +395,14 @@ class ToolResultEvent(QueryEvent):
 @dataclass
 class MessageCompleteEvent(QueryEvent):
     """Event when a message is complete"""
+
     message: Optional[Message] = None
 
 
 @dataclass
 class TurnCompleteEvent(QueryEvent):
     """Event when a turn is complete"""
+
     turn: int = 0
     has_more_turns: bool = False
     stop_reason: Optional[str] = None
@@ -384,11 +411,13 @@ class TurnCompleteEvent(QueryEvent):
 @dataclass
 class RequestStartEvent(QueryEvent):
     """Event when API request starts"""
+
     type: str = field(default="request_start", init=False)
 
 
 @dataclass
 class ErrorEvent(QueryEvent):
     """Event for errors"""
+
     error: str = ""
     is_fatal: bool = False

@@ -130,6 +130,16 @@ WelcomeWidget:focus {
 
 #user-input {
     width: 1fr;
+    height: auto;
+    min-height: 1;
+    max-height: 10;
+    background: #2a2a2a;
+    border: none;
+    padding: 1;
+}
+
+/* Override cursor line background to match input background */
+#user-input .text-area--cursor-line {
     background: #2a2a2a;
 }
 
@@ -308,7 +318,7 @@ WelcomeWidget:focus {
 }
 
 /* Focus styles */
-Input:focus {
+TextArea:focus {
     border: tall rgb(215,119,87);
 }
 

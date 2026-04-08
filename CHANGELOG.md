@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-08
+
+#### Query Limits
+- Raised the default `max_turns` limit from `20` to `1000000` across CLI and query state defaults.
+- Updated the CLI `--max-turns` help text to match the new default.
+
 ### Refactored - 2026-04-08
 
 #### TUI Module Split
@@ -21,6 +27,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **No functional changes** - purely structural refactoring
 
 ### Fixed - 2026-04-08
+
+#### TUI Input And Clipboard
+- Replaced the single-line `Input` prompt with a dedicated `InputTextArea`.
+- Added Enter-to-submit and Shift+Enter newline handling in the prompt widget.
+- Added persistent in-session prompt history navigation on Up/Down, with history saved to `~/.claude_code_history.json`.
+- Reset the prompt document cleanly after submit so follow-up prompts do not inherit stray newlines.
+- Collapse the prompt to a stable single-line height while a turn is processing, then restore automatic height afterward.
+- Added app-level copy bindings for `Ctrl+C`, `Ctrl+Shift+C`, and `Cmd+C` when the terminal forwards it.
+- Route copy through Textual clipboard handling and show a native toast: `Copied to clipboard`.
+- Updated the prompt placeholder to document the in-app copy shortcut.
 
 #### Tool Descriptions (aligned with TypeScript version)
 
@@ -80,6 +96,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `claude_code/core/prompts.py` - New module containing all system prompt definitions
 - `.gitignore` - Standard Python gitignore (excluding `__pycache__/`, `.env`, etc.)
 - `CHANGELOG.md` - This file
+
+### Tests - 2026-04-08
+
+#### Test Suite Cleanup
+- Consolidated TUI regression coverage into `tests/test_tui.py`.
+- Removed redundant root-level `test_*.py` scripts that duplicated TUI checks.
+- Renamed the manual TUI launcher from `test_tui.py` to `debug_tui.py` to avoid pytest collection conflicts.
+- Added pytest `testpaths = ["tests"]` so the automated suite only collects the formal test directory.
+- Expanded TUI regression coverage for clipboard notifications, input collapse/reset behavior, cursor-line styling, and prompt history navigation.
 
 ## [0.1.0] - Initial Release
 

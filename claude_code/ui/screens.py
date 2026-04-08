@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+from pathlib import Path
 from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, VerticalGroup
-from textual.widgets import Input, Label, LoadingIndicator
+from textual.widgets import Label, LoadingIndicator
 from textual.screen import Screen
+from textual import events
 
 from claude_code.core.messages import (
     Message,
@@ -25,7 +28,7 @@ from claude_code.core.messages import (
     ErrorEvent,
 )
 from claude_code.core.query_engine import QueryEngine
-from claude_code.ui.widgets import WelcomeWidget
+from claude_code.ui.widgets import WelcomeWidget, InputTextArea
 from claude_code.ui.message_widgets import (
     MessageList,
     AssistantMessageWidget,
@@ -40,6 +43,7 @@ class REPLScreen(Screen):
         self,
         query_engine: QueryEngine,
         model_name: str = "claude-sonnet-4-6",
+        save_history: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -51,6 +55,45 @@ class REPLScreen(Screen):
         self._show_welcome = True
         self._tool_use_context: dict[str, ToolUseContent] = {}
         self._tool_widget_context: dict[str, ToolUseWidget] = {}
+        self._save_history_enabled = save_history
+
+        # History management
+        self._history: list[str] = []
+        self._history_index: int = -1
+        self._current_draft: str = ""
+        self._history_file = Path.home() / ".claude_code_history.json"
+        if save_history:
+            self._load_history()
+
+    def _load_history(self) -> None:
+        """Load history from file"""
+        if self._history_file.exists():
+            try:
+                with open(self._history_file, "r", encoding="utf-8") as f:
+                    self._history = json.load(f)
+            except Exception:
+                self._history = []
+
+    def _save_history(self) -> None:
+        """Save history to file"""
+        if not self._save_history_enabled:
+            return
+        try:
+            with open(self._history_file, "w", encoding="utf-8") as f:
+                json.dump(self._history, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def _add_to_history(self, text: str) -> None:
+        """Add text to history, avoiding duplicates"""
+        if text.strip() and (not self._history or self._history[-1] != text):
+            self._history.append(text)
+            # Keep only last 1000 entries
+            if len(self._history) > 1000:
+                self._history = self._history[-1000:]
+            self._save_history()
+        self._history_index = -1
+        self._current_draft = ""
 
     def compose(self) -> ComposeResult:
         # Scrollable content area
@@ -67,20 +110,64 @@ class REPLScreen(Screen):
             with Horizontal(id="processing-row"):
                 yield LoadingIndicator(id="processing-indicator")
                 yield Label("Working...", id="processing-label", markup=False)
-            yield Input(
-                placeholder="Type your message and press Enter", id="user-input"
+            yield InputTextArea(
+                placeholder=self._input_placeholder_text(),
+                id="user-input",
+                language="text",
+                show_line_numbers=False,
+                tab_behavior="indent",
             )
 
     async def on_mount(self) -> None:
         """Called when screen is mounted"""
-        input_widget = self.query_one("#user-input", Input)
+        input_widget = self.query_one("#user-input", InputTextArea)
+        input_widget.set_on_submit(self._on_input_submit)
         input_widget.focus()
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle input submission"""
-        if event.input.id == "user-input":
-            event.stop()
-            self._start_message_submission(event.value)
+    def _on_input_submit(self, text: str) -> None:
+        """Handle submit from InputTextArea."""
+        self._start_message_submission(text)
+
+    async def on_key(self, event: events.Key) -> None:
+        """Handle keyboard events for history navigation"""
+        input_widget = self.query_one("#user-input", InputTextArea)
+        if input_widget.has_focus:
+            if event.key == "up":
+                event.stop()
+                self._navigate_history(1)  # Go to older history (increase index)
+            elif event.key == "down":
+                event.stop()
+                self._navigate_history(-1)  # Go to newer history (decrease index)
+
+    def _navigate_history(self, direction: int) -> None:
+        """Navigate history (direction: -1 for up/older, 1 for down/newer)"""
+        input_widget = self.query_one("#user-input", InputTextArea)
+
+        # Save current draft when starting navigation
+        if self._history_index == -1:
+            self._current_draft = input_widget.text
+
+        # Calculate new index
+        # _history_index: -1 = current draft, 0 = newest, 1 = second newest, etc.
+        new_index = self._history_index + direction
+
+        # Clamp to valid range
+        if new_index < -1:
+            new_index = -1
+        elif new_index >= len(self._history):
+            new_index = len(self._history) - 1
+
+        self._history_index = new_index
+
+        if self._history_index == -1:
+            # Restore draft
+            input_widget.text = self._current_draft
+        else:
+            # Show from history (0 = newest = last item in list)
+            input_widget.text = self._history[-(self._history_index + 1)]
+
+        # Move cursor to end
+        input_widget.move_cursor(input_widget.document.end)
 
     def _hide_welcome_widget(self) -> None:
         """Hide the welcome widget after the first prompt."""
@@ -96,14 +183,31 @@ class REPLScreen(Screen):
     def _set_processing_state(self, is_processing: bool) -> None:
         """Update prompt input state while a query is running."""
         self._is_processing = is_processing
-        input_widget = self.query_one("#user-input", Input)
+        input_widget = self.query_one("#user-input", InputTextArea)
         processing_row = self.query_one("#processing-row", Horizontal)
         input_widget.disabled = is_processing
         processing_row.display = is_processing
+
+        # When starting processing, ensure input collapses to single line
+        if is_processing:
+            input_widget.set_styles("height: 3;")
+        else:
+            # Reset height to auto when processing completes
+            input_widget.set_styles("height: auto;")
+        
+        input_widget.refresh()
+
         input_widget.placeholder = (
             "Claude is responding..."
             if is_processing
-            else "Type your message and press Enter"
+            else self._input_placeholder_text()
+        )
+
+    def _input_placeholder_text(self) -> str:
+        """Build the input hint shown below the transcript."""
+        return (
+            "Type your message and press Enter "
+            "(Shift+Enter for new line, Ctrl+C to copy selection)"
         )
 
     def _reset_streaming_state(self) -> None:
@@ -116,7 +220,7 @@ class REPLScreen(Screen):
         if self._is_processing:
             return
 
-        input_widget = self.query_one("#user-input", Input)
+        input_widget = self.query_one("#user-input", InputTextArea)
         user_text = submitted_value.strip()
 
         if not user_text:
@@ -128,7 +232,12 @@ class REPLScreen(Screen):
             return
 
         self._hide_welcome_widget()
-        input_widget.value = ""
+
+        # Add to history
+        self._add_to_history(submitted_value)
+
+        # Reset the document so the next prompt always starts from a clean single line.
+        input_widget.load_text("")
         self._reset_streaming_state()
         self._tool_use_context = {}
         self._tool_widget_context = {}
@@ -160,7 +269,7 @@ class REPLScreen(Screen):
 
         finally:
             self._set_processing_state(False)
-            input_widget = self.query_one("#user-input", Input)
+            input_widget = self.query_one("#user-input", InputTextArea)
             input_widget.focus()
 
     def _ensure_assistant_widget(

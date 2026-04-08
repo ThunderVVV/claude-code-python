@@ -211,8 +211,8 @@ async def run_cli_mode(
 @click.option(
     "--max-turns",
     type=int,
-    default=20,
-    help="Maximum number of turns per query (default: 20)",
+    default=1000000,
+    help="Maximum number of turns per query (default: 1000000)",
 )
 @click.option(
     "--debug",

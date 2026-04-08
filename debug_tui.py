@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Test script for TUI functionality"""
+"""Manual TUI launcher for local debugging."""
 
 import os
 import sys

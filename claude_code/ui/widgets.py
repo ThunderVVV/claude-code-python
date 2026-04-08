@@ -6,10 +6,44 @@ import os
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalGroup
-from textual.widgets import Label, Static
+from textual.widgets import Label, Static, TextArea
+from textual import events
 
 from claude_code.ui.constants import CLAUDE_ORANGE
 from claude_code.ui.utils import sanitize_terminal_text
+
+
+class InputTextArea(TextArea):
+    """Custom TextArea that handles Enter key for sending messages.
+
+    - Enter: sends the message
+    - Shift+Enter: inserts a new line
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._on_submit = None
+
+    async def _on_key(self, event: events.Key) -> None:
+        """Handle Enter key for sending message, Shift+Enter for new line."""
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            if self._on_submit:
+                self._on_submit(self.text)
+            return
+
+        if event.key == "shift+enter":
+            event.stop()
+            event.prevent_default()
+            self.insert("\n")
+            return
+
+        await super()._on_key(event)
+
+    def set_on_submit(self, callback) -> None:
+        """Set callback for submit action."""
+        self._on_submit = callback
 
 
 class Clawd(VerticalGroup):
