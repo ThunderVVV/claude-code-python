@@ -2,7 +2,7 @@
 
 ## Source Of Truth
 
-- This repository is a Python port of the official TypeScript Claude Code project.
+- This repository is a Python port of the official TypeScript Claude Code project (/Users/MacbookAir/Downloads/Framework-Reading/claude-code)
 - When behavior is ambiguous, align with the TypeScript implementation before adding Python-specific logic.
 - Tool descriptions, system prompts, and prompt-building helpers must stay exactly aligned with the TypeScript version.
 

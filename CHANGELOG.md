@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2026-04-08
 
+#### OpenAI Client SDK Migration
+- Replaced custom httpx-based HTTP client with official OpenAI Python SDK (`openai>=1.30.0`)
+- Migrated from manual POST request construction to SDK's `AsyncOpenAI.chat.completions.create()`
+- Removed manual SSE parsing, HTTP/2 configuration, connection pool management, and custom retry logic
+- SDK now handles automatic retries, streaming, and error handling internally
+- API remains backward compatible - no changes required in calling code
+- Fixed import path for `create_default_system_prompt` and `build_context_message` in `services/__init__.py`
+
+### Changed - 2026-04-08
+
 #### Query Limits
 - Raised the default `max_turns` limit from `20` to `1000000` across CLI and query state defaults.
 - Updated the CLI `--max-turns` help text to match the new default.

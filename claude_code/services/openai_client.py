@@ -1,47 +1,25 @@
 
-"""OpenAI compatible API client - aligned with TypeScript claude.ts streaming logic"""
+"""OpenAI compatible API client using official OpenAI SDK"""
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import uuid
-from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from dataclasses import dataclass
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
-import httpx
+from openai import AsyncOpenAI, APIError as OpenAIAPIError
 
 from claude_code.core.messages import (
-    ContentBlock,
     Message,
     MessageRole,
-    TextContent,
     ToolUseContent,
     ToolResultContent,
     Usage,
-    generate_uuid,
 )
 from claude_code.core.tools import ToolRegistry
-from claude_code.core.prompts import create_default_system_prompt, build_context_message
 
 logger = logging.getLogger(__name__)
-
-# Retry configuration
-MAX_RETRIES = 3
-RETRY_DELAY_BASE = 1.0  # seconds
-RETRY_DELAY_MULTIPLIER = 2.0
-
-# Network errors that should trigger retry
-RETRYABLE_ERRORS = (
-    httpx.RemoteProtocolError,
-    httpx.ConnectError,
-    httpx.ReadTimeout,
-    httpx.ConnectTimeout,
-    httpx.WriteTimeout,
-    ConnectionError,
-    OSError,
-)
 
 
 @dataclass
@@ -53,7 +31,7 @@ class OpenAIClientConfig:
     max_tokens: int = 4096
     temperature: float = 0.7
     timeout: float = 300.0  # 5 minutes default
-    max_retries: int = MAX_RETRIES
+    max_retries: int = 3
 
 
 @dataclass
@@ -65,35 +43,21 @@ class ToolCallDelta:
 
 
 class OpenAIClient:
-    """OpenAI compatible API client with streaming support"""
+    """OpenAI compatible API client with streaming support using official SDK"""
 
     def __init__(self, config: OpenAIClientConfig):
         self.config = config
-        # Configure httpx with better connection handling and HTTP/2 support
-        self._client = httpx.AsyncClient(
+        # Initialize official OpenAI SDK client
+        self._client = AsyncOpenAI(
             base_url=config.api_url,
-            http2=True,  # Enable HTTP/2 support for servers that require it
-            timeout=httpx.Timeout(
-                connect=30.0,  # Connection timeout
-                read=config.timeout,  # Read timeout
-                write=60.0,  # Write timeout
-                pool=30.0,  # Pool timeout
-            ),
-            limits=httpx.Limits(
-                max_connections=10,
-                max_keepalive_connections=5,
-                keepalive_expiry=30.0,
-            ),
-            headers={
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            },
+            api_key=config.api_key,
+            timeout=config.timeout,
+            max_retries=config.max_retries,
         )
-        self._retry_count = 0
 
     async def close(self) -> None:
         """Close the HTTP client"""
-        await self._client.aclose()
+        await self._client.close()
 
     def _convert_messages_to_openai_format(
         self,
@@ -170,7 +134,7 @@ class OpenAIClient:
         system_prompt: Optional[str] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        Make a chat completion request with retry logic.
+        Make a chat completion request using official OpenAI SDK.
 
         Yields streaming events or complete responses.
         """
@@ -187,8 +151,8 @@ class OpenAIClient:
         # Add conversation messages
         openai_messages.extend(self._convert_messages_to_openai_format(messages))
 
-        # Build request
-        request_data = {
+        # Build request parameters
+        request_params = {
             "model": self.config.model_name,
             "messages": openai_messages,
             "max_tokens": self.config.max_tokens,
@@ -200,121 +164,23 @@ class OpenAIClient:
         if tool_registry:
             tools = tool_registry.get_tool_definitions()
             if tools:
-                request_data["tools"] = tools
+                request_params["tools"] = tools
 
-        # Retry loop for transient failures
-        last_error: Optional[Exception] = None
-        for attempt in range(self.config.max_retries):
-            try:
-                if stream:
-                    # Streaming request
-                    async with self._client.stream(
-                        "POST",
-                        "/chat/completions",
-                        json=request_data,
-                        headers={
-                            "Accept": "text/event-stream",
-                            "Cache-Control": "no-cache",
-                        },
-                    ) as response:
-                        response.raise_for_status()
-
-                        async for line in response.aiter_lines():
-                            line = line.strip()
-                            if not line or not line.startswith("data:"):
-                                continue
-                            data_str = line[5:].strip()
-                            if data_str == "[DONE]":
-                                return
-                            try:
-                                data = json.loads(data_str)
-                                yield data
-                            except json.JSONDecodeError:
-                                continue
-                        return  # Successfully completed
-                else:
-                    # Non-streaming request
-                    request_data["stream"] = False
-                    response = await self._client.post(
-                        "/chat/completions",
-                        json=request_data,
-                        headers={"Accept": "application/json"},
-                    )
-                    response.raise_for_status()
-                    yield response.json()
-                    return  # Successfully completed
-
-            except RETRYABLE_ERRORS as e:
-                last_error = e
-                if attempt < self.config.max_retries - 1:
-                    delay = RETRY_DELAY_BASE * (RETRY_DELAY_MULTIPLIER ** attempt)
-                    logger.warning(
-                        f"Network error (attempt {attempt + 1}/{self.config.max_retries}): {e}. "
-                        f"Retrying in {delay:.1f}s..."
-                    )
-                    await asyncio.sleep(delay)
-                    # Reconnect with fresh client
-                    await self._reconnect()
-                else:
-                    logger.error(f"Max retries ({self.config.max_retries}) exceeded. Last error: {e}")
-                    raise APINetworkError(
-                        f"Network error after {self.config.max_retries} attempts: {e}"
-                    ) from e
-
-            except httpx.HTTPStatusError as e:
-                # HTTP errors (4xx, 5xx) - don't retry client errors (4xx)
-                if e.response.status_code < 500:
-                    # Client error - don't retry
-                    raise APIError(
-                        f"API error (HTTP {e.response.status_code}): {e.response.text}"
-                    ) from e
-                else:
-                    # Server error - retry
-                    last_error = e
-                    if attempt < self.config.max_retries - 1:
-                        delay = RETRY_DELAY_BASE * (RETRY_DELAY_MULTIPLIER ** attempt)
-                        logger.warning(
-                            f"Server error HTTP {e.response.status_code} (attempt {attempt + 1}/{self.config.max_retries}). "
-                            f"Retrying in {delay:.1f}s..."
-                        )
-                        await asyncio.sleep(delay)
-                    else:
-                        raise APIError(
-                            f"Server error after {self.config.max_retries} attempts: HTTP {e.response.status_code}"
-                        ) from e
-
-            except json.JSONDecodeError as e:
-                raise APIError(f"Invalid JSON response: {e}") from e
-
-        # Should not reach here, but just in case
-        if last_error:
-            raise APINetworkError(f"Request failed: {last_error}") from last_error
-
-    async def _reconnect(self) -> None:
-        """Recreate the HTTP client for a fresh connection"""
         try:
-            await self._client.aclose()
-        except Exception:
-            pass
-        self._client = httpx.AsyncClient(
-            base_url=self.config.api_url,
-            http2=True,  # Enable HTTP/2 support
-            timeout=httpx.Timeout(
-                connect=30.0,
-                read=self.config.timeout,
-                write=60.0,
-                pool=30.0,
-            ),
-            limits=httpx.Limits(
-                max_connections=10,
-                max_keepalive_connections=5,
-                keepalive_expiry=30.0,
-            ),
-            headers={
-                "Authorization": f"Bearer {self.config.api_key}",
-                "Content-Type": "application/json",
-            },
-        )
+            if stream:
+                # Streaming request using SDK
+                stream_response = await self._client.chat.completions.create(**request_params)
+                async for chunk in stream_response:
+                    yield chunk.model_dump()
+            else:
+                # Non-streaming request using SDK
+                response = await self._client.chat.completions.create(**request_params)
+                yield response.model_dump()
+
+        except OpenAIAPIError as e:
+            raise APIError(f"API error: {e}") from e
+        except Exception as e:
+            raise APINetworkError(f"Request failed: {e}") from e
 
     def parse_stream_chunk(
         self,
@@ -466,9 +332,4 @@ class APIError(Exception):
 
 class APINetworkError(APIError):
     """Exception for network-related errors (connection, timeout, etc.)"""
-    pass
-
-
-class APIResponseError(APIError):
-    """Exception for invalid API responses"""
     pass
