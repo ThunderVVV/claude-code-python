@@ -1,195 +1,159 @@
 
 # Claude Code Python
 
-Python 版本的 Claude Code - AI 编程助手。这是基于原始 TypeScript 版本重写的核心功能实现。
+`claude-code-python` 是对官方 TypeScript 版 Claude Code 的 Python 3.12 重写，当前聚焦核心 agent 能力：CLI/TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义。
 
-## 功能特性
+![Claude Code Python TUI](docs/assets/tui.png)
 
-- 核心查询引擎和对话循环
-- OpenAI 兼容 API 支持
-- 工具系统：
-  - `read` - 读取文本文件
-  - `write` - 写入文本文件
-  - `edit` - 编辑文本文件
-  - `glob` - 文件搜索
-  - `grep` - 内容搜索
-  - `bash` - 执行 shell 命令
-- CLI 交互模式
-- Textual TUI 界面（实验性）
+## 当前范围
+
+- CLI 与 Textual TUI 两种交互模式
+- 流式响应、工具调用、工具结果回填
+- 工具集：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
+- OpenAI 兼容 API 接入
+- 与 TypeScript 版本对齐的系统提示词和工具描述
+- 针对 TUI 的无头回归测试，覆盖工具优先响应、滚动、复制和输入状态
 
 ## 安装
 
-### 要求
+要求：
 
 - Python 3.12+
 
-### 开发安装
+开发安装：
 
 ```bash
 cd claude-code-python
-pip install -e .
-```
-
-或使用 Bun（如果已安装）：
-
-```bash
-bun install
+pip install -e ".[dev]"
 ```
 
 ## 配置
 
-### 环境变量
-
-创建 `.env` 文件：
+推荐在仓库根目录创建 `.env`：
 
 ```env
 CLAUDE_CODE_API_URL=https://api.openai.com/v1
-CLAUDE_CODE_API_KEY=your-api-key-here
-CLAUDE_CODE_MODEL=gpt-4
+CLAUDE_CODE_API_KEY=your-api-key
+CLAUDE_CODE_MODEL=gpt-4.1
 ```
 
-### 命令行参数
-
-也可以直接通过命令行参数配置：
+也可以直接用命令行参数覆盖：
 
 ```bash
-claude-code --api-url https://api.openai.com/v1 --api-key your-key --model gpt-4
+claude-code \
+  --api-url https://api.openai.com/v1 \
+  --api-key your-api-key \
+  --model gpt-4.1
 ```
 
-## 使用方法
+## 运行
 
-### CLI 模式
+CLI：
 
 ```bash
 claude-code
 ```
 
-### TUI 模式（实验性）
+TUI：
 
 ```bash
 claude-code --tui
 ```
 
-### 使用示例
+开启调试日志：
 
-1. 启动 Claude Code：
 ```bash
-claude-code
+claude-code --tui --debug
 ```
 
-2. 询问问题或请求任务：
-```
-You: 创建一个简单的 Python 脚本
-```
+如果没有显式传入 `--log-file`，`--debug` 或 `--tui` 会自动把日志写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`，避免把仓库根目录弄乱。
 
-3. 助手会使用工具来完成任务：
-```
-Assistant: 我来帮你创建一个简单的 Python 脚本。
+## 调试脚本
 
-[Tool: write]
-Input: {'path': 'hello.py', 'content': 'print("Hello, World!")\n'}
+仓库根目录只保留产品文件，调试脚本统一收口到 `scripts/debug/debug_query.py`、`scripts/debug/diagnose_api.py`、`scripts/debug/debug_tui.py`。
 
-✓ Result:
-Successfully wrote file: hello.py
+用于诊断 API 连接：
 
-Content:
-print("Hello, World!")
-
-Assistant: 已经创建了 `hello.py` 文件。这是一个简单的 Hello World 程序。
+```bash
+python scripts/debug/diagnose_api.py
 ```
 
-## 项目结构
+用于观察单次 query loop 的事件流：
 
+```bash
+python scripts/debug/debug_query.py
 ```
+
+用于手动检查 TUI 布局和交互：
+
+```bash
+python scripts/debug/debug_tui.py
+```
+
+这些脚本会自动把工作目录切回仓库根目录，并优先读取根目录 `.env`。
+
+## 目录结构
+
+```text
 claude-code-python/
-├── pyproject.toml          # 项目配置
+├── AGENTS.md
+├── README.md
+├── CHANGELOG.md
 ├── claude_code/
-│   ├── __init__.py
-│   ├── cli.py              # CLI 入口点
+│   ├── cli.py
 │   ├── core/
-│   │   ├── messages.py     # 消息类型和数据模型
-│   │   ├── tools.py        # 工具系统基础
-│   │   └── query_engine.py # 核心查询引擎
-│   ├── tools/
-│   │   ├── file_tools.py   # 文件相关工具
-│   │   └── bash_tool.py    # Bash 工具
+│   │   ├── messages.py
+│   │   ├── prompts.py
+│   │   ├── query_engine.py
+│   │   └── tools.py
 │   ├── services/
-│   │   └── openai_client.py # OpenAI API 客户端
+│   │   └── openai_client.py
+│   ├── tools/
+│   │   ├── bash_tool.py
+│   │   └── file_tools.py
 │   └── ui/
-│       ├── app.py          # Textual TUI 应用
-│       └── app.css         # TUI 样式
-└── README.md
+│       ├── app.py
+│       ├── message_widgets.py
+│       ├── screens.py
+│       ├── styles.py
+│       ├── utils.py
+│       └── widgets.py
+├── docs/
+│   ├── assets/
+│   │   └── tui.png
+│   └── history/
+│       └── rewrite_instructions.md
+├── scripts/
+│   └── debug/
+│       ├── debug_query.py
+│       ├── debug_tui.py
+│       └── diagnose_api.py
+└── tests/
+    ├── test_cli.py
+    ├── test_core.py
+    └── test_tui.py
 ```
 
-## 架构说明
+## 开发约定
 
-### 核心模块
+- 以官方 TypeScript 源码为准，Python 版本不要擅自新增交互语义。
+- 修改提示词、工具描述或系统 prompt 时，必须保持与 TypeScript 版一致。
+- 自动化测试只放在 `tests/`，不要再在根目录添加 `test_*.py` 或 `debug*.py`。
+- 调试脚本放 `scripts/debug/`，文档和截图放 `docs/`，运行日志放 `.logs/`。
+- TUI 动态内容优先使用 `VerticalGroup`，不要为尚未到达的流式文本预先挂空占位。
 
-1. **`claude_code/core/messages.py`**
-   - 消息类型定义
-   - 内容块（文本、工具使用、工具结果）
-   - 查询状态管理
-
-2. **`claude_code/core/tools.py`**
-   - 工具接口定义
-   - 工具注册表
-   - 工具上下文
-
-3. **`claude_code/core/query_engine.py`**
-   - 核心查询循环
-   - 事件系统
-   - 工具执行编排
-
-4. **`claude_code/services/openai_client.py`**
-   - OpenAI 兼容 API 客户端
-   - 流式响应处理
-   - 消息格式转换
-
-5. **`claude_code/tools/`**
-   - 具体工具实现
-   - 文件操作工具
-   - Bash 执行工具
-
-### 数据流
-
-```
-用户输入
-  ↓
-CLI/TUI 界面
-  ↓
-QueryEngine.submit_message()
-  ↓
-查询循环 (query_loop)
-  ↓
-OpenAIClient.chat_completion()
-  ↓
-流式响应处理
-  ↓
-工具调用 (如需要)
-  ↓
-工具执行
-  ↓
-结果反馈
-  ↓
-UI 更新
-  ↓
-循环 (直到任务完成)
-```
-
-## 开发
-
-### 运行测试
+## 测试与检查
 
 ```bash
 pytest
+ruff check .
+black --check .
 ```
 
-### 代码格式化
+## 历史文档
 
-```bash
-black claude_code/
-ruff check claude_code/
-```
+- 初始重写任务说明已归档到 `docs/history/rewrite_instructions.md`。
+- TUI 修复过程和对齐记录见 `CHANGELOG.md`。
 
 ## 许可证
 

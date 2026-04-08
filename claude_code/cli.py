@@ -8,19 +8,16 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import click
 from dotenv import load_dotenv
 
 from claude_code.core.messages import (
-    Message,
-    MessageRole,
     TextEvent,
     ToolUseEvent,
     ToolResultEvent,
-    MessageCompleteEvent,
-    TurnCompleteEvent,
     ErrorEvent,
 )
 from claude_code.core.query_engine import QueryEngine, QueryConfig
@@ -46,6 +43,28 @@ def create_tool_registry() -> ToolRegistry:
     registry.register(GrepTool())
     registry.register(BashTool())
     return registry
+
+
+def resolve_log_path(
+    log_file: Optional[str],
+    debug: bool,
+    tui: bool,
+    now: Optional[datetime] = None,
+) -> Optional[str]:
+    """Return the log file path for the current invocation."""
+    if log_file:
+        return log_file
+    if not (debug or tui):
+        return None
+    timestamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    return str(Path(".logs") / f"claude-code-debug-{timestamp}.log")
+
+
+def ensure_log_directory(log_path: Optional[str]) -> None:
+    """Create the parent directory for a log path when needed."""
+    if not log_path:
+        return
+    Path(log_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
 
 def print_tool_use_header(tool_name: str, tool_input: dict) -> None:
@@ -223,7 +242,7 @@ async def run_cli_mode(
     "--log-file",
     type=click.Path(),
     default=None,
-    help="Path to write debug log file (default: claude-code-debug.log in current directory if --debug or --tui)",
+    help="Path to write debug log file (default: .logs/claude-code-debug-<timestamp>.log if --debug or --tui)",
 )
 @click.version_option(version="0.1.0", prog_name="claude-code-python")
 def main(
@@ -246,14 +265,8 @@ def main(
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     # Determine log file path
-    if log_file:
-        log_path = log_file
-    elif debug or tui:
-        # Default log file for TUI or debug mode
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_path = f"claude-code-debug-{timestamp}.log"
-    else:
-        log_path = None
+    log_path = resolve_log_path(log_file, debug, tui)
+    ensure_log_directory(log_path)
 
     # Configure logging
     if log_path:

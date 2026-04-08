@@ -11,17 +11,19 @@ import os
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
-from dotenv import load_dotenv
 import httpx
+from dotenv import load_dotenv
+
+# Add the project root to the import path so the script can run from anywhere.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
 
 
 async def test_api_connection():
     """Test the API connection and report issues."""
     # Load environment variables
-    load_dotenv()
+    load_dotenv(PROJECT_ROOT / ".env")
 
     api_url = os.environ.get("CLAUDE_CODE_API_URL")
     api_key = os.environ.get("CLAUDE_CODE_API_KEY")
@@ -35,13 +37,18 @@ async def test_api_connection():
     # Check configuration
     print("Configuration Check:")
     print(f"  API URL: {api_url or 'NOT SET'}")
-    print(f"  API Key: {'***' + api_key[-4:] if api_key and len(api_key) > 4 else 'NOT SET'}")
+    print(
+        f"  API Key: {'***' + api_key[-4:] if api_key and len(api_key) > 4 else 'NOT SET'}"
+    )
     print(f"  Model: {model or 'NOT SET'}")
     print()
 
     if not api_url or not api_key or not model:
         print("ERROR: Missing configuration!")
-        print("Please set CLAUDE_CODE_API_URL, CLAUDE_CODE_API_KEY, and CLAUDE_CODE_MODEL")
+        print(
+            "Please set CLAUDE_CODE_API_URL, CLAUDE_CODE_API_KEY, "
+            "and CLAUDE_CODE_MODEL"
+        )
         print("in your .env file or environment variables.")
         return False
 
@@ -58,11 +65,13 @@ async def test_api_connection():
     print("Test 1: DNS Resolution...")
     try:
         from urllib.parse import urlparse
+
         parsed = urlparse(api_url)
         hostname = parsed.hostname
         print(f"  Hostname: {hostname}")
 
         import socket
+
         ip = socket.gethostbyname(hostname)
         print(f"  Resolved IP: {ip}")
         print("  ✓ DNS resolution successful")
@@ -76,8 +85,7 @@ async def test_api_connection():
     try:
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(hostname, port),
-            timeout=10.0
+            asyncio.open_connection(hostname, port), timeout=10.0
         )
         writer.close()
         await writer.wait_closed()
@@ -111,7 +119,10 @@ async def test_api_connection():
                     print("  ✗ Authentication failed - check your API key")
                     return False
                 elif response.status_code == 404:
-                    print("  ! Models endpoint not found (this may be normal for some APIs)")
+                    print(
+                        "  ! Models endpoint not found "
+                        "(this may be normal for some APIs)"
+                    )
             except Exception as e:
                 print(f"  ! Models request failed: {e}")
     except Exception as e:
@@ -185,7 +196,7 @@ async def test_api_connection():
         return False
 
 
-def main():
+def main() -> None:
     try:
         success = asyncio.run(test_api_connection())
         print()

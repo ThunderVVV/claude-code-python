@@ -3,7 +3,7 @@
 Debug script to diagnose tool execution issues.
 
 Usage:
-  python debug_query.py
+  python scripts/debug/debug_query.py
 
 Set environment variables first:
   export CLAUDE_CODE_API_URL="your_api_url"
@@ -15,25 +15,30 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Enable debug logging
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
-from dotenv import load_dotenv
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
+load_dotenv(PROJECT_ROOT / ".env")
 
-from claude_code.core.messages import Message, MessageRole
-from claude_code.core.query_engine import QueryEngine, QueryConfig
-from claude_code.core.tools import ToolRegistry
-from claude_code.services.openai_client import OpenAIClientConfig
-from claude_code.tools.file_tools import ReadTool, GlobTool, GrepTool
-from claude_code.tools.bash_tool import BashTool
+from claude_code.core.query_engine import QueryEngine, QueryConfig  # noqa: E402
+from claude_code.core.tools import ToolRegistry  # noqa: E402
+from claude_code.services.openai_client import OpenAIClientConfig  # noqa: E402
+from claude_code.tools.bash_tool import BashTool  # noqa: E402
+from claude_code.tools.file_tools import GlobTool, GrepTool, ReadTool  # noqa: E402
 
 
 def create_tool_registry() -> ToolRegistry:
+    """Create a minimal read-only registry for query debugging."""
     registry = ToolRegistry()
     registry.register(ReadTool())
     registry.register(GlobTool())
@@ -43,12 +48,16 @@ def create_tool_registry() -> ToolRegistry:
 
 
 async def main():
+    """Run a single query and print each emitted event."""
     api_url = os.environ.get("CLAUDE_CODE_API_URL")
     api_key = os.environ.get("CLAUDE_CODE_API_KEY")
     model_name = os.environ.get("CLAUDE_CODE_MODEL")
 
     if not all([api_url, api_key, model_name]):
-        print("Error: Please set CLAUDE_CODE_API_URL, CLAUDE_CODE_API_KEY, and CLAUDE_CODE_MODEL")
+        print(
+            "Error: Please set CLAUDE_CODE_API_URL, CLAUDE_CODE_API_KEY, "
+            "and CLAUDE_CODE_MODEL"
+        )
         sys.exit(1)
 
     print(f"=" * 60)
@@ -91,12 +100,20 @@ async def main():
 
         elif event_type == "ToolResultEvent":
             tool_results_received += 1
-            result_preview = event.result[:100] + "..." if len(event.result) > 100 else event.result
-            print(f"\n[TOOL_RESULT] {'ERROR' if event.is_error else 'OK'}: {result_preview}")
+            result_preview = (
+                event.result[:100] + "..." if len(event.result) > 100 else event.result
+            )
+            print(
+                f"\n[TOOL_RESULT] {'ERROR' if event.is_error else 'OK'}: "
+                f"{result_preview}"
+            )
 
         elif event_type == "TurnCompleteEvent":
             turn_count = event.turn
-            print(f"\n[TURN_COMPLETE] turn={event.turn}, has_more={event.has_more_turns}, stop_reason={event.stop_reason}")
+            print(
+                f"\n[TURN_COMPLETE] turn={event.turn}, "
+                f"has_more={event.has_more_turns}, stop_reason={event.stop_reason}"
+            )
 
         elif event_type == "ErrorEvent":
             print(f"\n[ERROR] {event.error}")
@@ -112,7 +129,7 @@ async def main():
     print(f"\nMessages:")
     for i, msg in enumerate(engine.get_messages()):
         role = msg.type.value
-        tool_uses = msg.get_tool_uses() if hasattr(msg, 'get_tool_uses') else []
+        tool_uses = msg.get_tool_uses() if hasattr(msg, "get_tool_uses") else []
         text = msg.get_text()[:50] + "..." if msg.get_text() else "(no text)"
         print(f"  {i}: {role} - {len(tool_uses)} tool uses, text: {text}")
 
