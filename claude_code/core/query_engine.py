@@ -211,6 +211,7 @@ class QueryEngine:
             accumulated_tool_calls: List[ToolCallDelta] = []
             previewed_tool_use_ids: set[str] = set()
             stop_reason = "end_turn"
+            current_usage: Optional[Usage] = None
 
             try:
                 # Yield request start event
@@ -224,6 +225,14 @@ class QueryEngine:
                     system_prompt=system_prompt,
                 ):
                     if self.config.stream:
+                        extract_usage = getattr(self._client, "extract_usage", None)
+                        chunk_usage = (
+                            extract_usage(chunk) if callable(extract_usage) else None
+                        )
+                        if chunk_usage:
+                            current_usage = chunk_usage
+                            self.state.total_usage = chunk_usage
+
                         # Parse streaming chunk
                         text_delta, thinking_delta, tool_call_deltas = (
                             self._client.parse_stream_chunk(chunk)
@@ -269,11 +278,13 @@ class QueryEngine:
                                 stop_reason = finish_reason
                     else:
                         # Non-streaming response
+                        choices = chunk.get("choices", [])
                         text, thinking, tool_uses, usage = (
                             self._client.parse_non_stream_response(chunk)
                         )
                         current_text = text
                         current_thinking = thinking
+                        current_usage = usage
                         accumulated_tool_calls = []
 
                         # Convert tool uses to deltas
@@ -319,6 +330,7 @@ class QueryEngine:
                 # Create assistant message
                 assistant_message = Message.assistant_message(
                     content_blocks,
+                    usage=current_usage,
                     stop_reason=stop_reason,
                 )
                 self.state.add_message(assistant_message)

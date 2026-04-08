@@ -14,6 +14,7 @@ from typing import Optional
 import click
 from dotenv import load_dotenv
 
+from claude_code.core.context_window import get_configured_context_window_tokens
 from claude_code.core.messages import (
     TextEvent,
     ToolUseEvent,
@@ -313,6 +314,7 @@ def main(
         api_key = os.environ.get("CLAUDE_CODE_API_KEY")
     if not model:
         model = os.environ.get("CLAUDE_CODE_MODEL")
+    context_window_tokens = get_configured_context_window_tokens()
 
     # Validate configuration
     if not api_url or not api_key or not model:
@@ -355,7 +357,11 @@ def main(
                 max_turns=max_turns,
             )
             engine = QueryEngine(client_config, registry, query_config)
-            app = ClaudeCodeApp(engine, model_name=model)
+            app = ClaudeCodeApp(
+                engine,
+                model_name=model,
+                context_window_tokens=context_window_tokens,
+            )
             app.run()
         except ImportError as e:
             click.echo(

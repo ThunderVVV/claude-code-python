@@ -205,6 +205,22 @@ class Message:
         """Check if message has tool uses"""
         return any(isinstance(block, ToolUseContent) for block in self.content)
 
+    def get_usage(self) -> Optional[Usage]:
+        """Get usage data from assistant messages when available."""
+        usage = self.message.get("usage") if self.message else None
+        if not isinstance(usage, dict):
+            return None
+
+        return Usage(
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
+            cache_creation_input_tokens=usage.get(
+                "cache_creation_input_tokens",
+                0,
+            ),
+            cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
+        )
+
     def to_api_format(self) -> Dict[str, Any]:
         """Convert to API format for OpenAI"""
         if self.type == MessageRole.SYSTEM:

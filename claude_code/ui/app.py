@@ -31,6 +31,7 @@ class ClaudeCodeApp(App):
         self,
         query_engine: QueryEngine,
         model_name: str = "claude-sonnet-4-6",
+        context_window_tokens: int | None = None,
         save_history: bool = True,
         **kwargs
     ):
@@ -38,6 +39,7 @@ class ClaudeCodeApp(App):
         self.theme = self.DEFAULT_THEME
         self.query_engine = query_engine
         self.model_name = model_name
+        self.context_window_tokens = context_window_tokens
         self.save_history = save_history
 
     async def on_mount(self) -> None:
@@ -45,7 +47,12 @@ class ClaudeCodeApp(App):
         # Initialize the query engine (creates HTTP client)
         await self.query_engine.initialize()
         await self.push_screen(
-            REPLScreen(self.query_engine, self.model_name, save_history=self.save_history)
+            REPLScreen(
+                self.query_engine,
+                self.model_name,
+                context_window_tokens=self.context_window_tokens,
+                save_history=self.save_history,
+            )
         )
 
     async def on_unmount(self) -> None:

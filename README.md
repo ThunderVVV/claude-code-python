@@ -36,7 +36,10 @@ pip install -e ".[dev]"
 CLAUDE_CODE_API_URL=https://api.openai.com/v1
 CLAUDE_CODE_API_KEY=your-api-key
 CLAUDE_CODE_MODEL=gpt-4.1
+CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
 ```
+
+`CLAUDE_CODE_MAX_CONTEXT_TOKENS` 用于 TUI 输入框下方的上下文占用提示行，显示当前已用上下文 token 数 / 模型总上下文 token 数 / 百分比。这个值不会自动推断，需按你实际使用的模型在 `.env` 中显式填写。
 
 也可以直接用命令行参数覆盖：
 

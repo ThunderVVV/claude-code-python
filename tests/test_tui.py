@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from textual.css.query import NoMatches
 from textual.widgets import Collapsible
+from textual.widgets import Label
 from textual.widgets import LoadingIndicator
 from textual.widgets import Markdown
 from textual.widgets import _markdown as textual_markdown
@@ -25,6 +26,7 @@ from claude_code.core.messages import (
     ToolUseContent,
     ToolUseEvent,
     TurnCompleteEvent,
+    Usage,
 )
 from claude_code.ui.app import ClaudeCodeApp
 from claude_code.ui.message_widgets import (
@@ -58,6 +60,11 @@ class FakeQueryEngine:
 
 class TUITestCase(unittest.IsolatedAsyncioTestCase):
     """End-to-end TUI behavior tests."""
+
+    @staticmethod
+    def _label_text(label: Label) -> str:
+        rendered = label.render()
+        return rendered.plain if hasattr(rendered, "plain") else str(rendered)
 
     async def test_only_literal_exit_quits_tui(self) -> None:
         submitted_messages: list[str] = []
@@ -304,6 +311,63 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
                 input_widget.styles.background,
             )
 
+    async def test_context_usage_status_line_uses_assistant_usage(self) -> None:
+        usage = Usage(
+            input_tokens=45000,
+            cache_creation_input_tokens=3000,
+            cache_read_input_tokens=2000,
+        )
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                MessageCompleteEvent(
+                    message=Message.assistant_message(
+                        [TextContent(text="Done")],
+                        usage=usage,
+                    ),
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory),
+            model_name="test-model",
+            context_window_tokens=200000,
+            save_history=False,
+        )
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            screen = app.screen
+            context_label = screen.query_one("#context-usage", Label)
+            input_widget = screen.query_one("#user-input", InputTextArea)
+
+            self.assertEqual(self._label_text(context_label), "Context: 0/200k (0%)")
+
+            input_widget.text = "show usage"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.1)
+
+            self.assertEqual(
+                self._label_text(context_label),
+                "Context: 50k/200k (25%)",
+            )
+
+    async def test_context_usage_status_line_requires_env_configuration(self) -> None:
+        app = ClaudeCodeApp(
+            FakeQueryEngine(lambda text: []), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            screen = app.screen
+            context_label = screen.query_one("#context-usage", Label)
+
+            self.assertEqual(
+                self._label_text(context_label),
+                "Context: unavailable (set CLAUDE_CODE_MAX_CONTEXT_TOKENS in .env)",
+            )
+
     async def test_history_navigation_restores_draft_after_browsing_history(self) -> None:
         def event_factory(user_text: str):
             return [
@@ -481,8 +545,11 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertIn("I am", mid_stream_screenshot)
             self.assertNotIn("demo.txt", mid_stream_screenshot)
 
-            await pilot.pause(0.16)
-            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            for _ in range(12):
+                await pilot.pause(0.02)
+                tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+                if str(tool_toggle.title) == "Write: demo.txt":
+                    break
             self.assertEqual(str(tool_toggle.title), "Write: demo.txt")
             self.assertEqual(len(list(screen.query(ToolUseWidget))), 1)
 

@@ -69,7 +69,8 @@ WelcomeWidget:focus {
 .section-content,
 #processing-label,
 .tool-param,
-.thinking-content {
+.thinking-content,
+#context-usage {
     color: $text-muted;
 }
 
@@ -113,6 +114,14 @@ WelcomeWidget:focus {
 
 #user-input .text-area--cursor-line {
     background: $surface;
+}
+
+#context-usage {
+    width: 1fr;
+    height: auto;
+    min-height: 1;
+    padding: 0 1;
+    margin: 1 0 0 0;
 }
 
 #processing-row {
@@ -288,7 +297,7 @@ MarkdownH4,
 MarkdownH5,
 MarkdownH6 {
     text-style: bold;
-    margin: 0;
+    margin: 0 0 1 0;
 }
 
 Markdown > MarkdownParagraph {
@@ -306,7 +315,7 @@ MarkdownBlockQuote > BlockQuote {
 }
 
 MarkdownFence {
-    margin: 0;
+    margin: 0 0 1 0;
 }
 
 MarkdownFence > Label {
@@ -314,7 +323,7 @@ MarkdownFence > Label {
 }
 
 MarkdownTable {
-    margin-bottom: 0;
+    margin-bottom: 1;
 }
 
 MarkdownHorizontalRule {

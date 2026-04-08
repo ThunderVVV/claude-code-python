@@ -14,6 +14,12 @@ from textual.widgets import Label, LoadingIndicator
 from textual.screen import Screen
 from textual import events
 
+from claude_code.core.context_window import (
+    CONTEXT_WINDOW_TOKENS_ENV_VAR,
+    format_token_count,
+    get_used_context_percentage,
+    get_used_context_tokens,
+)
 from claude_code.core.messages import (
     Message,
     MessageRole,
@@ -45,12 +51,15 @@ class REPLScreen(Screen):
         self,
         query_engine: QueryEngine,
         model_name: str = "claude-sonnet-4-6",
+        context_window_tokens: Optional[int] = None,
         save_history: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.query_engine = query_engine
         self.model_name = model_name
+        self._context_window_tokens = context_window_tokens
+        self._latest_usage = None
         self._is_processing = False
         self._current_assistant_widget: Optional[AssistantMessageWidget] = None
         self._current_thinking = ""
@@ -120,6 +129,7 @@ class REPLScreen(Screen):
                 show_line_numbers=False,
                 tab_behavior="indent",
             )
+            yield Label(self._context_usage_text(), id="context-usage", markup=False)
 
     async def on_mount(self) -> None:
         """Called when screen is mounted"""
@@ -212,6 +222,31 @@ class REPLScreen(Screen):
             "Type your message and press Enter "
             "(Shift+Enter for new line, Ctrl+C to copy selection)"
         )
+
+    def _context_usage_text(self) -> str:
+        """Build the context usage status line shown under the input box."""
+        if not self._context_window_tokens:
+            return (
+                "Context: unavailable "
+                f"(set {CONTEXT_WINDOW_TOKENS_ENV_VAR} in .env)"
+            )
+
+        used_tokens = get_used_context_tokens(self._latest_usage)
+        used_percentage = get_used_context_percentage(
+            self._latest_usage,
+            self._context_window_tokens,
+        )
+        return (
+            "Context: "
+            f"{format_token_count(used_tokens)}/"
+            f"{format_token_count(self._context_window_tokens)} "
+            f"({used_percentage}%)"
+        )
+
+    def _refresh_context_usage_label(self) -> None:
+        """Refresh the context usage line after new usage data arrives."""
+        label = self.query_one("#context-usage", Label)
+        label.update(self._context_usage_text())
 
     def _reset_streaming_state(self) -> None:
         """Prepare for a fresh assistant response."""
@@ -390,6 +425,10 @@ class REPLScreen(Screen):
                         event.message,
                         auto_follow=auto_follow,
                     )
+                    usage = event.message.get_usage()
+                    if usage is not None:
+                        self._latest_usage = usage
+                        self._refresh_context_usage_label()
                     self._tool_widget_context.update(
                         assistant_widget.get_tool_widgets()
                     )

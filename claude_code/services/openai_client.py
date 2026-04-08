@@ -175,6 +175,8 @@ class OpenAIClient:
             "temperature": self.config.temperature,
             "stream": stream,
         }
+        if stream:
+            request_params["stream_options"] = {"include_usage": True}
 
         # Add tools if available
         if tool_registry:
@@ -294,44 +296,25 @@ class OpenAIClient:
                 except (KeyError, json.JSONDecodeError):
                     continue
 
-        # Extract usage
-        if "usage" in response:
-            usage = Usage(
-                input_tokens=response["usage"].get("prompt_tokens", 0),
-                output_tokens=response["usage"].get("completion_tokens", 0),
-            )
+        usage = self.extract_usage(response)
 
         return text, thinking, tool_uses, usage
 
-        message = choices[0].get("message", {})
+    def extract_usage(self, payload: Dict[str, Any]) -> Optional[Usage]:
+        """Extract usage metadata from streaming or non-streaming payloads."""
+        usage_payload = payload.get("usage")
+        if not isinstance(usage_payload, dict):
+            return None
 
-        # Extract text content
-        if "content" in message and message["content"] is not None:
-            text = message["content"]
+        prompt_token_details = usage_payload.get("prompt_tokens_details") or {}
+        cached_tokens = prompt_token_details.get("cached_tokens", 0)
 
-        # Extract tool calls
-        if "tool_calls" in message and message["tool_calls"] is not None:
-            for tc in message["tool_calls"]:
-                try:
-                    args = json.loads(tc["function"]["arguments"])
-                    tool_uses.append(
-                        ToolUseContent(
-                            id=tc["id"],
-                            name=tc["function"]["name"],
-                            input=args,
-                        )
-                    )
-                except (KeyError, json.JSONDecodeError):
-                    continue
-
-        # Extract usage
-        if "usage" in response:
-            usage = Usage(
-                input_tokens=response["usage"].get("prompt_tokens", 0),
-                output_tokens=response["usage"].get("completion_tokens", 0),
-            )
-
-        return text, tool_uses, usage
+        return Usage(
+            input_tokens=usage_payload.get("prompt_tokens", 0),
+            output_tokens=usage_payload.get("completion_tokens", 0),
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=cached_tokens,
+        )
 
     def accumulate_tool_calls(
         self,
