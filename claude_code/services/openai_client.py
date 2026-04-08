@@ -28,7 +28,7 @@ class OpenAIClientConfig:
     api_url: str
     api_key: str
     model_name: str
-    max_tokens: int = 4096
+    max_tokens: int = 16384
     temperature: float = 0.7
     timeout: float = 300.0  # 5 minutes default
     max_retries: int = 3
