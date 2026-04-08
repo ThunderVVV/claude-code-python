@@ -225,7 +225,7 @@ WelcomeWidget:focus {
     height: auto;
     margin: 0 0 1 0;
     padding: 0 1;
-    background: #141414;
+    background: transparent;
 }
 
 .tool-inline-result {
