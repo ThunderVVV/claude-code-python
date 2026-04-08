@@ -49,13 +49,12 @@ def create_tool_registry() -> ToolRegistry:
 def resolve_log_path(
     log_file: Optional[str],
     debug: bool,
-    tui: bool,
     now: Optional[datetime] = None,
 ) -> Optional[str]:
     """Return the log file path for the current invocation."""
     if log_file:
         return log_file
-    if not (debug or tui):
+    if not debug:
         return None
     timestamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
     return str(Path(".logs") / f"claude-code-debug-{timestamp}.log")
@@ -219,9 +218,15 @@ async def run_cli_mode(
     help="System prompt for the assistant",
 )
 @click.option(
+    "--cli",
+    "use_cli",
+    is_flag=True,
+    help="Use simple CLI interface instead of TUI",
+)
+@click.option(
     "--tui",
     is_flag=True,
-    help="Use Textual TUI interface (experimental)",
+    help="Use Textual TUI interface (default behavior, this flag is optional)",
 )
 @click.option(
     "--env-file",
@@ -243,7 +248,7 @@ async def run_cli_mode(
     "--log-file",
     type=click.Path(),
     default=None,
-    help="Path to write debug log file (default: .logs/claude-code-debug-<timestamp>.log if --debug or --tui)",
+    help="Path to write debug log file (default: .logs/claude-code-debug-<timestamp>.log if --debug)",
 )
 @click.version_option(version="0.1.0", prog_name="claude-code-python")
 def main(
@@ -251,6 +256,7 @@ def main(
     api_key: Optional[str],
     model: Optional[str],
     system_prompt: Optional[str],
+    use_cli: bool,
     tui: bool,
     env_file: Optional[str],
     max_turns: int,
@@ -266,7 +272,7 @@ def main(
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     # Determine log file path
-    log_path = resolve_log_path(log_file, debug, tui)
+    log_path = resolve_log_path(log_file, debug)
     ensure_log_directory(log_path)
 
     # Configure logging
@@ -340,8 +346,11 @@ def main(
     elif api_url.endswith("/v1/chat/completions"):
         api_url = api_url.rsplit("/v1/chat/completions", 1)[0] + "/v1"
 
-    # Run in TUI or CLI mode
-    if tui:
+    # Determine mode: CLI if --cli flag, otherwise TUI (default)
+    if use_cli:
+        asyncio.run(run_cli_mode(api_url, api_key, model, system_prompt))
+    else:
+        # Default to TUI mode
         try:
             from claude_code.ui.app import ClaudeCodeApp
 
@@ -371,8 +380,6 @@ def main(
                 err=True,
             )
             sys.exit(1)
-    else:
-        asyncio.run(run_cli_mode(api_url, api_key, model, system_prompt))
 
 
 if __name__ == "__main__":

@@ -13,8 +13,13 @@ Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 - 流式响应、工具调用、工具结果回填
 - TUI 中每个工具调用渲染为单个可折叠块，结果返回后直接原地替换标题摘要
 - 工具集：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
-- OpenAI 兼容 API 接入
+- OpenAI 兼容 API 接入（使用官方 OpenAI Python SDK）
 - 与 TypeScript 版本对齐的系统提示词和工具描述
+- **推理/思考内容支持**：支持显示模型的推理过程（如 DeepSeek 的 chain-of-thought）
+- **上下文使用提示**：TUI 输入框下方显示当前上下文占用情况
+- **内联 Diff 展示**：`Edit` 和 `Write` 工具结果以 diff 格式呈现，而非原始内容预览
+- **多行输入支持**：Enter 提交，Shift+Enter 换行
+- **输入历史**：上下键导航历史输入，持久化到 `~/.claude_code_history.json`
 - 针对 TUI 的无头回归测试，覆盖工具优先响应、滚动、复制和输入状态
 
 ## 安装
@@ -54,25 +59,25 @@ claude-code \
 
 ## 运行
 
-CLI：
+默认启动 TUI 模式：
 
 ```bash
 claude-code
 ```
 
-TUI：
+使用 CLI 模式：
 
 ```bash
-claude-code --tui
+claude-code --cli
 ```
 
 开启调试日志：
 
 ```bash
-claude-code --tui --debug
+claude-code --debug
 ```
 
-如果没有显式传入 `--log-file`，`--debug` 或 `--tui` 会自动把日志写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`，避免把仓库根目录弄乱。
+如果同时指定了 `--log-file`，调试日志会写到指定路径；否则会自动写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`。
 
 TUI 中工具结果的显示规则：
 
@@ -111,6 +116,7 @@ python scripts/debug/debug_tui.py
 claude-code-python/
 ├── AGENTS.md
 ├── README.md
+├── README_EN.md
 ├── CHANGELOG.md
 ├── claude_code/
 │   ├── cli.py
@@ -123,9 +129,15 @@ claude-code-python/
 │   │   └── openai_client.py
 │   ├── tools/
 │   │   ├── bash_tool.py
-│   │   └── file_tools.py
+│   │   ├── read_tool.py
+│   │   ├── write_tool.py
+│   │   ├── edit_tool.py
+│   │   ├── glob_tool.py
+│   │   └── grep_tool.py
 │   └── ui/
 │       ├── app.py
+│       ├── constants.py
+│       ├── diff_view.py
 │       ├── message_widgets.py
 │       ├── screens.py
 │       ├── styles.py

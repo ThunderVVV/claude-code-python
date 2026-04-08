@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-09
+
+#### Default TUI Mode and Logging Behavior
+- Changed default mode from CLI to TUI when running `claude-code` without flags
+- Added `--cli` flag to explicitly use simple CLI mode
+- Kept `--tui` flag for compatibility (optional, same as default behavior)
+- Disabled automatic debug logging for TUI mode - now only enabled with explicit `--debug` flag
+- Updated `resolve_log_path()` to only create log files when `--debug` is set
+- Updated CLI help text to reflect new default behavior
+- Updated README documentation in both Chinese and English versions
+
 ### Added - 2026-04-09
 
 #### TUI Context And Diff Presentation
