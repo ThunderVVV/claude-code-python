@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed - 2026-04-08
+
+#### Duplicate Tool Definitions Cleanup
+- Removed `claude_code/tools/file_tools.py` (650 lines) - contained duplicate tool definitions
+- All tools are already defined in separate files: `read_tool.py`, `write_tool.py`, `edit_tool.py`, `glob_tool.py`, `grep_tool.py`
+- Updated imports in `cli.py`, `test_core.py`, and debug scripts to use `from claude_code.tools import ...` instead of `from claude_code.tools.file_tools import ...`
+- No functional changes - purely code cleanup to eliminate redundancy
+
 ### Changed - 2026-04-08
 
 #### OpenAI Client SDK Migration

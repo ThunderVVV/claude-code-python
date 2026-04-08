@@ -14,7 +14,7 @@ from claude_code.core.tools import (
     ToolContext,
     ToolInputSchema,
 )
-from claude_code.tools.file_tools import (
+from claude_code.tools import (
     ReadTool,
     WriteTool,
     EditTool,

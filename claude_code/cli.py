@@ -23,7 +23,7 @@ from claude_code.core.messages import (
 from claude_code.core.query_engine import QueryEngine, QueryConfig
 from claude_code.core.tools import ToolRegistry
 from claude_code.services.openai_client import OpenAIClientConfig
-from claude_code.tools.file_tools import (
+from claude_code.tools import (
     ReadTool,
     WriteTool,
     EditTool,

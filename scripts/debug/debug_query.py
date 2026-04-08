@@ -34,7 +34,7 @@ from claude_code.core.query_engine import QueryEngine, QueryConfig  # noqa: E402
 from claude_code.core.tools import ToolRegistry  # noqa: E402
 from claude_code.services.openai_client import OpenAIClientConfig  # noqa: E402
 from claude_code.tools.bash_tool import BashTool  # noqa: E402
-from claude_code.tools.file_tools import GlobTool, GrepTool, ReadTool  # noqa: E402
+from claude_code.tools import GlobTool, GrepTool, ReadTool  # noqa: E402
 
 
 def create_tool_registry() -> ToolRegistry:
