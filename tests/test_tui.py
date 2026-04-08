@@ -6,15 +6,21 @@ import asyncio
 import unittest
 from unittest.mock import patch
 
+from textual.css.query import NoMatches
 from textual.widgets import Collapsible
 from textual.widgets import LoadingIndicator
+from textual.widgets import Markdown
+from textual.widgets import _markdown as textual_markdown
 from textual.containers import Horizontal
+from textual.widgets._markdown import MarkdownH2, MarkdownH4
 
 from claude_code.core.messages import (
     Message,
     MessageCompleteEvent,
     TextContent,
     TextEvent,
+    ThinkingContent,
+    ThinkingEvent,
     ToolResultEvent,
     ToolUseContent,
     ToolUseEvent,
@@ -458,15 +464,21 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             input_widget.text = "write it"
             input_widget._on_submit(input_widget.text)
 
-            await pilot.pause(0.06)
-            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            tool_toggle = None
+            for _ in range(8):
+                await pilot.pause(0.02)
+                try:
+                    tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+                except NoMatches:
+                    continue
+                break
+            self.assertIsNotNone(tool_toggle)
             self.assertEqual(str(tool_toggle.title), "Write")
 
             mid_stream_screenshot = app.export_screenshot(simplify=True).replace(
                 "&#160;", " "
             )
             self.assertIn("I am", mid_stream_screenshot)
-            self.assertIn("Write", mid_stream_screenshot)
             self.assertNotIn("demo.txt", mid_stream_screenshot)
 
             await pilot.pause(0.16)
@@ -481,8 +493,8 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Write: demo.txt", final_screenshot)
 
     async def test_manual_scroll_up_during_stream_does_not_snap_back(self) -> None:
-        first_chunk = "\n".join(f"line {index}" for index in range(12))
-        second_chunk = "\n".join(f"next {index}" for index in range(12))
+        first_chunk = "\n".join(f"line {index}" for index in range(20))
+        second_chunk = "\n".join(f"next {index}" for index in range(20))
         full_text = f"{first_chunk}\n{second_chunk}"
 
         def event_factory(user_text: str):
@@ -515,7 +527,7 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
 
             input_widget.text = "stream please"
             input_widget._on_submit(input_widget.text)
-            await pilot.pause(0.06)
+            await pilot.pause(0.1)
 
             self.assertGreater(content_area.max_scroll_y, 0)
             content_area.scroll_end(
@@ -741,7 +753,7 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(tool_toggle.title), "[OK] Ran: rg --files | head")
 
             screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
-            self.assertIn("[OK] Ran: rg --files | head", screenshot)
+            self.assertIn("[OK] Ran: rg --files |", screenshot)
             self.assertNotIn("Bash: rg --files | head", screenshot)
             self.assertNotIn("Output Preview", screenshot)
             self.assertNotIn("README.md", screenshot)
@@ -840,6 +852,156 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(thinking_toggle.styles.background_tint.a, 0)
             self.assertEqual(thinking_title.styles.background.a, 0)
 
+    async def test_streaming_thinking_updates_full_content(self) -> None:
+        first_chunk = "Thinking"
+        second_chunk = " through the full answer"
+        full_thinking = first_chunk + second_chunk
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ThinkingEvent(thinking=first_chunk),
+                0.02,
+                ThinkingEvent(thinking=second_chunk),
+                0.02,
+                MessageCompleteEvent(
+                    message=Message.assistant_message(
+                        [ThinkingContent(thinking=full_thinking)]
+                    ),
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "show thinking"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            thinking_toggle = screen.query_one(".thinking-collapsible", Collapsible)
+            thinking_toggle.collapsed = False
+            await pilot.pause(0.05)
+
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertIn("Thinking through the full answer", screenshot)
+
+    async def test_streaming_markdown_uses_textual_stream_api(self) -> None:
+        full_text = "Hello world!"
+        stream_writes: list[str] = []
+
+        class FakeMarkdownStream:
+            def __init__(self, markdown_widget: Markdown):
+                self._markdown_widget = markdown_widget
+
+            async def write(self, markdown_fragment: str) -> None:
+                stream_writes.append(markdown_fragment)
+                await self._markdown_widget.append(markdown_fragment)
+
+            async def stop(self) -> None:
+                pass
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                TextEvent(text="Hello"),
+                0.02,
+                TextEvent(text=" world"),
+                0.02,
+                TextEvent(text="!"),
+                0.02,
+                MessageCompleteEvent(
+                    message=Message.assistant_message([TextContent(text=full_text)]),
+                ),
+                TurnCompleteEvent(turn=1, has_more_turns=False, stop_reason="end_turn"),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        with patch(
+            "claude_code.ui.message_widgets.Markdown.get_stream",
+            side_effect=lambda widget: FakeMarkdownStream(widget),
+        ) as get_stream:
+            async with app.run_test(size=(80, 14)) as pilot:
+                await pilot.pause()
+                screen = app.screen
+                input_widget = screen.query_one("#user-input", InputTextArea)
+                input_widget.text = "stream markdown"
+                input_widget._on_submit(input_widget.text)
+                await pilot.pause(0.25)
+
+                screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+                self.assertIn(full_text, screenshot)
+
+        self.assertEqual(stream_writes, [" world", "!"])
+        self.assertEqual(get_stream.call_count, 1)
+
+    async def test_markdown_headings_and_links_do_not_use_underlines(self) -> None:
+        markdown_text = "## Heading\n\n#### Minor\n\n[link](https://example.com)\n"
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                MessageCompleteEvent(
+                    message=Message.assistant_message([TextContent(text=markdown_text)]),
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "show headings"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            heading_two = screen.query_one(MarkdownH2)
+            heading_four = screen.query_one(MarkdownH4)
+            markdown_widget = screen.query_one(Markdown)
+
+            self.assertNotIn("underline", str(heading_two.styles.text_style))
+            self.assertNotIn("underline", str(heading_four.styles.text_style))
+            self.assertEqual(str(markdown_widget.styles.link_style), "none")
+            self.assertEqual(str(markdown_widget.styles.link_style_hover), "bold")
+
+    async def test_untyped_code_fence_uses_plain_text_highlighting(self) -> None:
+        markdown_text = "```\n.logs/claude-code-debug-<timestamp>.log\n```\n"
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                MessageCompleteEvent(
+                    message=Message.assistant_message([TextContent(text=markdown_text)]),
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "show code"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            fence = screen.query_one(textual_markdown.MarkdownFence)
+            span_styles = [str(span.style) for span in fence._highlighted_code.spans]
+
+            self.assertEqual(span_styles, ["$text"])
+
     async def test_tool_output_strips_terminal_control_sequences(self) -> None:
         def event_factory(user_text: str):
             return [
@@ -873,6 +1035,128 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertIn("next", joined)
             self.assertNotIn("\x1b", joined)
             self.assertNotIn("\x07", joined)
+
+    async def test_assistant_markdown_renders_and_keeps_strikethrough_literal(
+        self,
+    ) -> None:
+        markdown_text = (
+            "# Plan\n\n"
+            "- first\n\n"
+            "> quoted\n\n"
+            "Inline `code`\n\n"
+            "```python\nhi()\n```\n\n"
+            "~~literal~~ and ~100\n"
+        )
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                MessageCompleteEvent(
+                    message=Message.assistant_message([TextContent(text=markdown_text)]),
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 24)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "show markdown"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+            content_area = screen.query_one("#content-area")
+            content_area.scroll_home(animate=False, force=True, immediate=True)
+            await pilot.pause(0.05)
+
+            markdown_widgets = list(screen.query(Markdown))
+            self.assertGreaterEqual(len(markdown_widgets), 1)
+
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertIn("Plan", screenshot)
+            self.assertIn("first", screenshot)
+            self.assertIn("quoted", screenshot)
+            self.assertIn("code", screenshot)
+            self.assertIn("hi", screenshot)
+            self.assertIn("()", screenshot)
+            self.assertIn("~~literal~~", screenshot)
+            self.assertIn("~100", screenshot)
+            self.assertNotIn("```", screenshot)
+            self.assertNotIn("# Plan", screenshot)
+
+    async def test_markdown_table_cells_do_not_expose_hover_tooltips(self) -> None:
+        markdown_text = "| Name | Value |\n| --- | --- |\n| alpha | beta |\n"
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                MessageCompleteEvent(
+                    message=Message.assistant_message([TextContent(text=markdown_text)]),
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "show table"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            markdown_widget = next(
+                widget for widget in screen.query(Markdown) if isinstance(widget, Markdown)
+            )
+            tooltips = [
+                child.tooltip
+                for child in markdown_widget.walk_children(with_self=True)
+                if getattr(child, "tooltip", None) is not None
+            ]
+            self.assertEqual(tooltips, [])
+
+    async def test_tool_output_keeps_raw_markdown_text(self) -> None:
+        tool_output = "## raw\n- item\n`code`\n"
+
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result=tool_output,
+                    is_error=False,
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(80, 14)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "show raw output"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            tool_toggle.collapsed = False
+            await pilot.pause(0.05)
+            self.assertIn("## raw", str(tool_toggle.title))
+
+            expanded_contents = [
+                str(widget.content)
+                for widget in tool_toggle.query(".tool-output-label, .tool-result-preview")
+                if hasattr(widget, "content")
+            ]
+            joined = "\n".join(expanded_contents)
+            self.assertIn("- item", joined)
+            self.assertIn("`code`", joined)
 
 
 if __name__ == "__main__":

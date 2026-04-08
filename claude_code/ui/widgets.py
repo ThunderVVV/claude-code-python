@@ -9,7 +9,6 @@ from textual.containers import Container, Horizontal, VerticalGroup
 from textual.widgets import Label, Static, TextArea
 from textual import events
 
-from claude_code.ui.constants import CLAUDE_ORANGE
 from claude_code.ui.utils import sanitize_terminal_text
 
 
@@ -62,50 +61,6 @@ class Clawd(VerticalGroup):
 
 class WelcomeWidget(Container):
     """Welcome widget aligned with TypeScript LogoV2.tsx - rendered as part of scrollable content"""
-
-    DEFAULT_CSS = f"""
-    WelcomeWidget {{
-        width: 100%;
-        height: auto;
-        border: round {CLAUDE_ORANGE};
-        padding: 0 1;
-        margin: 0 1 1 1;
-    }}
-
-    WelcomeWidget .welcome-title {{
-        color: {CLAUDE_ORANGE};
-        text-style: bold;
-    }}
-
-    WelcomeWidget .welcome-version {{
-        color: rgb(153,153,153);
-    }}
-
-    WelcomeWidget #left-panel {{
-        width: 1fr;
-        height: auto;
-        align: center top;
-        padding: 0 1;
-    }}
-
-    WelcomeWidget #right-panel {{
-        width: 1fr;
-        height: auto;
-        min-height: 7;
-        padding: 0 0 0 1;
-        margin-left: 1;
-        border-left: solid {CLAUDE_ORANGE};
-    }}
-
-    WelcomeWidget #left-panel {{
-        min-height: 7;
-    }}
-
-    WelcomeWidget .welcome-horizontal {{
-        width: 100%;
-        height: auto;
-    }}
-    """
 
     def __init__(
         self,

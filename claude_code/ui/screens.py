@@ -269,14 +269,14 @@ class REPLScreen(Screen):
 
         except Exception as e:
             error_msg = Message.system_message(f"Error: {str(e)}")
-            message_list.add_message(error_msg)
+            await message_list.add_message(error_msg)
 
         finally:
             self._set_processing_state(False)
             input_widget = self.query_one("#user-input", InputTextArea)
             input_widget.focus()
 
-    def _ensure_assistant_widget(
+    async def _ensure_assistant_widget(
         self,
         message_list: MessageList,
         message: Optional[Message] = None,
@@ -284,12 +284,12 @@ class REPLScreen(Screen):
     ) -> AssistantMessageWidget:
         """Return the live assistant widget for the current response."""
         if not self._current_assistant_widget:
-            self._current_assistant_widget = message_list.create_assistant_widget(
+            self._current_assistant_widget = await message_list.create_assistant_widget(
                 message=message,
                 auto_follow=auto_follow,
             )
         elif message:
-            self._current_assistant_widget.sync_from_message(message)
+            await self._current_assistant_widget.sync_from_message(message)
         return self._current_assistant_widget
 
     async def _handle_query_event(
@@ -307,13 +307,13 @@ class REPLScreen(Screen):
             self._current_thinking += event.thinking
 
             # Create assistant widget on first thinking if not exists
-            assistant_widget = self._ensure_assistant_widget(
+            assistant_widget = await self._ensure_assistant_widget(
                 message_list,
                 auto_follow=auto_follow,
             )
 
-            # Update the thinking in the existing widget (no recreation)
-            assistant_widget.update_thinking(self._current_thinking)
+            # Stream the thinking delta directly into the markdown widget.
+            await assistant_widget.append_thinking(event.thinking)
             message_list.schedule_scroll_to_latest(auto_follow)
 
         elif isinstance(event, TextEvent):
@@ -322,13 +322,13 @@ class REPLScreen(Screen):
             self._current_text += event.text
 
             # Create assistant widget on first text if not exists
-            assistant_widget = self._ensure_assistant_widget(
+            assistant_widget = await self._ensure_assistant_widget(
                 message_list,
                 auto_follow=auto_follow,
             )
 
-            # Update the text in the existing widget (no recreation)
-            assistant_widget.update_text(self._current_text)
+            # Stream the text delta directly into the markdown widget.
+            await assistant_widget.append_text(event.text)
             message_list.schedule_scroll_to_latest(auto_follow)
 
         elif isinstance(event, ToolUseEvent):
@@ -341,13 +341,13 @@ class REPLScreen(Screen):
             )
             self._tool_use_context[event.tool_use_id] = tool_use
             # Ensure we have an assistant widget
-            assistant_widget = self._ensure_assistant_widget(
+            assistant_widget = await self._ensure_assistant_widget(
                 message_list,
                 auto_follow=auto_follow,
             )
 
             # Add tool use to the existing widget (no recreation)
-            tool_widget = assistant_widget.add_tool_use(tool_use)
+            tool_widget = await assistant_widget.add_tool_use(tool_use)
             if tool_widget:
                 self._tool_widget_context[event.tool_use_id] = tool_widget
             message_list.schedule_scroll_to_latest(auto_follow)
@@ -372,7 +372,7 @@ class REPLScreen(Screen):
                 tool_use = self._tool_use_context.get(event.tool_use_id)
                 tool_name = tool_use.name if tool_use else "Tool"
                 tool_input = tool_use.input if tool_use else {}
-                message_list.add_tool_result(
+                await message_list.add_tool_result(
                     tool_name=tool_name,
                     tool_input=tool_input,
                     result=event.result,
@@ -385,7 +385,7 @@ class REPLScreen(Screen):
             if event.message:
                 auto_follow = message_list.should_auto_follow_output()
                 if event.message.type == MessageRole.ASSISTANT:
-                    assistant_widget = self._ensure_assistant_widget(
+                    assistant_widget = await self._ensure_assistant_widget(
                         message_list,
                         event.message,
                         auto_follow=auto_follow,
@@ -396,11 +396,14 @@ class REPLScreen(Screen):
                     self._current_text = event.message.get_text()
                     message_list.schedule_scroll_to_latest(auto_follow)
                 elif event.message.type != MessageRole.TOOL:
-                    message_list.add_message(event.message, auto_follow=auto_follow)
+                    await message_list.add_message(
+                        event.message,
+                        auto_follow=auto_follow,
+                    )
 
         elif isinstance(event, TurnCompleteEvent):
             self._reset_streaming_state()
 
         elif isinstance(event, ErrorEvent):
             error_msg = Message.system_message(f"Error: {event.error}")
-            message_list.add_message(error_msg)
+            await message_list.add_message(error_msg)

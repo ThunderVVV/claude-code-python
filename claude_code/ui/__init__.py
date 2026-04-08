@@ -17,7 +17,6 @@ from claude_code.ui.utils import (
     summarize_tool_use,
     format_tool_input_details,
 )
-from claude_code.ui.constants import CLAUDE_ORANGE, CLAUDE_ORANGE_LIGHT
 
 __all__ = [
     "ClaudeCodeApp",
@@ -34,6 +33,4 @@ __all__ = [
     "summarize_tool_result",
     "summarize_tool_use",
     "format_tool_input_details",
-    "CLAUDE_ORANGE",
-    "CLAUDE_ORANGE_LIGHT",
 ]

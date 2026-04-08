@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from typing import List, Optional
+from markdown_it import MarkdownIt
+from textual.await_complete import AwaitComplete
 from textual.app import ComposeResult
 from textual.content import Content
 from textual.containers import Container, VerticalGroup, ScrollableContainer
-from textual.widgets import Collapsible, Label, Static
+from textual.highlight import highlight as highlight_code
+from textual.widgets import _markdown as textual_markdown
+from textual.widgets import Collapsible, Label, Markdown, Static
 
 from claude_code.core.messages import (
     Message,
@@ -24,40 +28,175 @@ from claude_code.ui.utils import (
 )
 
 
-class StreamingTextWidget(Static):
-    """Widget for streaming text content - updates in place without recreating."""
+def _create_markdown_parser() -> MarkdownIt:
+    """Build a Markdown parser aligned with the TypeScript implementation."""
+    return MarkdownIt("gfm-like").disable("strikethrough")
+
+
+class TranscriptMarkdownFence(textual_markdown.MarkdownFence):
+    """Markdown fence that treats untyped code blocks as plain text."""
+
+    @classmethod
+    def highlight(cls, code: str, language: str) -> Content:
+        return highlight_code(code, language=language or "text")
+
+
+class TranscriptMarkdownWidget(Markdown):
+    """Markdown widget wrapper that disables hover tooltips in transcript content."""
+
+    def __init__(self, initial_text: str = "", **kwargs):
+        normalized = sanitize_terminal_text(initial_text)
+        self._markdown_text = normalized
+        self._stream: textual_markdown.MarkdownStream | None = None
+        super().__init__(
+            normalized,
+            parser_factory=_create_markdown_parser,
+            **kwargs,
+        )
+
+    def _clear_tooltips(self) -> None:
+        """Remove built-in Textual markdown tooltips from markdown tables."""
+        self.tooltip = None
+        for table in self.query(textual_markdown.MarkdownTableContent):
+            table.tooltip = None
+            for child in table.walk_children(with_self=False):
+                child.tooltip = None
+
+    def _schedule_tooltip_cleanup(self, update: AwaitComplete) -> None:
+        """Clear table tooltips after the current markdown update completes."""
+        if "|" not in self._markdown_text:
+            self.tooltip = None
+            return
+        future = getattr(update, "_future", None)
+        if future is None:
+            self.call_after_refresh(self._clear_tooltips)
+            return
+
+        def cleanup_callback(_future) -> None:
+            try:
+                self.call_after_refresh(self._clear_tooltips)
+            except Exception:
+                pass
+
+        future.add_done_callback(cleanup_callback)
+
+    def get_block_class(
+        self,
+        block_name: str,
+    ) -> type[textual_markdown.MarkdownBlock]:
+        """Use a plain-text fallback for fenced code blocks without a language."""
+        if block_name in {"fence", "code_block"}:
+            return TranscriptMarkdownFence
+        return super().get_block_class(block_name)
+
+    def update(self, markdown: str) -> AwaitComplete:
+        """Update markdown content and strip any built-in hover tooltips."""
+        normalized = sanitize_terminal_text(markdown)
+        self._markdown_text = normalized
+        update = super().update(normalized)
+        self._schedule_tooltip_cleanup(update)
+        return update
+
+    def append(self, markdown: str) -> AwaitComplete:
+        """Append markdown content and strip any built-in hover tooltips."""
+        normalized = sanitize_terminal_text(markdown)
+        if not normalized:
+            return AwaitComplete.nothing()
+        update = super().append(normalized)
+        self._schedule_tooltip_cleanup(update)
+        return update
+
+    def _get_stream(self) -> textual_markdown.MarkdownStream:
+        """Lazily create a Textual markdown stream for high-frequency appends."""
+        if self._stream is None:
+            self._stream = Markdown.get_stream(self)
+        return self._stream
+
+    async def finish_streaming(self) -> None:
+        """Stop the background markdown stream, flushing any queued fragments."""
+        if self._stream is None:
+            return
+        stream = self._stream
+        self._stream = None
+        await stream.stop()
+
+    async def append_markdown(self, markdown: str) -> None:
+        """Append a markdown fragment using Textual's streaming helper."""
+        normalized = sanitize_terminal_text(markdown)
+        if not normalized:
+            return
+        self._markdown_text += normalized
+        if not self.is_mounted:
+            self._initial_markdown = self._markdown_text
+            return
+        await self._get_stream().write(normalized)
+
+    async def set_markdown_text(self, text: str) -> None:
+        """Reconcile the widget with the provided full markdown text."""
+        normalized = sanitize_terminal_text(text)
+        previous = self._markdown_text
+
+        if normalized == previous:
+            return
+
+        if not self.is_mounted:
+            self._markdown_text = normalized
+            self._initial_markdown = normalized
+            return
+
+        if normalized.startswith(previous):
+            await self.append_markdown(normalized[len(previous) :])
+            return
+
+        await self.finish_streaming()
+        await self.update(normalized)
+
+    async def _on_unmount(self) -> None:
+        await self.finish_streaming()
+
+
+class StreamingTextWidget(TranscriptMarkdownWidget):
+    """Widget for assistant markdown content that updates in place."""
 
     def __init__(self, initial_text: str = "", **kwargs):
         super().__init__(
-            sanitize_terminal_text(initial_text),
             classes="streaming-content",
-            markup=False,
+            initial_text=initial_text,
             **kwargs,
         )
         self._text = initial_text
 
-    def update_text(self, text: str) -> None:
+    async def append_text(self, text: str) -> None:
+        """Append streamed text."""
+        self._text += text
+        await self.append_markdown(text)
+
+    async def update_text(self, text: str) -> None:
         """Update the displayed text."""
         self._text = text
-        self.update(sanitize_terminal_text(text))
+        await self.set_markdown_text(text)
 
 
-class ThinkingWidget(Static):
-    """Widget for displaying thinking/reasoning content in a collapsible block."""
+class ThinkingWidget(TranscriptMarkdownWidget):
+    """Widget for displaying reasoning content in a collapsible block."""
 
     def __init__(self, initial_thinking: str = "", **kwargs):
         super().__init__(
-            sanitize_terminal_text(initial_thinking),
             classes="thinking-content",
-            markup=False,
+            initial_text=initial_thinking,
             **kwargs,
         )
         self._thinking = initial_thinking
 
-    def update_thinking(self, thinking: str) -> None:
+    async def append_thinking(self, thinking: str) -> None:
+        """Append streamed thinking content."""
+        self._thinking += thinking
+        await self.append_markdown(thinking)
+
+    async def update_thinking(self, thinking: str) -> None:
         """Update the displayed thinking content."""
         self._thinking = thinking
-        self.update(sanitize_terminal_text(thinking))
+        await self.set_markdown_text(thinking)
 
 
 class ThinkingBlockWidget(VerticalGroup):
@@ -80,11 +219,23 @@ class ThinkingBlockWidget(VerticalGroup):
             self._thinking_widget = ThinkingWidget(self._thinking)
             yield self._thinking_widget
 
-    def update_thinking(self, thinking: str) -> None:
+    async def append_thinking(self, thinking: str) -> None:
+        """Append streamed thinking content."""
+        self._thinking += thinking
+        if self._thinking_widget:
+            await self._thinking_widget.append_thinking(thinking)
+
+    async def update_thinking(self, thinking: str) -> None:
         """Update the thinking content."""
         self._thinking = thinking
         if self._thinking_widget:
-            self._thinking_widget.update_thinking(thinking)
+            await self._thinking_widget.update_thinking(thinking)
+            self.refresh(layout=True)
+
+    async def finish_streaming(self) -> None:
+        """Flush and stop the markdown stream used by the thinking widget."""
+        if self._thinking_widget:
+            await self._thinking_widget.finish_streaming()
 
 
 class ToolUseWidget(VerticalGroup):
@@ -212,7 +363,19 @@ class AssistantMessageWidget(VerticalGroup):
         self.add_class("message-block")
         self.add_class("assistant-message-block")
         if message:
-            self.sync_from_message(message)
+            self._load_initial_message(message)
+
+    def _load_initial_message(self, message: Message) -> None:
+        """Seed internal state before mount from a finalized assistant message."""
+        for block in message.content:
+            if isinstance(block, ThinkingContent):
+                self._thinking_content = block.thinking
+            elif isinstance(block, TextContent):
+                self._text_content = block.text
+            elif isinstance(block, ToolUseContent):
+                self._tool_uses.append(block)
+                if block.id:
+                    self._tool_use_ids.add(block.id)
 
     def compose(self) -> ComposeResult:
         # Content container - will hold thinking, text and tool widgets
@@ -235,29 +398,73 @@ class AssistantMessageWidget(VerticalGroup):
                     self._tool_widgets_by_id[tool_use.id] = tool_widget
                 yield tool_widget
 
-    def update_thinking(self, thinking: str) -> None:
+    async def append_thinking(self, thinking: str) -> None:
+        """Append streamed thinking content."""
+        if not thinking:
+            return
+        self._thinking_content += thinking
+        if self._thinking_widget:
+            await self._thinking_widget.append_thinking(thinking)
+        elif self._content_container:
+            self._thinking_widget = ThinkingBlockWidget(self._thinking_content)
+            before_widget = self._streaming_widget
+            if not before_widget and self._tool_widgets:
+                before_widget = self._tool_widgets[0]
+            await self._content_container.mount(
+                self._thinking_widget,
+                before=before_widget,
+            )
+            self.refresh(layout=True)
+
+    async def update_thinking(self, thinking: str) -> None:
         """Update the streaming thinking content"""
         self._thinking_content = thinking
         if self._thinking_widget:
-            self._thinking_widget.update_thinking(thinking)
+            await self._thinking_widget.update_thinking(thinking)
+            self.refresh(layout=True)
         elif thinking and self._content_container:
             self._thinking_widget = ThinkingBlockWidget(thinking)
             before_widget = self._streaming_widget
             if not before_widget and self._tool_widgets:
                 before_widget = self._tool_widgets[0]
-            self._content_container.mount(self._thinking_widget, before=before_widget)
+            await self._content_container.mount(
+                self._thinking_widget,
+                before=before_widget,
+            )
+            self.refresh(layout=True)
 
-    def update_text(self, text: str) -> None:
+    async def append_text(self, text: str) -> None:
+        """Append streamed text content."""
+        if not text:
+            return
+        self._text_content += text
+        if self._streaming_widget:
+            await self._streaming_widget.append_text(text)
+        elif self._content_container:
+            self._streaming_widget = StreamingTextWidget(self._text_content)
+            before_widget = self._tool_widgets[0] if self._tool_widgets else None
+            await self._content_container.mount(
+                self._streaming_widget,
+                before=before_widget,
+            )
+            self.refresh(layout=True)
+
+    async def update_text(self, text: str) -> None:
         """Update the streaming text content"""
         self._text_content = text
         if self._streaming_widget:
-            self._streaming_widget.update_text(text)
+            await self._streaming_widget.update_text(text)
+            self.refresh(layout=True)
         elif text and self._content_container:
             self._streaming_widget = StreamingTextWidget(text)
             before_widget = self._tool_widgets[0] if self._tool_widgets else None
-            self._content_container.mount(self._streaming_widget, before=before_widget)
+            await self._content_container.mount(
+                self._streaming_widget,
+                before=before_widget,
+            )
+            self.refresh(layout=True)
 
-    def add_tool_use(self, tool_use: ToolUseContent) -> Optional[ToolUseWidget]:
+    async def add_tool_use(self, tool_use: ToolUseContent) -> Optional[ToolUseWidget]:
         """Add a tool use to the message and return its widget."""
         if tool_use.id and tool_use.id in self._tool_use_ids:
             self._update_tool_use(tool_use)
@@ -271,10 +478,11 @@ class AssistantMessageWidget(VerticalGroup):
                 tool_input=tool_use.input,
                 tool_use_id=tool_use.id,
             )
-            self._content_container.mount(tool_widget)
             self._tool_widgets.append(tool_widget)
             if tool_use.id:
                 self._tool_widgets_by_id[tool_use.id] = tool_widget
+            await self._content_container.mount(tool_widget)
+            self.refresh(layout=True)
             return tool_widget
         return None
 
@@ -308,15 +516,23 @@ class AssistantMessageWidget(VerticalGroup):
         """Expose rendered tool widgets by tool-use id."""
         return dict(self._tool_widgets_by_id)
 
-    def sync_from_message(self, message: Message) -> None:
+    async def sync_from_message(self, message: Message) -> None:
         """Ensure widget state matches the finalized assistant message."""
         for block in message.content:
             if isinstance(block, ThinkingContent):
-                self.update_thinking(block.thinking)
+                await self.update_thinking(block.thinking)
             elif isinstance(block, TextContent):
-                self.update_text(block.text)
+                await self.update_text(block.text)
             elif isinstance(block, ToolUseContent):
-                self.add_tool_use(block)
+                await self.add_tool_use(block)
+        await self.finish_streaming()
+
+    async def finish_streaming(self) -> None:
+        """Flush and stop any active markdown streams for this assistant message."""
+        if self._thinking_widget:
+            await self._thinking_widget.finish_streaming()
+        if self._streaming_widget:
+            await self._streaming_widget.finish_streaming()
 
     def get_message(self) -> Message:
         """Build the current message from accumulated content"""
@@ -393,10 +609,10 @@ class MessageWidget(VerticalGroup):
                         markup=False,
                     )
 
-    def update_streaming_text(self, text: str) -> None:
+    async def update_streaming_text(self, text: str) -> None:
         """Update streaming text content for assistant messages"""
         if self._streaming_widget:
-            self._streaming_widget.update_text(text)
+            await self._streaming_widget.update_text(text)
 
     def _get_role_label(self) -> tuple[str, str]:
         role_map = {
@@ -481,17 +697,21 @@ class MessageList(VerticalGroup):
         """Scroll after the current DOM/layout update flushes."""
         if auto_follow:
             self.call_after_refresh(
-                lambda: self.call_after_refresh(self._scroll_to_latest)
+                lambda: self.call_after_refresh(
+                    lambda: self.call_after_refresh(self._scroll_to_latest)
+                )
             )
+            self.set_timer(0.01, self._scroll_to_latest)
+            self.set_timer(0.05, self._scroll_to_latest)
 
-    def add_message(self, message: Message, auto_follow: bool = True) -> None:
+    async def add_message(self, message: Message, auto_follow: bool = True) -> None:
         """Add a message to the list"""
         widget = MessageWidget(message)
-        self.mount(widget)
+        await self.mount(widget)
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)
 
-    def add_tool_result(
+    async def add_tool_result(
         self,
         tool_name: str,
         tool_input: dict,
@@ -504,18 +724,18 @@ class MessageList(VerticalGroup):
             tool_name=tool_name, tool_input=tool_input, tool_use_id=""
         )
         widget.set_result(result, is_error)
-        self.mount(widget)
+        await self.mount(widget)
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)
 
-    def create_assistant_widget(
+    async def create_assistant_widget(
         self,
         message: Optional[Message] = None,
         auto_follow: bool = True,
     ) -> AssistantMessageWidget:
         """Create a new assistant message widget for streaming"""
         widget = AssistantMessageWidget(message=message)
-        self.mount(widget)
+        await self.mount(widget)
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)
         return widget

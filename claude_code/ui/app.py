@@ -13,6 +13,7 @@ class ClaudeCodeApp(App):
     """Main Claude Code application - aligned with TypeScript App.tsx"""
 
     CSS = TUI_CSS
+    DEFAULT_THEME = "tokyo-night"
     ALLOW_SELECT = True
     BINDINGS = [
         Binding(
@@ -34,6 +35,7 @@ class ClaudeCodeApp(App):
         **kwargs
     ):
         super().__init__(**kwargs)
+        self.theme = self.DEFAULT_THEME
         self.query_engine = query_engine
         self.model_name = model_name
         self.save_history = save_history

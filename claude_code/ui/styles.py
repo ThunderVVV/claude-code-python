@@ -1,21 +1,12 @@
-"""TUI CSS styles - aligned with TypeScript theme"""
+"""TUI CSS styles."""
 
 TUI_CSS = """
-/* Claude Code Python TUI Styles */
-/* Color theme aligned with TypeScript version: rgb(215,119,87) - Claude Orange */
-
-/* App-level styles */
-ClaudeCodeApp {
-    background: #1a1a1a;
-    color: #ffffff;
-}
-
+ClaudeCodeApp,
 REPLScreen {
-    background: #1a1a1a;
-    color: #ffffff;
+    background: $background;
+    color: $foreground;
 }
 
-/* Main content scrollable area */
 #content-area {
     height: 1fr;
     overflow-y: auto;
@@ -23,34 +14,23 @@ REPLScreen {
     padding: 0 1;
 }
 
-/* Scrollbar styling - Claude Orange theme */
 ScrollableContainer {
     scrollbar-size: 1 1;
-    scrollbar-background: #2a2a2a;
-    scrollbar-background-hover: #3a3a3a;
-    scrollbar-color: rgb(215,119,87);
-    scrollbar-color-hover: rgb(235,159,127);
 }
 
-ScrollableContainer:focus {
-    scrollbar-color: rgb(235,159,127);
-    scrollbar-color-hover: rgb(255,179,147);
-}
-
-/* Welcome widget with border */
 WelcomeWidget {
     width: 100%;
     height: auto;
-    border: round rgb(215,119,87);
+    border: round $border;
+    background: $boost;
     padding: 0 1;
     margin: 0 1 1 1;
 }
 
 WelcomeWidget:focus {
-    border: round rgb(235,159,127);
+    border: round $primary;
 }
 
-/* Left panel */
 #left-panel {
     width: 1fr;
     height: auto;
@@ -59,73 +39,65 @@ WelcomeWidget:focus {
     min-height: 7;
 }
 
-/* Right panel */
 #right-panel {
     width: 1fr;
     height: auto;
     min-height: 7;
     padding: 0 0 0 1;
     margin-left: 1;
-    border-left: solid rgb(215,119,87);
+    border-left: solid $border;
 }
 
-/* Horizontal layout for welcome */
 .welcome-horizontal {
     width: 100%;
     height: auto;
 }
 
-/* Welcome message */
 .welcome-message {
-    color: #ffffff;
     text-style: bold;
     text-align: center;
     margin: 0 0 1 0;
 }
 
-/* Clawd ASCII art */
 .clawd-line {
-    color: rgb(215,119,87);
+    color: $primary;
     text-align: center;
 }
 
-/* Model info line */
-.model-info {
-    color: rgb(153,153,153);
-    text-align: center;
+.model-info,
+.cwd-info,
+.section-content,
+#processing-label,
+.tool-param,
+.thinking-content {
+    color: $text-muted;
 }
 
-/* CWD line */
+.model-info,
 .cwd-info {
-    color: rgb(153,153,153);
     text-align: center;
 }
 
-/* Section title */
 .section-title {
-    color: rgb(215,119,87);
+    color: $primary;
     text-style: bold;
     margin-top: 0;
 }
 
-/* Section content */
 .section-content {
-    color: rgb(153,153,153);
     margin-left: 1;
 }
 
-/* Message list container */
 #message-list {
     height: auto;
     padding: 0 2;
 }
 
-/* Input area - fixed at bottom */
 #input-area {
     height: auto;
     dock: bottom;
     padding: 1 2;
-    background: #1a1a1a;
+    background: $background;
 }
 
 #user-input {
@@ -133,14 +105,14 @@ WelcomeWidget:focus {
     height: auto;
     min-height: 1;
     max-height: 10;
-    background: #2a2a2a;
+    background: $surface;
+    color: $foreground;
     border: none;
     padding: 1;
 }
 
-/* Override cursor line background to match input background */
 #user-input .text-area--cursor-line {
-    background: #2a2a2a;
+    background: $surface;
 }
 
 #processing-row {
@@ -154,42 +126,36 @@ WelcomeWidget:focus {
     width: 3;
     height: 1;
     min-width: 3;
-    color: rgb(215,119,87);
+    color: $primary;
     margin-right: 1;
 }
 
-#processing-label {
-    width: auto;
-    color: rgb(153,153,153);
-}
-
-/* Message roles */
 .message-role {
     text-style: bold;
     width: auto;
     margin: 0;
     padding: 0 1;
-    background: #262626;
+    background: $surface;
 }
 
 .role-user {
-    color: rgb(78,186,101);
-    background: #1b2b1f;
+    color: $success;
+    background: $success-muted;
 }
 
 .role-assistant {
-    color: rgb(215,119,87);
+    color: $primary;
     background: transparent;
 }
 
 .role-system {
-    color: rgb(255,193,7);
-    background: #2c2816;
+    color: $warning;
+    background: $warning-muted;
 }
 
 .role-tool {
-    color: rgb(235,159,127);
-    background: #2d221d;
+    color: $secondary;
+    background: $secondary-muted;
 }
 
 .message-block {
@@ -197,11 +163,11 @@ WelcomeWidget:focus {
     height: auto;
     margin: 0 0 1 0;
     padding: 1 1;
-    background: #171717;
+    background: $boost;
 }
 
 .user-message-block {
-    background: #2a2d31;
+    background: $surface;
 }
 
 .assistant-message-block {
@@ -211,13 +177,13 @@ WelcomeWidget:focus {
 }
 
 .system-message-block {
-    border-left: solid rgb(255,193,7);
-    background: #211f12;
+    border-left: solid $warning;
+    background: $warning-muted;
 }
 
 .tool-result-block {
-    border-left: solid rgb(235,159,127);
-    background: #171a20;
+    border-left: solid $secondary;
+    background: $secondary-muted;
 }
 
 .tool-use-block {
@@ -228,32 +194,23 @@ WelcomeWidget:focus {
     background: transparent;
 }
 
-/* Message content */
 .message-content {
     margin-left: 0;
     margin-bottom: 0;
     padding: 0;
 }
 
-/* Streaming message content - inline update */
 .streaming-content {
     width: 100%;
     margin-left: 0;
     margin-bottom: 1;
     padding: 0 1;
-    color: #ffffff;
     background: transparent;
 }
 
-/* Tool styling */
 .tool-header {
-    color: rgb(235,159,127);
+    color: $secondary;
     text-style: bold;
-}
-
-.tool-param {
-    color: rgb(153,153,153);
-    margin-left: 1;
 }
 
 .tool-collapsible {
@@ -273,7 +230,7 @@ WelcomeWidget:focus {
 }
 
 .tool-use-details CollapsibleTitle {
-    color: rgb(235,159,127);
+    color: $secondary;
 }
 
 .tool-result {
@@ -283,48 +240,86 @@ WelcomeWidget:focus {
 }
 
 .tool-success {
-    color: rgb(78,186,101);
+    color: $success;
 }
 
 .tool-error {
-    color: rgb(255,107,128);
+    color: $error;
 }
 
 .tool-output-label {
-    color: rgb(210,210,210);
+    color: $foreground;
     text-style: bold;
     margin-left: 1;
 }
 
 .tool-result-preview {
-    color: rgb(210,210,210);
+    color: $foreground;
     margin-left: 2;
 }
 
-/* Focus styles */
 TextArea:focus {
-    border: tall rgb(215,119,87);
+    border: tall $primary;
 }
 
-/* Header */
 Header {
-    background: #1a1a1a;
-    color: rgb(215,119,87);
+    background: $panel;
+    color: $foreground;
 }
 
-MessageList {
-    width: 100%;
-    height: auto;
-}
-
-MessageWidget, AssistantMessageWidget {
-    width: 100%;
-    height: auto;
-}
-
+MessageList,
+MessageWidget,
+AssistantMessageWidget,
 ToolUseWidget {
     width: 100%;
     height: auto;
+}
+
+Markdown {
+    padding: 0 1;
+    link-style: none;
+    link-style-hover: bold;
+}
+
+MarkdownH1,
+MarkdownH2,
+MarkdownH3,
+MarkdownH4,
+MarkdownH5,
+MarkdownH6 {
+    text-style: bold;
+    margin: 0;
+}
+
+Markdown > MarkdownParagraph {
+    margin: 0;
+}
+
+MarkdownBlockQuote {
+    margin: 0 0 1 0;
+    padding: 0 1;
+}
+
+MarkdownBlockQuote > BlockQuote {
+    margin-left: 1;
+    margin-top: 0;
+}
+
+MarkdownFence {
+    margin: 0;
+}
+
+MarkdownFence > Label {
+    padding: 0 1;
+}
+
+MarkdownTable {
+    margin-bottom: 0;
+}
+
+MarkdownHorizontalRule {
+    padding-top: 0;
+    margin: 0 0 1 0;
 }
 
 .tool-detail-body {
@@ -332,7 +327,6 @@ ToolUseWidget {
     height: auto;
 }
 
-/* Thinking block styling */
 .thinking-block {
     width: 100%;
     height: auto;
@@ -344,7 +338,7 @@ ToolUseWidget {
 .thinking-collapsible {
     background: transparent;
     border-top: none;
-    border-left: solid rgb(153,153,153);
+    border-left: solid $border;
     padding: 0;
     margin: 0;
 }
@@ -354,19 +348,19 @@ ToolUseWidget {
 }
 
 .thinking-collapsible CollapsibleTitle {
-    color: rgb(153,153,153);
+    color: $text-muted;
     text-style: italic;
     background: transparent;
 }
 
 .thinking-collapsible CollapsibleTitle:hover {
     background: transparent;
-    color: rgb(153,153,153);
+    color: $text-muted;
 }
 
 .thinking-collapsible CollapsibleTitle:focus {
     background: transparent;
-    color: rgb(153,153,153);
+    color: $text-muted;
     text-style: italic;
 }
 
@@ -375,7 +369,6 @@ ToolUseWidget {
 }
 
 .thinking-content {
-    color: rgb(153,153,153);
     text-style: italic;
     padding: 0 1;
     margin: 0;
