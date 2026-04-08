@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Refactored - 2026-04-08
+
+#### TUI Module Split
+- Split 1349-line `claude_code/ui/app.py` into multiple modules for better maintainability:
+  - `claude_code/ui/constants.py` - Theme colors (CLAUDE_ORANGE, etc.)
+  - `claude_code/ui/styles.py` - TUI CSS definitions
+  - `claude_code/ui/utils.py` - Text sanitization and tool summarization functions
+  - `claude_code/ui/widgets.py` - Clawd and WelcomeWidget
+  - `claude_code/ui/message_widgets.py` - MessageList, MessageWidget, AssistantMessageWidget, ToolUseWidget, ToolResultWidget, StreamingTextWidget
+  - `claude_code/ui/screens.py` - REPLScreen
+  - `claude_code/ui/app.py` - ClaudeCodeApp (simplified main app)
+- Added proper `__init__.py` exports for backwards compatibility
+- **No functional changes** - purely structural refactoring
+
 ### Fixed - 2026-04-08
 
 #### Tool Descriptions (aligned with TypeScript version)
