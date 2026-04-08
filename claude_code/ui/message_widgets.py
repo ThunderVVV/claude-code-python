@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 from textual.app import ComposeResult
+from textual.content import Content
 from textual.containers import Container, VerticalGroup, ScrollableContainer
 from textual.widgets import Collapsible, Label, Static
 
@@ -55,78 +56,84 @@ class ToolUseWidget(VerticalGroup):
         self.tool_input = tool_input
         self.tool_use_id = tool_use_id
         self._result_summary: Optional[str] = None
-        self._result_preview_lines: List[str] = []
+        self._result_output_lines: List[str] = []
         self._result_is_error = False
-        self._result_container: Optional[VerticalGroup] = None
+        self._details_collapsible: Optional[Collapsible] = None
+        self._details_container: Optional[VerticalGroup] = None
         self.add_class("tool-use-block")
 
     def compose(self) -> ComposeResult:
-        detail_lines = format_tool_input_details(self.tool_input)
         with Collapsible(
-            title=sanitize_terminal_text(
-                summarize_tool_use(self.tool_name, self.tool_input)
-            ),
+            title=self._collapsible_title(),
             collapsed=True,
             collapsed_symbol=">",
             expanded_symbol="v",
             classes="tool-collapsible tool-use-details",
-        ):
-            if detail_lines:
-                for line in detail_lines:
-                    yield Static(line, classes="tool-param", markup=False)
-            else:
-                yield Static("No input parameters", classes="tool-param", markup=False)
-        with VerticalGroup(classes="tool-inline-result") as container:
-            self._result_container = container
-            if self._result_summary is not None:
-                yield from self._compose_result_widgets()
+        ) as collapsible:
+            self._details_collapsible = collapsible
+            with VerticalGroup(classes="tool-detail-body") as container:
+                self._details_container = container
+                yield from self._compose_detail_widgets()
 
     def set_result(self, result: str, is_error: bool) -> None:
         """Attach the tool result to the existing tool-use block."""
         self._result_is_error = is_error
-        self._result_summary, self._result_preview_lines = summarize_tool_result(
+        self._result_summary, self._result_output_lines = summarize_tool_result(
             self.tool_name,
             self.tool_input,
             result,
             is_error,
         )
-        if self._result_container:
-            self._render_result_widgets()
+        if self._details_collapsible:
+            self._details_collapsible.title = self._collapsible_title()
+        if self._details_container and self._details_container.is_mounted:
+            self._render_detail_widgets()
 
-    def _compose_result_widgets(self) -> ComposeResult:
-        status_class = "tool-error" if self._result_is_error else "tool-success"
+    def on_mount(self) -> None:
+        """Refresh the single collapsible after mount in case results arrived early."""
+        if self._details_collapsible:
+            self._details_collapsible.title = self._collapsible_title()
+        if self._details_container and self._details_container.is_mounted:
+            self._render_detail_widgets()
+
+    def _collapsible_title(self) -> Content:
+        """Return the current single-line title for the tool call."""
+        if self._result_summary is None:
+            return Content.from_text(
+                sanitize_terminal_text(
+                    summarize_tool_use(self.tool_name, self.tool_input)
+                ),
+                markup=False,
+            )
         prefix = "[ERR]" if self._result_is_error else "[OK]"
-        yield Label(
-            f"{prefix} {self._result_summary}",
-            classes=f"tool-inline-summary {status_class}",
+        return Content.from_text(
+            sanitize_terminal_text(f"{prefix} {self._result_summary}"),
             markup=False,
         )
-        if self._result_preview_lines:
-            preview_count = len(self._result_preview_lines)
-            preview_title = f"Output Preview ({preview_count} line{'s' if preview_count != 1 else ''})"
-            yield Collapsible(
-                *[
-                    Static(
-                        line,
-                        classes="tool-result-preview",
-                        markup=False,
-                    )
-                    for line in self._result_preview_lines
-                ],
-                title=preview_title,
-                collapsed=not self._result_is_error,
-                collapsed_symbol=">",
-                expanded_symbol="v",
-                classes="tool-collapsible tool-result-preview-toggle",
-            )
 
-    def _render_result_widgets(self) -> None:
-        if not self._result_container:
+    def _compose_detail_widgets(self) -> ComposeResult:
+        detail_lines = format_tool_input_details(self.tool_input)
+        if detail_lines:
+            for line in detail_lines:
+                yield Static(line, classes="tool-param", markup=False)
+        elif self._result_summary is None:
+            yield Static("No input parameters", classes="tool-param", markup=False)
+
+        if self._result_summary is not None:
+            yield Static("Output:", classes="tool-output-label", markup=False)
+            if self._result_output_lines:
+                for line in self._result_output_lines:
+                    yield Static(line, classes="tool-result-preview", markup=False)
+            else:
+                yield Static("(no output)", classes="tool-result-preview", markup=False)
+
+    def _render_detail_widgets(self) -> None:
+        if not self._details_container:
             return
-        for child in list(self._result_container.children):
+        for child in list(self._details_container.children):
             child.remove()
-        for widget in self._compose_result_widgets():
-            self._result_container.mount(widget)
+        for widget in self._compose_detail_widgets():
+            self._details_container.mount(widget)
 
 
 class AssistantMessageWidget(VerticalGroup):
@@ -230,61 +237,6 @@ class AssistantMessageWidget(VerticalGroup):
             content.append(TextContent(text=self._text_content))
         content.extend(self._tool_uses)
         return Message.assistant_message(content)
-
-
-class ToolResultWidget(VerticalGroup):
-    """Compact tool result widget inspired by the TypeScript tool UI components."""
-
-    def __init__(
-        self,
-        tool_name: str,
-        tool_input: dict,
-        result: str,
-        is_error: bool,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.tool_name = tool_name
-        self.tool_input = tool_input
-        self.result = result
-        self.is_error = is_error
-        self.add_class("message-block")
-        self.add_class("tool-result-block")
-
-    def compose(self) -> ComposeResult:
-        status_class = "tool-error" if self.is_error else "tool-success"
-        summary, preview_lines = summarize_tool_result(
-            self.tool_name,
-            self.tool_input,
-            self.result,
-            self.is_error,
-        )
-
-        yield Label("Tool", classes="message-role role-tool", markup=False)
-        with VerticalGroup(classes="message-content tool-result-body"):
-            prefix = "[ERR]" if self.is_error else "[OK]"
-            yield Label(
-                f"  {prefix} {summary}",
-                classes=f"tool-result-summary {status_class}",
-                markup=False,
-            )
-            if preview_lines:
-                preview_count = len(preview_lines)
-                preview_title = f"Output Preview ({preview_count} line{'s' if preview_count != 1 else ''})"
-                with Collapsible(
-                    title=preview_title,
-                    collapsed=not self.is_error,
-                    collapsed_symbol=">",
-                    expanded_symbol="v",
-                    classes="tool-collapsible tool-result-preview-toggle",
-                ):
-                    for line in preview_lines:
-                        yield Static(
-                            line,
-                            classes="tool-result-preview",
-                            markup=False,
-                        )
-
 
 class MessageWidget(VerticalGroup):
     """Widget for displaying a single message"""
@@ -453,13 +405,9 @@ class MessageList(VerticalGroup):
         is_error: bool,
         auto_follow: bool = True,
     ) -> None:
-        """Add a compact tool result widget."""
-        widget = ToolResultWidget(
-            tool_name=tool_name,
-            tool_input=tool_input,
-            result=result,
-            is_error=is_error,
-        )
+        """Add a fallback tool result using the same single-collapsible tool UI."""
+        widget = ToolUseWidget(tool_name=tool_name, tool_input=tool_input, tool_use_id="")
+        widget.set_result(result, is_error)
         self.mount(widget)
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)

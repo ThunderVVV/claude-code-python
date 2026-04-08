@@ -36,6 +36,14 @@ The TUI must handle the case where the assistant emits tool calls without preced
 
 This path previously rendered as a black screen. Tests must cover tool-only and tool-first sequences explicitly.
 
+### Tool Block Structure
+
+- Each tool call should render as a single collapsible block.
+- Before the result arrives, the collapsible title shows the tool invocation summary.
+- After the result arrives, update that same title in place to the compact result summary instead of adding a second summary row.
+- Tool parameters and `Output:` content live inside the same collapsible body; do not add a second nested "Output Preview" collapsible for normal tool rendering.
+- Compact tool summaries should not end with a trailing colon.
+
 ### Dynamic Text Rendering
 
 - Always use `markup=False` when rendering dynamic content such as tool output or user input.

@@ -666,39 +666,75 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(content_area.scroll_y, content_area.max_scroll_y)
             self.assertEqual(len(list(message_list.children)), 2)
             self.assertEqual(len(list(screen.query(ToolUseWidget))), 1)
+            self.assertEqual(len(list(screen.query(Collapsible))), 1)
 
-            tool_input_toggle = screen.query_one(".tool-use-details", Collapsible)
-            output_preview_toggle = screen.query_one(
-                ".tool-result-preview-toggle",
-                Collapsible,
-            )
-            self.assertTrue(tool_input_toggle.collapsed)
-            self.assertTrue(output_preview_toggle.collapsed)
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertTrue(tool_toggle.collapsed)
+            self.assertEqual(str(tool_toggle.title), "[OK] Ran: rg --files | head")
 
             screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
-            self.assertIn("Ran: rg --files | head", screenshot)
-            self.assertIn("Output Preview (2 lines)", screenshot)
+            self.assertIn("[OK] Ran: rg --files | head", screenshot)
+            self.assertNotIn("Bash: rg --files | head", screenshot)
+            self.assertNotIn("Output Preview", screenshot)
             self.assertNotIn("README.md", screenshot)
             self.assertNotIn("claude_code/ui/app.py", screenshot)
 
-            tool_input_toggle.collapsed = False
-            output_preview_toggle.collapsed = False
+            tool_toggle.collapsed = False
             await pilot.pause(0.05)
 
             detail_contents = [
                 str(widget.content)
-                for widget in tool_input_toggle.query(".tool-param")
+                for widget in tool_toggle.query(".tool-param")
                 if hasattr(widget, "content")
             ]
             self.assertIn("command: rg --files | head", "\n".join(detail_contents))
 
-            preview_contents = [
+            expanded_contents = [
                 str(widget.content)
-                for widget in output_preview_toggle.query(".tool-result-preview")
+                for widget in tool_toggle.query(".tool-output-label, .tool-result-preview")
                 if hasattr(widget, "content")
             ]
-            self.assertIn("README.md", "\n".join(preview_contents))
-            self.assertIn("claude_code/ui/app.py", "\n".join(preview_contents))
+            self.assertIn("Output:", "\n".join(expanded_contents))
+            self.assertIn("README.md", "\n".join(expanded_contents))
+            self.assertIn("claude_code/ui/app.py", "\n".join(expanded_contents))
+
+    async def test_tool_summary_title_strips_trailing_colon(self) -> None:
+        def event_factory(user_text: str):
+            return [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Glob",
+                    input={"pattern": "*.md"},
+                ),
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Found 3 files matching '*.md':\nREADME.md\nAGENTS.md\nCHANGELOG.md\n",
+                    is_error=False,
+                ),
+            ]
+
+        app = ClaudeCodeApp(
+            FakeQueryEngine(event_factory), model_name="test-model", save_history=False
+        )
+
+        async with app.run_test(size=(80, 14)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "find markdown"
+            input_widget._on_submit(input_widget.text)
+            await pilot.pause(0.2)
+
+            tool_toggle = screen.query_one(".tool-use-details", Collapsible)
+            self.assertEqual(
+                str(tool_toggle.title),
+                "[OK] Found 3 files matching '*.md'",
+            )
+
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertIn("[OK] Found 3 files matching", screenshot)
+            self.assertNotIn("&#x27;*.md&#x27;:", screenshot)
 
     async def test_tool_output_strips_terminal_control_sequences(self) -> None:
         def event_factory(user_text: str):

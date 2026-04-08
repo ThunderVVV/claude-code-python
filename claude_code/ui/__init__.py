@@ -7,7 +7,6 @@ from claude_code.ui.message_widgets import (
     StreamingTextWidget,
     ToolUseWidget,
     AssistantMessageWidget,
-    ToolResultWidget,
     MessageWidget,
     MessageList,
 )
@@ -28,7 +27,6 @@ __all__ = [
     "StreamingTextWidget",
     "ToolUseWidget",
     "AssistantMessageWidget",
-    "ToolResultWidget",
     "MessageWidget",
     "MessageList",
     "sanitize_terminal_text",

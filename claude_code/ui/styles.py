@@ -228,17 +228,6 @@ WelcomeWidget:focus {
     background: transparent;
 }
 
-.tool-inline-result {
-    width: 100%;
-    height: auto;
-    margin-left: 0;
-    margin-top: 0;
-}
-
-.tool-inline-summary {
-    margin: 0;
-}
-
 /* Message content */
 .message-content {
     margin-left: 0;
@@ -287,11 +276,6 @@ WelcomeWidget:focus {
     color: rgb(235,159,127);
 }
 
-.tool-result-preview-toggle CollapsibleTitle {
-    color: rgb(153,153,153);
-    margin-left: 2;
-}
-
 .tool-result {
     margin-left: 0;
     margin-bottom: 0;
@@ -306,10 +290,10 @@ WelcomeWidget:focus {
     color: rgb(255,107,128);
 }
 
-.tool-result-summary {
-    color: #ffffff;
+.tool-output-label {
+    color: rgb(210,210,210);
     text-style: bold;
-    margin: 0;
+    margin-left: 1;
 }
 
 .tool-result-preview {
@@ -333,7 +317,7 @@ MessageList {
     height: auto;
 }
 
-MessageWidget, AssistantMessageWidget, ToolResultWidget {
+MessageWidget, AssistantMessageWidget {
     width: 100%;
     height: auto;
 }
@@ -343,7 +327,7 @@ ToolUseWidget {
     height: auto;
 }
 
-.tool-result-body {
+.tool-detail-body {
     width: 100%;
     height: auto;
 }

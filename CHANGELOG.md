@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `claude_code/ui/styles.py` - TUI CSS definitions
   - `claude_code/ui/utils.py` - Text sanitization and tool summarization functions
   - `claude_code/ui/widgets.py` - Clawd and WelcomeWidget
-  - `claude_code/ui/message_widgets.py` - MessageList, MessageWidget, AssistantMessageWidget, ToolUseWidget, ToolResultWidget, StreamingTextWidget
+  - `claude_code/ui/message_widgets.py` - MessageList, MessageWidget, AssistantMessageWidget, ToolUseWidget, StreamingTextWidget
   - `claude_code/ui/screens.py` - REPLScreen
   - `claude_code/ui/app.py` - ClaudeCodeApp (simplified main app)
 - Added proper `__init__.py` exports for backwards compatibility
@@ -37,6 +37,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added app-level copy bindings for `Ctrl+C`, `Ctrl+Shift+C`, and `Cmd+C` when the terminal forwards it.
 - Route copy through Textual clipboard handling and show a native toast: `Copied to clipboard`.
 - Updated the prompt placeholder to document the in-app copy shortcut.
+
+#### TUI Tool Blocks
+- Collapsed tool invocation and tool result rendering into a single `Collapsible` per tool call.
+- Updated tool result handling to replace the existing tool title in place instead of adding a second summary row.
+- Merged tool parameters and `Output:` content into the same expanded body and removed the extra "Output Preview" collapsible from the normal path.
+- Reused `ToolUseWidget` for fallback tool-result rendering and removed the separate `ToolResultWidget` path.
+- Normalized compact tool summaries so titles do not end with a trailing colon.
 
 #### Tool Descriptions (aligned with TypeScript version)
 
@@ -156,7 +163,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 **Tool Rendering Changes**:
 - Fixed tool-only/tool-first transcript path (previously black screen)
 - Merged tool calls and results into single tool block
-- Added `Collapsible` sections for tool input/output
+- Kept a single `Collapsible` per tool block and rendered parameters plus `Output:` in the same expanded body
 - Kept ANSI sanitization and compact summaries
 
 **Visual Changes**:

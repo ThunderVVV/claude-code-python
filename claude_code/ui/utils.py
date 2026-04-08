@@ -30,13 +30,33 @@ def truncate_preview_line(text: str, max_width: int = 88) -> str:
     return expanded[: max_width - 3] + "..."
 
 
+def _truncate_result_lines(
+    lines: List[str],
+    max_lines: int,
+    max_width: int = 88,
+) -> List[str]:
+    """Trim a result preview to a bounded number of lines."""
+    preview = [truncate_preview_line(line, max_width) for line in lines[:max_lines]]
+    if len(lines) > max_lines:
+        preview.append(f"... ({len(lines) - max_lines} more lines)")
+    return preview
+
+
+def _normalize_summary_text(summary: str) -> str:
+    """Keep summary titles compact by dropping trailing punctuation we don't render well."""
+    normalized = summary.rstrip()
+    if normalized.endswith(":"):
+        normalized = normalized[:-1].rstrip()
+    return normalized
+
+
 def summarize_tool_result(
     tool_name: str,
     tool_input: dict,
     result: str,
     is_error: bool,
 ) -> Tuple[str, List[str]]:
-    """Build a compact, always-visible summary for a tool result."""
+    """Build a compact title summary plus bounded output lines for a tool result."""
     lines = sanitize_terminal_text(result).splitlines()
     trimmed_lines = [line for line in lines if line.strip()]
 
@@ -44,8 +64,8 @@ def summarize_tool_result(
         summary = truncate_preview_line(
             trimmed_lines[0] if trimmed_lines else "Tool failed"
         )
-        preview = [truncate_preview_line(line) for line in trimmed_lines[1:5]]
-        return summary, preview
+        output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1], 4)
+        return _normalize_summary_text(summary), output_lines
 
     if tool_name == "Read":
         match = re.search(r"Lines:\s*(\d+)-(\d+)\s+of\s+(\d+)", result)
@@ -58,24 +78,23 @@ def summarize_tool_result(
             summary = f"Read {count} line{'s' if count != 1 else ''} from {file_name} ({start_line}-{end_line} of {total_lines})"
         else:
             summary = f"Read {file_name}"
-        preview_source = lines[3:] if len(lines) > 3 else []
-        preview = [
-            truncate_preview_line(line) for line in preview_source[:5] if line.strip()
-        ]
-        return summary, preview
+        preview_source = [line for line in lines[3:] if line.strip()]
+        output_lines = _truncate_result_lines(preview_source or trimmed_lines[:1], 5)
+        return _normalize_summary_text(summary), output_lines
 
     if tool_name in {"Glob", "Grep"}:
         summary = truncate_preview_line(
             trimmed_lines[0] if trimmed_lines else f"{tool_name} completed"
         )
-        preview = [truncate_preview_line(line) for line in trimmed_lines[1:6]]
-        return summary, preview
+        output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1], 5)
+        return _normalize_summary_text(summary), output_lines
 
     if tool_name in {"Write", "Edit"}:
         summary = truncate_preview_line(
             trimmed_lines[0] if trimmed_lines else f"{tool_name} completed"
         )
-        return summary, []
+        output_lines = _truncate_result_lines(trimmed_lines[:1], 1)
+        return _normalize_summary_text(summary), output_lines
 
     if tool_name == "Bash":
         command = tool_input.get("command", "")
@@ -83,16 +102,14 @@ def summarize_tool_result(
             summary = f"Ran: {truncate_preview_line(command, 64)}"
         else:
             summary = "Command completed"
-        preview = [truncate_preview_line(line) for line in trimmed_lines[:6]]
-        if len(trimmed_lines) > 6:
-            preview.append(f"... ({len(trimmed_lines) - 6} more lines)")
-        return summary, preview
+        output_lines = _truncate_result_lines(trimmed_lines, 6)
+        return _normalize_summary_text(summary), output_lines
 
     summary = truncate_preview_line(
         trimmed_lines[0] if trimmed_lines else f"{tool_name} completed"
     )
-    preview = [truncate_preview_line(line) for line in trimmed_lines[1:5]]
-    return summary, preview
+    output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1], 4)
+    return _normalize_summary_text(summary), output_lines
 
 
 def summarize_tool_use(tool_name: str, tool_input: dict) -> str:

@@ -9,6 +9,7 @@
 
 - CLI 与 Textual TUI 两种交互模式
 - 流式响应、工具调用、工具结果回填
+- TUI 中每个工具调用渲染为单个可折叠块，结果返回后直接原地替换标题摘要
 - 工具集：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
 - OpenAI 兼容 API 接入
 - 与 TypeScript 版本对齐的系统提示词和工具描述
@@ -67,6 +68,12 @@ claude-code --tui --debug
 ```
 
 如果没有显式传入 `--log-file`，`--debug` 或 `--tui` 会自动把日志写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`，避免把仓库根目录弄乱。
+
+TUI 中工具结果的显示规则：
+
+- 每个工具调用只占一行标题，并使用单个折叠块承载参数和输出。
+- 工具执行完成后，标题会从调用摘要直接更新为结果摘要，例如 `Bash: ls -la` 更新为 `[OK] Ran: ls -la`。
+- 展开后先显示工具参数，再显示 `Output:` 和裁剪后的输出内容。
 
 ## 调试脚本
 
