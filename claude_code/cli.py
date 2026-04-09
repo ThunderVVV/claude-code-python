@@ -22,6 +22,7 @@ from claude_code.core.messages import (
     ErrorEvent,
 )
 from claude_code.core.query_engine import QueryEngine, QueryConfig
+from claude_code.core.session_store import PersistedSession, SessionStore, SessionSummary
 from claude_code.core.tools import ToolRegistry
 from claude_code.services.openai_client import OpenAIClientConfig
 from claude_code.tools import (
@@ -65,6 +66,89 @@ def ensure_log_directory(log_path: Optional[str]) -> None:
     if not log_path:
         return
     Path(log_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
+
+
+def format_session_summary(index: int, session: SessionSummary) -> str:
+    """Format a saved session for terminal selection."""
+    updated_at = session.updated_at.replace("T", " ")
+    cwd = session.working_directory or "."
+    return (
+        f"{index}. {session.title}\n"
+        f"   id: {session.session_id}\n"
+        f"   updated: {updated_at}\n"
+        f"   cwd: {cwd}\n"
+        f"   messages: {session.message_count}"
+    )
+
+
+def resolve_session_choice(
+    choice: str,
+    sessions: list[SessionSummary],
+) -> Optional[str]:
+    """Resolve a numeric picker choice or literal session ID."""
+    normalized = choice.strip()
+    if not normalized:
+        return None
+
+    if normalized.isdigit():
+        index = int(normalized)
+        if 1 <= index <= len(sessions):
+            return sessions[index - 1].session_id
+        return None
+
+    return normalized
+
+
+def prompt_for_session_selection(session_store: SessionStore) -> Optional[str]:
+    """Prompt in the terminal for a saved TUI session."""
+    sessions = session_store.list_sessions()
+    if not sessions:
+        click.echo("No saved sessions found. Starting a new session.")
+        return None
+
+    click.echo("Saved sessions:\n")
+    for index, session in enumerate(sessions, start=1):
+        click.echo(format_session_summary(index, session))
+        click.echo("")
+
+    while True:
+        choice = click.prompt(
+            "Select a session by number or session id",
+            type=str,
+            default="",
+            show_default=False,
+        )
+        resolved_session_id = resolve_session_choice(choice, sessions)
+        if resolved_session_id is not None:
+            return resolved_session_id
+
+        if not choice.strip():
+            return None
+
+        click.echo(click.style("Invalid selection. Try again.\n", fg="red"))
+
+
+def resolve_initial_tui_session(
+    session_store: SessionStore,
+    session_id: Optional[str],
+    use_session_list: bool,
+) -> Optional[PersistedSession]:
+    """Resolve the initial TUI session from CLI flags."""
+    if session_id and use_session_list:
+        raise click.UsageError("--session and --session_list cannot be used together.")
+
+    resolved_session_id = session_id
+    if use_session_list:
+        resolved_session_id = prompt_for_session_selection(session_store)
+
+    if not resolved_session_id:
+        return None
+
+    session = session_store.load_session(resolved_session_id)
+    if session is None:
+        raise click.ClickException(f"Session not found: {resolved_session_id}")
+
+    return session
 
 
 def print_tool_use_header(tool_name: str, tool_input: dict) -> None:
@@ -234,6 +318,17 @@ async def run_cli_mode(
     help="Path to .env file",
 )
 @click.option(
+    "--session",
+    "session_id",
+    help="Resume a saved TUI session by session ID",
+)
+@click.option(
+    "--session_list",
+    "session_list",
+    is_flag=True,
+    help="Interactively choose a saved TUI session before launch",
+)
+@click.option(
     "--max-turns",
     type=int,
     default=1000000,
@@ -259,6 +354,8 @@ def main(
     use_cli: bool,
     tui: bool,
     env_file: Optional[str],
+    session_id: Optional[str],
+    session_list: bool,
     max_turns: int,
     debug: bool,
     log_file: Optional[str],
@@ -348,6 +445,10 @@ def main(
 
     # Determine mode: CLI if --cli flag, otherwise TUI (default)
     if use_cli:
+        if session_id or session_list:
+            raise click.UsageError(
+                "--session and --session_list are only supported in TUI mode."
+            )
         asyncio.run(run_cli_mode(api_url, api_key, model, system_prompt))
     else:
         # Default to TUI mode
@@ -355,6 +456,12 @@ def main(
             from claude_code.ui.app import ClaudeCodeApp
 
             registry = create_tool_registry()
+            session_store = SessionStore()
+            initial_session = resolve_initial_tui_session(
+                session_store,
+                session_id,
+                session_list,
+            )
             client_config = OpenAIClientConfig(
                 api_url=api_url,
                 api_key=api_key,
@@ -364,12 +471,31 @@ def main(
                 system_prompt=system_prompt or "",
                 stream=True,
                 max_turns=max_turns,
+                working_directory=(
+                    initial_session.working_directory if initial_session else ""
+                ),
             )
-            engine = QueryEngine(client_config, registry, query_config)
+            engine = QueryEngine(
+                client_config,
+                registry,
+                query_config,
+                session_id=(initial_session.session_id if initial_session else None),
+                initial_messages=(
+                    list(initial_session.messages) if initial_session else None
+                ),
+                initial_current_turn=(
+                    initial_session.current_turn if initial_session else 0
+                ),
+                initial_usage=(
+                    initial_session.total_usage if initial_session else None
+                ),
+            )
             app = ClaudeCodeApp(
                 engine,
                 model_name=model,
                 context_window_tokens=context_window_tokens,
+                session_store=session_store,
+                initial_session=initial_session,
             )
             app.run()
         except ImportError as e:

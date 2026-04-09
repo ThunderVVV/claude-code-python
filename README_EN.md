@@ -19,6 +19,7 @@ Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 - **Inline Diff Display**: `Edit` and `Write` tool results rendered in diff format instead of raw content preview
 - **Multi-line Input Support**: Enter to submit, Shift+Enter for newline
 - **Input History**: Navigate history with Up/Down arrows, persisted to `~/.claude_code_history.json`
+- **TUI Session Persistence And Resume**: Each TUI conversation gets a unique session id, persisted under `~/.claude-code-python/sessions/`, and can be resumed later
 - Headless regression testing for TUI, covering tool-first responses, scrolling, copy, and input states
 
 ## Installation
@@ -64,6 +65,18 @@ Default TUI mode:
 claude-code
 ```
 
+Resume a specific TUI session:
+
+```bash
+claude-code --session <session_id>
+```
+
+Interactively choose a saved TUI session before launch:
+
+```bash
+claude-code --session_list
+```
+
 Use CLI mode:
 
 ```bash
@@ -78,10 +91,17 @@ claude-code --debug
 
 If `--log-file` is specified, debug logs will be written to that path; otherwise, they will be automatically written to `.logs/claude-code-debug-<timestamp>.log` in the current directory.
 
+TUI session notes:
+
+- `claude-code` starts a fresh TUI session by default.
+- `--session` and `--session_list` are TUI-only; they are not supported with `--cli`.
+- Session titles default to the first sentence of the first user message.
+- Session snapshots are saved at the same stable rollback boundaries used by `Escape`, so interrupted partial turns are not persisted as resumable history.
+
 TUI tool result display rules:
 
 - Each tool call occupies only one title line and uses a single collapsible block to hold parameters and output.
-- After tool execution completes, the title updates from call summary to result summary, e.g., `Bash: ls -la` updates to `[OK] Ran: ls -la`.
+- After tool execution completes, the title updates from call summary to result summary, e.g., `Bash: ls -la` updates to `● Ran: ls -la`, with a green dot for success and red dot for failure.
 - `Edit` and `Write` show inline diffs on success, hiding original `old_string` / `new_string` / `content` large fields; normal tools still show `Output:` and trimmed output content.
 - `Edit` and `Write` results auto-expand by default, search tool titles distinguish `Glob` / `Grep` and preserve match patterns when possible.
 
@@ -123,6 +143,7 @@ claude-code-python/
 │   │   ├── messages.py
 │   │   ├── prompts.py
 │   │   ├── query_engine.py
+│   │   ├── session_store.py
 │   │   └── tools.py
 │   ├── services/
 │   │   └── openai_client.py

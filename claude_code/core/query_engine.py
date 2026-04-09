@@ -92,6 +92,10 @@ class QueryEngine:
         client_config: OpenAIClientConfig,
         tool_registry: ToolRegistry,
         config: Optional[QueryConfig] = None,
+        session_id: Optional[str] = None,
+        initial_messages: Optional[List[Message]] = None,
+        initial_current_turn: int = 0,
+        initial_usage: Optional[Usage] = None,
     ):
         self.client_config = client_config
         self.tool_registry = tool_registry
@@ -99,8 +103,15 @@ class QueryEngine:
 
         # Mutable state
         self.state = QueryState()
+        self.state.messages = list(initial_messages or [])
+        self.state.current_turn = initial_current_turn
+        self.state.total_usage = Usage(
+            input_tokens=(initial_usage.input_tokens if initial_usage else 0),
+            output_tokens=(initial_usage.output_tokens if initial_usage else 0),
+        )
         self._client: Optional[OpenAIClient] = None
-        self._session_id = generate_uuid()
+        self._session_id = session_id or generate_uuid()
+        self.state.session_id = self._session_id
         self._is_initialized = False
         self._interrupt_reason: Optional[str] = None
         self._active_task: Optional[asyncio.Task[Any]] = None
@@ -137,6 +148,10 @@ class QueryEngine:
     def get_session_id(self) -> str:
         """Get the session ID"""
         return self._session_id
+
+    def get_working_directory(self) -> str:
+        """Return the working directory for this session."""
+        return self._cwd
 
     def get_messages(self) -> List[Message]:
         """Get all messages in the conversation"""

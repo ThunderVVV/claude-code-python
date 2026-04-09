@@ -23,6 +23,7 @@ Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 - **内联 Diff 展示**：`Edit` 和 `Write` 工具结果以 diff 格式呈现，而非原始内容预览
 - **多行输入支持**：Enter 提交，Shift+Enter 换行
 - **输入历史**：上下键导航历史输入，持久化到 `~/.claude_code_history.json`
+- **TUI Session 持久化与恢复**：每次 TUI 对话都会分配唯一 session id，记录持久化到 `~/.claude-code-python/sessions/`，支持 resume
 - 针对 TUI 的无头回归测试，覆盖工具优先响应、滚动、复制和输入状态
 
 ## 安装
@@ -68,6 +69,18 @@ claude-code \
 claude-code
 ```
 
+恢复指定 TUI session：
+
+```bash
+claude-code --session <session_id>
+```
+
+通过命令行交互选择已有 TUI session：
+
+```bash
+claude-code --session_list
+```
+
 使用 CLI 模式：
 
 ```bash
@@ -81,6 +94,13 @@ claude-code --debug
 ```
 
 如果同时指定了 `--log-file`，调试日志会写到指定路径；否则会自动写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`。
+
+TUI session 说明：
+
+- `claude-code` 默认新开一个 TUI session。
+- `--session` 和 `--session_list` 只在 TUI 模式下生效，`--cli` 不支持。
+- session 标题默认取首条用户消息的第一句。
+- session 保存时机与 TUI 内部 rollback boundary 对齐，因此中断中的半成品响应不会污染可恢复记录。
 
 TUI 中工具结果的显示规则：
 
@@ -127,6 +147,7 @@ claude-code-python/
 │   │   ├── messages.py
 │   │   ├── prompts.py
 │   │   ├── query_engine.py
+│   │   ├── session_store.py
 │   │   └── tools.py
 │   ├── services/
 │   │   └── openai_client.py

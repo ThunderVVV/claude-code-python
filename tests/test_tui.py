@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from textual.css.query import NoMatches
@@ -30,6 +32,7 @@ from claude_code.core.messages import (
     Usage,
 )
 from claude_code.core.query_engine import QueryConfig, QueryEngine, QueryStateSnapshot
+from claude_code.core.session_store import SessionStore
 from claude_code.core.tools import BaseTool, ToolInputSchema, ToolRegistry
 from claude_code.services.openai_client import OpenAIClient, OpenAIClientConfig
 from claude_code.ui.app import ClaudeCodeApp
@@ -47,12 +50,26 @@ from claude_code.ui.widgets import WelcomeWidget, InputTextArea
 class FakeQueryEngine:
     """Minimal async event source for TUI tests."""
 
-    def __init__(self, event_factory):
+    def __init__(
+        self,
+        event_factory,
+        *,
+        session_id: str = "test-session",
+        working_directory: str = "/tmp/test-project",
+        initial_messages: list[Message] | None = None,
+        initial_current_turn: int = 0,
+        initial_usage: Usage | None = None,
+    ):
         self._event_factory = event_factory
-        self._messages: list[Message] = []
-        self._current_turn = 0
+        self._messages: list[Message] = list(initial_messages or [])
+        self._current_turn = initial_current_turn
         self._interrupt_reason: str | None = None
-        self._total_usage = Usage()
+        self._total_usage = Usage(
+            input_tokens=(initial_usage.input_tokens if initial_usage else 0),
+            output_tokens=(initial_usage.output_tokens if initial_usage else 0),
+        )
+        self._session_id = session_id
+        self._working_directory = working_directory
         self.state = self._State(self)
 
     class _State:
@@ -61,6 +78,7 @@ class FakeQueryEngine:
         def __init__(self, engine: "FakeQueryEngine"):
             self._engine = engine
             self.total_usage = engine._total_usage
+            self.current_turn = engine._current_turn
 
         def add_message(self, message: Message) -> None:
             self._engine._messages.append(message)
@@ -87,6 +105,7 @@ class FakeQueryEngine:
                         self.state.total_usage = usage
             elif isinstance(item, TurnCompleteEvent):
                 self._current_turn = item.turn
+                self.state.current_turn = item.turn
             yield item
 
     def create_state_snapshot(self) -> QueryStateSnapshot:
@@ -115,10 +134,17 @@ class FakeQueryEngine:
             output_tokens=snapshot.total_usage.output_tokens,
         )
         self.state.total_usage = self._total_usage
+        self.state.current_turn = self._current_turn
         self.clear_interrupt()
 
     def get_messages(self) -> list[Message]:
         return list(self._messages)
+
+    def get_session_id(self) -> str:
+        return self._session_id
+
+    def get_working_directory(self) -> str:
+        return self._working_directory
 
     def interrupt(self, reason: str = "interrupt") -> None:
         self._interrupt_reason = reason
@@ -2006,6 +2032,180 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             tool_toggle = screen.query_one(".tool-use-details", Collapsible)
             self.assertEqual(str(tool_toggle.title), "● Failed to read missing.txt")
             self.assertEqual(tool_toggle.title.spans, [Span(0, 1, "$error")])
+
+    async def test_session_save_uses_stable_boundary_for_tool_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_store = SessionStore(Path(tmpdir))
+
+            def event_factory(user_text: str):
+                return [
+                    MessageCompleteEvent(message=Message.user_message(user_text)),
+                    MessageCompleteEvent(
+                        message=Message.assistant_message(
+                            [
+                                TextContent(text="Let me check."),
+                                ToolUseContent(
+                                    id="tool-1",
+                                    name="Bash",
+                                    input={"command": "pwd"},
+                                ),
+                            ]
+                        ),
+                    ),
+                ]
+
+            app = ClaudeCodeApp(
+                FakeQueryEngine(
+                    event_factory,
+                    session_id="session-prefix",
+                    working_directory="/tmp/project",
+                ),
+                model_name="test-model",
+                save_history=False,
+                session_store=session_store,
+            )
+
+            async with app.run_test(size=(90, 16)) as pilot:
+                await pilot.pause()
+                screen = app.screen
+                input_widget = screen.query_one("#user-input", InputTextArea)
+                input_widget.text = "Fix login flow on mobile. Add tests too."
+                input_widget._on_submit(input_widget.text)
+                await pilot.pause(0.2)
+
+            saved = session_store.load_session("session-prefix")
+            self.assertIsNotNone(saved)
+            assert saved is not None
+            self.assertEqual(saved.title, "Fix login flow on mobile.")
+            self.assertEqual(saved.current_turn, 0)
+            self.assertEqual([message.type for message in saved.messages], [
+                MessageRole.USER,
+                MessageRole.ASSISTANT,
+            ])
+            self.assertEqual(saved.messages[1].get_text(), "Let me check.")
+            self.assertFalse(saved.messages[1].has_tool_uses())
+
+    async def test_session_save_after_tool_batch_persists_full_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_store = SessionStore(Path(tmpdir))
+            tool_result = Message.tool_result_message("tool-1", "/tmp/project", False)
+
+            def event_factory(user_text: str):
+                return [
+                    MessageCompleteEvent(message=Message.user_message(user_text)),
+                    ToolUseEvent(
+                        tool_use_id="tool-1",
+                        tool_name="Bash",
+                        input={"command": "pwd"},
+                    ),
+                    MessageCompleteEvent(
+                        message=Message.assistant_message(
+                            [
+                                ToolUseContent(
+                                    id="tool-1",
+                                    name="Bash",
+                                    input={"command": "pwd"},
+                                )
+                            ]
+                        ),
+                    ),
+                    ToolResultEvent(
+                        tool_use_id="tool-1",
+                        result="/tmp/project",
+                        is_error=False,
+                    ),
+                    MessageCompleteEvent(message=tool_result),
+                    TurnCompleteEvent(
+                        turn=1,
+                        has_more_turns=True,
+                        stop_reason="tool_use",
+                    ),
+                ]
+
+            app = ClaudeCodeApp(
+                FakeQueryEngine(
+                    event_factory,
+                    session_id="session-full-batch",
+                    working_directory="/tmp/project",
+                ),
+                model_name="test-model",
+                save_history=False,
+                session_store=session_store,
+            )
+
+            async with app.run_test(size=(90, 16)) as pilot:
+                await pilot.pause()
+                screen = app.screen
+                input_widget = screen.query_one("#user-input", InputTextArea)
+                input_widget.text = "run pwd"
+                input_widget._on_submit(input_widget.text)
+                await pilot.pause(0.2)
+
+            saved = session_store.load_session("session-full-batch")
+            self.assertIsNotNone(saved)
+            assert saved is not None
+            self.assertEqual(saved.current_turn, 1)
+            self.assertEqual([message.type for message in saved.messages], [
+                MessageRole.USER,
+                MessageRole.ASSISTANT,
+                MessageRole.TOOL,
+            ])
+            self.assertTrue(saved.messages[1].has_tool_uses())
+
+    async def test_resume_session_rebuilds_single_tool_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_store = SessionStore(Path(tmpdir))
+            saved_session = session_store.save_snapshot(
+                session_id="resume-session",
+                title="Run pwd",
+                created_at="2026-04-09T00:00:00+00:00",
+                messages=[
+                    Message.user_message("run pwd"),
+                    Message.assistant_message(
+                        [
+                            ToolUseContent(
+                                id="tool-1",
+                                name="Bash",
+                                input={"command": "pwd"},
+                            )
+                        ]
+                    ),
+                    Message.tool_result_message("tool-1", "/tmp/project", False),
+                ],
+                working_directory="/tmp/project",
+                current_turn=1,
+                model_name="test-model",
+                total_usage=Usage(input_tokens=10, output_tokens=2),
+            )
+
+            app = ClaudeCodeApp(
+                FakeQueryEngine(
+                    lambda text: [],
+                    session_id=saved_session.session_id,
+                    working_directory=saved_session.working_directory,
+                    initial_messages=saved_session.messages,
+                    initial_current_turn=saved_session.current_turn,
+                    initial_usage=saved_session.total_usage,
+                ),
+                model_name="test-model",
+                context_window_tokens=100,
+                save_history=False,
+                session_store=session_store,
+                initial_session=saved_session,
+            )
+
+            async with app.run_test(size=(90, 16)) as pilot:
+                await pilot.pause(0.2)
+                screen = app.screen
+                welcome_widget = screen.query_one("#welcome-widget", WelcomeWidget)
+                tool_toggles = list(screen.query(".tool-use-details"))
+                context_label = screen.query_one("#context-usage", Label)
+
+                self.assertFalse(welcome_widget.display)
+                self.assertEqual(len(tool_toggles), 1)
+                self.assertEqual(len(list(screen.query(".tool-result-block"))), 0)
+                self.assertIn("pwd", str(tool_toggles[0].title))
+                self.assertEqual(self._label_text(context_label), "Context: 12/100 (12%)")
 
 
 if __name__ == "__main__":

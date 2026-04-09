@@ -1,10 +1,13 @@
 """Main Claude Code TUI application - aligned with TypeScript App.tsx"""
 
+from __future__ import annotations
+
 from textual.app import App
 from textual.binding import Binding
 from textual.widget import Widget
 
 from claude_code.core.query_engine import QueryEngine
+from claude_code.core.session_store import PersistedSession, SessionStore
 from claude_code.ui.styles import TUI_CSS
 from claude_code.ui.screens import REPLScreen
 
@@ -33,6 +36,8 @@ class ClaudeCodeApp(App):
         model_name: str = "claude-sonnet-4-6",
         context_window_tokens: int | None = None,
         save_history: bool = True,
+        session_store: SessionStore | None = None,
+        initial_session: PersistedSession | None = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -41,6 +46,8 @@ class ClaudeCodeApp(App):
         self.model_name = model_name
         self.context_window_tokens = context_window_tokens
         self.save_history = save_history
+        self.session_store = session_store
+        self.initial_session = initial_session
 
     async def on_mount(self) -> None:
         """Initialize and push the REPL screen on mount"""
@@ -52,6 +59,8 @@ class ClaudeCodeApp(App):
                 self.model_name,
                 context_window_tokens=self.context_window_tokens,
                 save_history=self.save_history,
+                session_store=self.session_store,
+                initial_session=self.initial_session,
             )
         )
 

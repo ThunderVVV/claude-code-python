@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -27,7 +26,9 @@ from claude_code.core.messages import (
     MessageRole,
     ThinkingContent,
     TextContent,
+    ToolResultContent,
     ToolUseContent,
+    Usage,
     QueryEvent,
     TextEvent,
     ThinkingEvent,
@@ -39,6 +40,7 @@ from claude_code.core.messages import (
 )
 from claude_code.core.query_engine import QueryEngine
 from claude_code.core.query_engine import QueryStateSnapshot
+from claude_code.core.session_store import PersistedSession, SessionStore
 from claude_code.ui.widgets import WelcomeWidget, InputTextArea
 from claude_code.ui.message_widgets import (
     MessageList,
@@ -69,6 +71,8 @@ class REPLScreen(Screen):
         model_name: str = "claude-sonnet-4-6",
         context_window_tokens: Optional[int] = None,
         save_history: bool = True,
+        session_store: SessionStore | None = None,
+        initial_session: PersistedSession | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -89,6 +93,10 @@ class REPLScreen(Screen):
         self._current_submission_id: Optional[int] = None
         self._cancelled_submission_ids: set[int] = set()
         self._turn_snapshot: Optional[TurnRenderSnapshot] = None
+        self._session_store = session_store
+        self._initial_session = initial_session
+        self._session_title = initial_session.title if initial_session else None
+        self._session_created_at = initial_session.created_at if initial_session else None
 
         # History management
         self._history: list[str] = []
@@ -147,7 +155,9 @@ class REPLScreen(Screen):
         with ScrollableContainer(id="content-area"):
             # Welcome widget - shown initially, hidden after first message
             yield WelcomeWidget(
-                id="welcome-widget", model_name=self.model_name, cwd=os.getcwd()
+                id="welcome-widget",
+                model_name=self.model_name,
+                cwd=self.query_engine.get_working_directory(),
             )
             # Message list (initially empty)
             yield MessageList(id="message-list")
@@ -171,6 +181,7 @@ class REPLScreen(Screen):
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.set_on_submit(self._on_input_submit)
         input_widget.focus()
+        await self._restore_initial_session()
 
     def _on_input_submit(self, text: str) -> None:
         """Handle submit from InputTextArea."""
@@ -388,6 +399,7 @@ class REPLScreen(Screen):
         rollback_input_text: Optional[str] = None,
         rollback_remove_history_entry: bool = False,
         remove_current_assistant_widget: bool = False,
+        persisted_current_turn: Optional[int] = None,
     ) -> None:
         """Remember the transcript prefix to restore when Escape cancels the active node."""
         snapshot = self._turn_snapshot
@@ -407,6 +419,16 @@ class REPLScreen(Screen):
         snapshot.rollback_latest_usage = self._clone_usage(rollback_latest_usage)
         snapshot.rollback_input_text = rollback_input_text
         snapshot.rollback_remove_history_entry = rollback_remove_history_entry
+        self._persist_session_boundary(
+            rollback_message_count=snapshot.rollback_message_count,
+            rollback_messages=snapshot.rollback_messages,
+            rollback_latest_usage=snapshot.rollback_latest_usage,
+            current_turn=(
+                self.query_engine.state.current_turn
+                if persisted_current_turn is None
+                else persisted_current_turn
+            ),
+        )
 
     def _update_rollback_boundary(
         self,
@@ -435,6 +457,7 @@ class REPLScreen(Screen):
                 ),
                 rollback_input_text=None,
                 remove_current_assistant_widget=True,
+                persisted_current_turn=self.query_engine.state.current_turn,
             )
             return
 
@@ -447,6 +470,7 @@ class REPLScreen(Screen):
             rollback_messages=[],
             rollback_latest_usage=message.get_usage() or self._latest_usage,
             rollback_input_text=None,
+            persisted_current_turn=self.query_engine.state.current_turn + 1,
         )
 
     def _update_rollback_boundary_after_tool_batch(
@@ -460,6 +484,7 @@ class REPLScreen(Screen):
             rollback_messages=[],
             rollback_latest_usage=self._latest_usage,
             rollback_input_text=None,
+            persisted_current_turn=self.query_engine.state.current_turn,
         )
 
     def _should_handle_submission(self, submission_id: int) -> bool:
@@ -743,3 +768,116 @@ class REPLScreen(Screen):
         elif isinstance(event, ErrorEvent):
             error_msg = Message.system_message(f"Error: {event.error}")
             await message_list.add_message(error_msg)
+
+    async def _restore_initial_session(self) -> None:
+        """Render a previously saved session into the transcript."""
+        session = self._initial_session
+        if session is None or not session.messages:
+            return
+
+        self._hide_welcome_widget()
+        self._latest_usage = self._clone_usage(session.total_usage)
+        self._refresh_context_usage_label()
+
+        message_list = self.query_one("#message-list", MessageList)
+        await self._render_persisted_messages(message_list, session.messages)
+        message_list.schedule_scroll_to_latest(auto_follow=True)
+
+    async def _render_persisted_messages(
+        self,
+        message_list: MessageList,
+        messages: list[Message],
+    ) -> None:
+        """Replay persisted messages through the same transcript structure as live turns."""
+        assistant_widget: Optional[AssistantMessageWidget] = None
+        tool_use_context: dict[str, ToolUseContent] = {}
+        tool_widget_context: dict[str, ToolUseWidget] = {}
+
+        for message in messages:
+            if message.type == MessageRole.ASSISTANT:
+                assistant_widget = await message_list.create_assistant_widget(
+                    message=message,
+                    auto_follow=False,
+                )
+                tool_widget_context = assistant_widget.get_tool_widgets()
+                tool_use_context = {
+                    tool_use.id: tool_use
+                    for tool_use in message.get_tool_uses()
+                    if tool_use.id
+                }
+                continue
+
+            if message.type == MessageRole.TOOL:
+                tool_result = next(
+                    (
+                        block
+                        for block in message.content
+                        if isinstance(block, ToolResultContent)
+                    ),
+                    None,
+                )
+                if tool_result is None:
+                    continue
+
+                merged_result = False
+                tool_widget = tool_widget_context.get(tool_result.tool_use_id)
+                if tool_widget is not None:
+                    tool_widget.set_result(tool_result.content, tool_result.is_error)
+                    merged_result = True
+                elif assistant_widget is not None:
+                    merged_result = assistant_widget.add_tool_result(
+                        tool_result.tool_use_id,
+                        tool_result.content,
+                        tool_result.is_error,
+                    )
+
+                if not merged_result:
+                    tool_use = tool_use_context.get(tool_result.tool_use_id)
+                    await message_list.add_tool_result(
+                        tool_name=tool_use.name if tool_use else "Tool",
+                        tool_input=tool_use.input if tool_use else {},
+                        result=tool_result.content,
+                        is_error=tool_result.is_error,
+                        auto_follow=False,
+                    )
+                continue
+
+            assistant_widget = None
+            tool_use_context = {}
+            tool_widget_context = {}
+            await message_list.add_message(message, auto_follow=False)
+
+    def _persist_session_boundary(
+        self,
+        *,
+        rollback_message_count: int,
+        rollback_messages: list[Message],
+        rollback_latest_usage: Optional[Usage],
+        current_turn: int,
+    ) -> None:
+        """Persist the same stable prefix used by Escape rollback."""
+        if self._session_store is None:
+            return
+
+        stable_messages = list(self.query_engine.get_messages()[:rollback_message_count])
+        stable_messages.extend(rollback_messages)
+        usage = self._clone_usage(rollback_latest_usage) or self._clone_usage(
+            self.query_engine.state.total_usage
+        )
+
+        try:
+            session = self._session_store.save_snapshot(
+                session_id=self.query_engine.get_session_id(),
+                messages=stable_messages,
+                working_directory=self.query_engine.get_working_directory(),
+                current_turn=current_turn,
+                title=self._session_title,
+                created_at=self._session_created_at,
+                model_name=self.model_name,
+                total_usage=usage,
+            )
+        except Exception:
+            return
+
+        self._session_title = session.title
+        self._session_created_at = session.created_at
