@@ -9,8 +9,10 @@ import uuid
 from pathlib import Path
 from unittest.mock import patch
 
+from textual.app import App
 from textual.css.query import NoMatches
 from textual.widgets import Collapsible
+from textual.widgets import Button
 from textual.widgets import Label
 from textual.widgets import LoadingIndicator
 from textual.widgets import Markdown
@@ -45,6 +47,7 @@ from claude_code.ui.message_widgets import (
     ThinkingBlockWidget,
     ToolUseWidget,
 )
+from claude_code.ui.session_resume_modal import SessionResumeModal
 from claude_code.ui.widgets import WelcomeWidget, InputTextArea
 
 
@@ -2218,6 +2221,35 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(list(screen.query(".tool-result-block"))), 0)
                 self.assertIn("pwd", str(tool_toggles[0].title))
                 self.assertEqual(self._label_text(context_label), "Context: 12/100 (12%)")
+
+    async def test_session_picker_uses_compact_action_buttons(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_store = SessionStore(Path(tmpdir))
+            session_store.save_snapshot(
+                session_id="resume-session",
+                title="Resume me",
+                created_at="2026-04-09T00:00:00+00:00",
+                messages=[Message.user_message("resume me")],
+                working_directory="/tmp/project",
+                current_turn=1,
+            )
+
+            class SessionPickerApp(App):
+                async def on_mount(self) -> None:
+                    self.push_screen(SessionResumeModal(session_store))
+
+            app = SessionPickerApp()
+
+            async with app.run_test(size=(90, 16)) as pilot:
+                await pilot.pause(0.2)
+
+                resume_button = app.screen.query_one("#resume", Button)
+                cancel_button = app.screen.query_one("#cancel", Button)
+
+                self.assertEqual(resume_button.region.height, 1)
+                self.assertEqual(cancel_button.region.height, 1)
+                self.assertLess(resume_button.region.width, 16)
+                self.assertLess(cancel_button.region.width, 16)
 
     async def test_clear_command_starts_new_session(self) -> None:
         """Typing 'clear' should reset the session and show welcome widget."""

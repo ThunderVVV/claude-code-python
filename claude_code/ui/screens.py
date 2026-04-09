@@ -40,13 +40,14 @@ from claude_code.core.messages import (
 )
 from claude_code.core.query_engine import QueryEngine
 from claude_code.core.query_engine import QueryStateSnapshot
-from claude_code.core.session_store import PersistedSession, SessionStore
+from claude_code.core.session_store import PersistedSession, SessionStore, SessionSummary
 from claude_code.ui.widgets import WelcomeWidget, InputTextArea
 from claude_code.ui.message_widgets import (
     MessageList,
     AssistantMessageWidget,
     ToolUseWidget,
 )
+from claude_code.ui.session_resume_modal import SessionResumeModal
 
 
 @dataclass
@@ -567,6 +568,11 @@ class REPLScreen(Screen):
             self._start_new_session()
             return
 
+        # Handle "sessions" command to show session picker
+        if user_text.lower() == "sessions":
+            self._show_session_picker()
+            return
+
         self._hide_welcome_widget()
 
         # Add to history
@@ -641,6 +647,99 @@ class REPLScreen(Screen):
         self._refresh_context_usage_label()
 
         # Focus input
+        input_widget.focus()
+
+    def _show_session_picker(self) -> None:
+        """Show the session picker modal to switch between sessions."""
+        if self._is_processing:
+            return
+
+        if self._session_store is None:
+            return
+
+        # Clear input
+        input_widget = self.query_one("#user-input", InputTextArea)
+        input_widget.load_text("")
+
+        # Push the session resume modal
+        self.app.push_screen(
+            SessionResumeModal(
+                self._session_store,
+                current_session_id=self.query_engine.get_session_id(),
+            ),
+            callback=self._on_session_selected,
+        )
+
+    def _on_session_selected(self, session: Optional[SessionSummary]) -> None:
+        """Handle session selection from the picker."""
+        if session is None:
+            return
+
+        # Load the selected session
+        self._load_session(session.session_id)
+
+    def _load_session(self, session_id: str) -> None:
+        """Load a session by ID and replace the current session."""
+        if self._session_store is None:
+            return
+
+        session = self._session_store.load_session(session_id)
+        if session is None:
+            return
+
+        # Reset the query engine state WITHOUT generating a new session_id
+        self.query_engine.state.clear()
+        self.query_engine.state.session_id = session.session_id
+        self.query_engine._undo_operations = []
+        self.query_engine.clear_interrupt()
+
+        # Load messages into query engine
+        for message in session.messages:
+            self.query_engine.state.add_message(message)
+
+        # Update session metadata
+        self._session_title = session.title
+        self._session_created_at = session.created_at
+        self._latest_usage = session.total_usage
+
+        # Clear and re-render the message list
+        message_list = self.query_one("#message-list", MessageList)
+        message_list.clear()
+
+        # Reset internal state
+        self._reset_streaming_state()
+        self._tool_use_context = {}
+        self._tool_widget_context = {}
+        self._turn_snapshot = None
+        self._cancelled_submission_ids.clear()
+
+        # Hide welcome widget
+        self._hide_welcome_widget()
+
+        # Refresh context usage label
+        self._refresh_context_usage_label()
+
+        # Schedule rendering of persisted messages
+        self.run_worker(
+            self._restore_session_messages(session),
+            group="restore-session",
+            exclusive=True,
+        )
+
+    async def _restore_session_messages(self, session: PersistedSession) -> None:
+        """Restore session messages to the UI."""
+        if not session.messages:
+            return
+
+        self._latest_usage = self._clone_usage(session.total_usage)
+        self._refresh_context_usage_label()
+
+        message_list = self.query_one("#message-list", MessageList)
+        await self._render_persisted_messages(message_list, session.messages)
+        message_list.schedule_scroll_to_latest(auto_follow=True)
+
+        # Focus input
+        input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.focus()
 
     async def _process_message(self, user_text: str, submission_id: int) -> None:
