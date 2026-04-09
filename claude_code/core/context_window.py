@@ -45,8 +45,7 @@ def get_used_context_tokens(usage: Optional[Usage]) -> int:
 
     return (
         usage.input_tokens
-        + usage.cache_creation_input_tokens
-        + usage.cache_read_input_tokens
+        + usage.output_tokens
     )
 
 

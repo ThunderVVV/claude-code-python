@@ -306,14 +306,9 @@ class OpenAIClient:
         if not isinstance(usage_payload, dict):
             return None
 
-        prompt_token_details = usage_payload.get("prompt_tokens_details") or {}
-        cached_tokens = prompt_token_details.get("cached_tokens", 0)
-
         return Usage(
             input_tokens=usage_payload.get("prompt_tokens", 0),
             output_tokens=usage_payload.get("completion_tokens", 0),
-            cache_creation_input_tokens=0,
-            cache_read_input_tokens=cached_tokens,
         )
 
     def accumulate_tool_calls(

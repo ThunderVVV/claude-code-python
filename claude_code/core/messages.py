@@ -96,8 +96,6 @@ class Usage:
 
     input_tokens: int = 0
     output_tokens: int = 0
-    cache_creation_input_tokens: int = 0
-    cache_read_input_tokens: int = 0
 
 
 @dataclass
@@ -143,8 +141,6 @@ class Message:
             msg.message["usage"] = {
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
-                "cache_creation_input_tokens": usage.cache_creation_input_tokens,
-                "cache_read_input_tokens": usage.cache_read_input_tokens,
             }
         if stop_reason:
             msg.message["stop_reason"] = stop_reason
@@ -214,11 +210,6 @@ class Message:
         return Usage(
             input_tokens=usage.get("input_tokens", 0),
             output_tokens=usage.get("output_tokens", 0),
-            cache_creation_input_tokens=usage.get(
-                "cache_creation_input_tokens",
-                0,
-            ),
-            cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
         )
 
     def to_api_format(self) -> Dict[str, Any]:

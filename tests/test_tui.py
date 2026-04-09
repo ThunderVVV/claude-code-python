@@ -316,8 +316,7 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
     async def test_context_usage_status_line_uses_assistant_usage(self) -> None:
         usage = Usage(
             input_tokens=45000,
-            cache_creation_input_tokens=3000,
-            cache_read_input_tokens=2000,
+            output_tokens==5000,
         )
 
         def event_factory(user_text: str):
