@@ -131,14 +131,14 @@ def prompt_for_session_selection(session_store: SessionStore) -> Optional[str]:
 def resolve_initial_tui_session(
     session_store: SessionStore,
     session_id: Optional[str],
-    use_session_list: bool,
+    use_sessions: bool,
 ) -> Optional[PersistedSession]:
     """Resolve the initial TUI session from CLI flags."""
-    if session_id and use_session_list:
-        raise click.UsageError("--session and --session_list cannot be used together.")
+    if session_id and use_sessions:
+        raise click.UsageError("--resume and --sessions cannot be used together.")
 
     resolved_session_id = session_id
-    if use_session_list:
+    if use_sessions:
         resolved_session_id = prompt_for_session_selection(session_store)
 
     if not resolved_session_id:
@@ -318,13 +318,13 @@ async def run_cli_mode(
     help="Path to .env file",
 )
 @click.option(
-    "--session",
+    "--resume",
     "session_id",
     help="Resume a saved TUI session by session ID",
 )
 @click.option(
-    "--session_list",
-    "session_list",
+    "--sessions",
+    "sessions",
     is_flag=True,
     help="Interactively choose a saved TUI session before launch",
 )
@@ -355,7 +355,7 @@ def main(
     tui: bool,
     env_file: Optional[str],
     session_id: Optional[str],
-    session_list: bool,
+    sessions: bool,
     max_turns: int,
     debug: bool,
     log_file: Optional[str],
@@ -445,9 +445,9 @@ def main(
 
     # Determine mode: CLI if --cli flag, otherwise TUI (default)
     if use_cli:
-        if session_id or session_list:
+        if session_id or sessions:
             raise click.UsageError(
-                "--session and --session_list are only supported in TUI mode."
+                "--resume and --sessions are only supported in TUI mode."
             )
         asyncio.run(run_cli_mode(api_url, api_key, model, system_prompt))
     else:
@@ -460,7 +460,7 @@ def main(
             initial_session = resolve_initial_tui_session(
                 session_store,
                 session_id,
-                session_list,
+                sessions,
             )
             client_config = OpenAIClientConfig(
                 api_url=api_url,

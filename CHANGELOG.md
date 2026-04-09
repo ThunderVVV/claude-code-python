@@ -36,8 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### TUI Session Persistence And Resume
 - Added persistent TUI session storage under `~/.claude-code-python/sessions/`
 - Each new TUI conversation now gets a unique session ID and a default title derived from the first user prompt
-- Added `--session <session_id>` to resume a saved TUI session
-- Added `--session_list` to choose a saved TUI session from an interactive terminal picker before launch
+- Added `--resume <session_id>` to resume a saved TUI session
+- Added `--sessions` to choose a saved TUI session from an interactive terminal picker before launch
 - TUI session snapshots now save at the same stable rollback boundaries used by `Escape`, so interrupted partial turns do not become resumable history
 - Resume now reconstructs prior assistant/tool transcript structure so each tool call still renders as a single collapsible block after reload
 - Added regression coverage for session save boundaries, resume transcript rebuild, and session-picker helpers

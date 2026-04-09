@@ -72,13 +72,13 @@ claude-code
 恢复指定 TUI session：
 
 ```bash
-claude-code --session <session_id>
+claude-code --resume <session_id>
 ```
 
 通过命令行交互选择已有 TUI session：
 
 ```bash
-claude-code --session_list
+claude-code --sessions
 ```
 
 使用 CLI 模式：
@@ -98,7 +98,7 @@ claude-code --debug
 TUI session 说明：
 
 - `claude-code` 默认新开一个 TUI session。
-- `--session` 和 `--session_list` 只在 TUI 模式下生效，`--cli` 不支持。
+- `--resume` 和 `--sessions` 只在 TUI 模式下生效，`--cli` 不支持。
 - session 标题默认取首条用户消息的第一句。
 - session 保存时机与 TUI 内部 rollback boundary 对齐，因此中断中的半成品响应不会污染可恢复记录。
 

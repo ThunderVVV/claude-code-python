@@ -68,13 +68,13 @@ claude-code
 Resume a specific TUI session:
 
 ```bash
-claude-code --session <session_id>
+claude-code --resume <session_id>
 ```
 
 Interactively choose a saved TUI session before launch:
 
 ```bash
-claude-code --session_list
+claude-code --sessions
 ```
 
 Use CLI mode:
@@ -94,7 +94,7 @@ If `--log-file` is specified, debug logs will be written to that path; otherwise
 TUI session notes:
 
 - `claude-code` starts a fresh TUI session by default.
-- `--session` and `--session_list` are TUI-only; they are not supported with `--cli`.
+- `--resume` and `--sessions` are TUI-only; they are not supported with `--cli`.
 - Session titles default to the first sentence of the first user message.
 - Session snapshots are saved at the same stable rollback boundaries used by `Escape`, so interrupted partial turns are not persisted as resumable history.
 
