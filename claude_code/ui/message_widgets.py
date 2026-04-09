@@ -767,13 +767,7 @@ class MessageList(VerticalGroup):
     def schedule_scroll_to_latest(self, auto_follow: bool = True) -> None:
         """Scroll after the current DOM/layout update flushes."""
         if auto_follow:
-            self.call_after_refresh(
-                lambda: self.call_after_refresh(
-                    lambda: self.call_after_refresh(self._scroll_to_latest)
-                )
-            )
-            self.set_timer(0.01, self._scroll_to_latest)
-            self.set_timer(0.05, self._scroll_to_latest)
+            self.call_after_refresh(self._scroll_to_latest)
 
     async def add_message(self, message: Message, auto_follow: bool = True) -> None:
         """Add a message to the list"""
