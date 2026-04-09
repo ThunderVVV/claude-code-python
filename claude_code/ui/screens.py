@@ -220,7 +220,7 @@ class REPLScreen(Screen):
         """Build the input hint shown below the transcript."""
         return (
             "Type your message and press Enter "
-            "(Shift+Enter for new line, Ctrl+C to copy selection)"
+            "(Shift+Enter for new line)"
         )
 
     def _context_usage_text(self) -> str:
