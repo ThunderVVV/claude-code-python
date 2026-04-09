@@ -96,7 +96,7 @@ class WelcomeWidget(Container):
                     "Tips for getting started", classes="section-title", markup=False
                 )
                 yield Label(
-                    "Run /init to create a CLAUDE.md file with instructions for Claude",
+                    "/new to create a new session, /exit to quit, /sessions to view all sessions",
                     classes="section-content",
                     markup=False,
                 )
