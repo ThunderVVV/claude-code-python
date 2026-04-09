@@ -63,7 +63,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed - 2026-04-09
 
 #### Default TUI Mode and Logging Behavior
-- Changed default mode from CLI to TUI when running `claude-code` without flags
+- Changed default mode from CLI to TUI when running `claude-code-python` (or `cc-py`) without flags
 - Added `--cli` flag to explicitly use simple CLI mode
 - Kept `--tui` flag for compatibility (optional, same as default behavior)
 - Disabled automatic debug logging for TUI mode - now only enabled with explicit `--debug` flag
@@ -253,7 +253,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### TUI Tool Output Incident - 2026-04-08
 
-**Symptom**: In `claude-code --tui`, tool calls were producing output (scrollbar moving), but the transcript area appeared as a black/blank block.
+**Symptom**: In `claude-code-python --tui` (or `cc-py --tui`), tool calls were producing output (scrollbar moving), but the transcript area appeared as a black/blank block.
 
 **Root Cause**: Textual's expanding containers (`Container`/`Vertical`) default to consuming remaining space (`height: 1fr`), while `VerticalGroup` fits to content height. The TUI was using expanding containers in the dynamic message path, creating a layout bug where:
 1. Empty streaming area expanded and consumed vertical space

@@ -22,7 +22,7 @@ def test_resolve_log_path_uses_hidden_logs_dir() -> None:
         debug=True,
         now=datetime(2026, 4, 8, 13, 52, 1),
     )
-    assert log_path == str(Path(".logs") / "claude-code-debug-20260408_135201.log")
+    assert log_path == str(Path(".logs") / "claude-code-python-debug-20260408_135201.log")
 
 
 def test_resolve_log_path_returns_explicit_log_file() -> None:

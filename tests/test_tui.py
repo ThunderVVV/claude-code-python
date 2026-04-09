@@ -1747,7 +1747,7 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(markdown_widget.styles.link_style_hover), "bold")
 
     async def test_untyped_code_fence_uses_plain_text_highlighting(self) -> None:
-        markdown_text = "```\n.logs/claude-code-debug-<timestamp>.log\n```\n"
+        markdown_text = "```\n.logs/claude-code-python-debug-<timestamp>.log\n```\n"
 
         def event_factory(user_text: str):
             return [

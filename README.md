@@ -55,7 +55,16 @@ CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
 也可以直接用命令行参数覆盖：
 
 ```bash
-claude-code \
+claude-code-python \
+  --api-url https://api.openai.com/v1 \
+  --api-key your-api-key \
+  --model gpt-4.1
+```
+
+或使用简写：
+
+```bash
+cc-py \
   --api-url https://api.openai.com/v1 \
   --api-key your-api-key \
   --model gpt-4.1
@@ -66,38 +75,44 @@ claude-code \
 默认启动 TUI 模式：
 
 ```bash
-claude-code
+claude-code-python
+```
+
+或使用简写：
+
+```bash
+cc-py
 ```
 
 恢复指定 TUI session：
 
 ```bash
-claude-code --resume <session_id>
+claude-code-python --resume <session_id>
 ```
 
 通过命令行交互选择已有 TUI session：
 
 ```bash
-claude-code --sessions
+claude-code-python --sessions
 ```
 
 使用 CLI 模式：
 
 ```bash
-claude-code --cli
+claude-code-python --cli
 ```
 
 开启调试日志：
 
 ```bash
-claude-code --debug
+claude-code-python --debug
 ```
 
 如果同时指定了 `--log-file`，调试日志会写到指定路径；否则会自动写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`。
 
 TUI session 说明：
 
-- `claude-code` 默认新开一个 TUI session。
+- `claude-code-python`（或 `cc-py`）默认新开一个 TUI session。
 - `--resume` 和 `--sessions` 只在 TUI 模式下生效，`--cli` 不支持。
 - session 标题默认取首条用户消息的第一句。
 - session 保存时机与 TUI 内部 rollback boundary 对齐，因此中断中的半成品响应不会污染可恢复记录。

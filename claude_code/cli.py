@@ -58,7 +58,7 @@ def resolve_log_path(
     if not debug:
         return None
     timestamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
-    return str(Path(".logs") / f"claude-code-debug-{timestamp}.log")
+    return str(Path(".logs") / f"claude-code-python-debug-{timestamp}.log")
 
 
 def ensure_log_directory(log_path: Optional[str]) -> None:
@@ -343,7 +343,7 @@ async def run_cli_mode(
     "--log-file",
     type=click.Path(),
     default=None,
-    help="Path to write debug log file (default: .logs/claude-code-debug-<timestamp>.log if --debug)",
+    help="Path to write debug log file (default: .logs/claude-code-python-debug-<timestamp>.log if --debug)",
 )
 @click.version_option(version="0.1.0", prog_name="claude-code-python")
 def main(

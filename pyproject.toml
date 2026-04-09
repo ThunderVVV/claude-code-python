@@ -25,7 +25,8 @@ dev = [
 ]
 
 [project.scripts]
-claude-code = "claude_code.cli:main"
+claude-code-python = "claude_code.cli:main"
+cc-py = "claude_code.cli:main"
 
 [build-system]
 requires = ["hatchling"]
