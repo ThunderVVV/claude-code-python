@@ -111,14 +111,19 @@ class Message:
     tool_use_result: Any = None
     is_visible_in_transcript_only: bool = False
     message: Optional[Dict[str, Any]] = None
+    # File expansion info for user messages
+    file_expansions: List[Any] = field(default_factory=list)  # List of FileExpansion objects
+    original_text: str = ""  # Original user text before expansion (for display)
 
     @classmethod
-    def user_message(cls, text: str) -> "Message":
+    def user_message(cls, text: str, file_expansions: Optional[List[Any]] = None, original_text: str = "") -> "Message":
         """Create a user message"""
         return cls(
             type=MessageRole.USER,
             content=[TextContent(text=text)],
             message={"role": "user", "content": text},
+            file_expansions=file_expansions or [],
+            original_text=original_text or text,
         )
 
     @classmethod

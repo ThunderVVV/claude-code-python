@@ -35,6 +35,7 @@ from claude_code.core.messages import (
 )
 from claude_code.core.tools import ToolContext, ToolRegistry, find_tool_by_name
 from claude_code.core.prompts import create_default_system_prompt, build_context_message
+from claude_code.core.file_expansion import expand_file_references
 from claude_code.services.openai_client import (
     OpenAIClient,
     OpenAIClientConfig,
@@ -293,8 +294,17 @@ class QueryEngine:
         try:
             self._raise_if_interrupted()
 
-            # Create and add user message
-            user_message = Message.user_message(user_text)
+            # Expand @file_path references
+            expanded_text, file_expansions = expand_file_references(
+                user_text, self._cwd
+            )
+
+            # Create and add user message with file expansion info
+            user_message = Message.user_message(
+                text=expanded_text,
+                file_expansions=file_expansions,
+                original_text=user_text,
+            )
             self.state.add_message(user_message)
             yield MessageCompleteEvent(message=user_message)
 

@@ -100,6 +100,11 @@ class WelcomeWidget(Container):
                     classes="section-content",
                     markup=False,
                 )
+                yield Label(
+                    "@web to enable web search and extract skills",
+                    classes="section-content",
+                    markup=False,
+                )
                 yield Label("Recent activity", classes="section-title", markup=False)
                 yield Label(
                     "No recent activity", classes="section-content", markup=False

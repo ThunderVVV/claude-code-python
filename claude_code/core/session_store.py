@@ -300,7 +300,7 @@ def _content_block_from_dict(data: dict[str, Any]) -> Any:
 
 
 def _message_to_dict(message: Message) -> dict[str, Any]:
-    return {
+    result = {
         "type": message.type.value,
         "content": [_content_block_to_dict(block) for block in message.content],
         "uuid": message.uuid,
@@ -311,6 +311,19 @@ def _message_to_dict(message: Message) -> dict[str, Any]:
         "is_visible_in_transcript_only": message.is_visible_in_transcript_only,
         "message": message.message,
     }
+    # Save file expansion info for user messages
+    if message.file_expansions:
+        result["file_expansions"] = [
+            {
+                "file_path": exp.file_path,
+                "content": exp.content,
+                "display_path": exp.display_path,
+            }
+            for exp in message.file_expansions
+        ]
+    if message.original_text:
+        result["original_text"] = message.original_text
+    return result
 
 
 def _message_from_dict(data: dict[str, Any]) -> Message:
@@ -321,6 +334,22 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
         else datetime.now()
     )
     role_value = str(data.get("type", MessageRole.USER.value))
+
+    # Restore file expansions
+    file_expansions = []
+    expansions_data = data.get("file_expansions", [])
+    if isinstance(expansions_data, list):
+        from claude_code.core.file_expansion import FileExpansion
+        for exp_data in expansions_data:
+            if isinstance(exp_data, dict):
+                file_expansions.append(FileExpansion(
+                    file_path=str(exp_data.get("file_path", "")),
+                    content=str(exp_data.get("content", "")),
+                    display_path=str(exp_data.get("display_path", "")),
+                ))
+
+    original_text = str(data.get("original_text", ""))
+
     return Message(
         type=MessageRole(role_value),
         content=[
@@ -337,4 +366,6 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
             data.get("is_visible_in_transcript_only", False)
         ),
         message=data.get("message") if isinstance(data.get("message"), dict) else None,
+        file_expansions=file_expansions,
+        original_text=original_text,
     )

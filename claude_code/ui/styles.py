@@ -383,4 +383,13 @@ MarkdownHorizontalRule {
     margin: 0;
     background: transparent;
 }
+
+.file-expansion {
+    width: 100%;
+    margin: 0 0 1 0;
+    padding: 0 1;
+    background: $surface;
+    border-left: solid $primary;
+    color: $text-muted;
+}
 """

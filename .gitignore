@@ -1,6 +1,7 @@
 *.log
 .logs/
 opencode.json
+.claude
 
 # Python
 __pycache__/

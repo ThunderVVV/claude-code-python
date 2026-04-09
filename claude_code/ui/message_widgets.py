@@ -26,6 +26,7 @@ from claude_code.ui.utils import (
     summarize_tool_result,
     summarize_tool_use,
     format_tool_input_details,
+    truncate_preview_line,
 )
 
 
@@ -632,6 +633,15 @@ class MessageWidget(VerticalGroup):
         if self.message.type not in {MessageRole.USER, MessageRole.ASSISTANT}:
             yield Label(role_label, classes=f"message-role {role_class}", markup=False)
 
+        # For user messages, show file expansions first (abbreviated)
+        if self.message.type == MessageRole.USER and self.message.file_expansions:
+            for expansion in self.message.file_expansions:
+                yield Static(
+                    self._format_file_expansion(expansion),
+                    classes="file-expansion",
+                    markup=False,
+                )
+
         # Content
         for block in self.message.content:
             if isinstance(block, ThinkingContent):
@@ -644,8 +654,15 @@ class MessageWidget(VerticalGroup):
                         self._streaming_widget = StreamingTextWidget(block.text)
                         yield self._streaming_widget
                     else:
+                        # For user messages with file expansions, show only the original text
+                        # (file expansions are already shown separately above)
+                        display_text = (
+                            self.message.original_text
+                            if self.message.file_expansions
+                            else block.text
+                        )
                         yield Static(
-                            sanitize_terminal_text(block.text),
+                            sanitize_terminal_text(display_text),
                             classes="message-content",
                             markup=False,
                         )
@@ -679,6 +696,25 @@ class MessageWidget(VerticalGroup):
                         classes="tool-result-preview",
                         markup=False,
                     )
+
+    def _format_file_expansion(self, expansion) -> str:
+        """Format a file expansion for display with 5-line limit."""
+        lines = expansion.content.splitlines()
+        total_lines = len(lines)
+        max_lines = 5
+
+        # Format with line numbers like Read tool
+        formatted_lines = []
+        for i, line in enumerate(lines[:max_lines], start=1):
+            formatted_lines.append(f"{i:6}\t{truncate_preview_line(line)}")
+
+        result = f"@{expansion.display_path}:"
+        result += "\n" + "\n".join(formatted_lines)
+
+        if total_lines > max_lines:
+            result += f"\n... ({total_lines - max_lines} more lines)"
+
+        return result
 
     async def update_streaming_text(self, text: str) -> None:
         """Update streaming text content for assistant messages"""
