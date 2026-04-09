@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +14,7 @@ from textual.containers import Horizontal, ScrollableContainer, VerticalGroup
 from textual.widgets import Label, LoadingIndicator
 from textual.screen import Screen
 from textual import events
+from textual.worker import Worker
 
 from claude_code.core.context_window import (
     CONTEXT_WINDOW_TOKENS_ENV_VAR,
@@ -23,8 +25,8 @@ from claude_code.core.context_window import (
 from claude_code.core.messages import (
     Message,
     MessageRole,
-    TextContent,
     ThinkingContent,
+    TextContent,
     ToolUseContent,
     QueryEvent,
     TextEvent,
@@ -36,12 +38,26 @@ from claude_code.core.messages import (
     ErrorEvent,
 )
 from claude_code.core.query_engine import QueryEngine
+from claude_code.core.query_engine import QueryStateSnapshot
 from claude_code.ui.widgets import WelcomeWidget, InputTextArea
 from claude_code.ui.message_widgets import (
     MessageList,
     AssistantMessageWidget,
     ToolUseWidget,
 )
+
+
+@dataclass
+class TurnRenderSnapshot:
+    """UI/query state captured before a new assistant turn starts."""
+
+    state_snapshot: QueryStateSnapshot
+    rollback_widget_count: int
+    rollback_message_count: int
+    rollback_messages: list[Message]
+    rollback_latest_usage: object
+    rollback_input_text: Optional[str]
+    rollback_remove_history_entry: bool
 
 
 class REPLScreen(Screen):
@@ -68,6 +84,11 @@ class REPLScreen(Screen):
         self._tool_use_context: dict[str, ToolUseContent] = {}
         self._tool_widget_context: dict[str, ToolUseWidget] = {}
         self._save_history_enabled = save_history
+        self._query_worker: Optional[Worker] = None
+        self._active_submission_id = 0
+        self._current_submission_id: Optional[int] = None
+        self._cancelled_submission_ids: set[int] = set()
+        self._turn_snapshot: Optional[TurnRenderSnapshot] = None
 
         # History management
         self._history: list[str] = []
@@ -96,14 +117,28 @@ class REPLScreen(Screen):
         except Exception:
             pass
 
-    def _add_to_history(self, text: str) -> None:
+    def _add_to_history(self, text: str) -> bool:
         """Add text to history, avoiding duplicates"""
+        added = False
         if text.strip() and (not self._history or self._history[-1] != text):
             self._history.append(text)
             # Keep only last 1000 entries
             if len(self._history) > 1000:
                 self._history = self._history[-1000:]
             self._save_history()
+            added = True
+        self._history_index = -1
+        self._current_draft = ""
+        return added
+
+    def _remove_last_history_entry(self, text: str) -> None:
+        """Undo the latest prompt-history entry when Escape semantically undoes submit."""
+        if not text.strip() or not self._history:
+            return
+        if self._history[-1] != text:
+            return
+        self._history.pop()
+        self._save_history()
         self._history_index = -1
         self._current_draft = ""
 
@@ -121,7 +156,7 @@ class REPLScreen(Screen):
         with VerticalGroup(id="input-area"):
             with Horizontal(id="processing-row"):
                 yield LoadingIndicator(id="processing-indicator")
-                yield Label("Working...", id="processing-label", markup=False)
+                yield Label("Working... (esc to interrupt)", id="processing-label", markup=False)
             yield InputTextArea(
                 placeholder=self._input_placeholder_text(),
                 id="user-input",
@@ -143,6 +178,11 @@ class REPLScreen(Screen):
 
     async def on_key(self, event: events.Key) -> None:
         """Handle keyboard events for history navigation"""
+        if event.key == "escape" and self._is_processing:
+            event.stop()
+            await self._cancel_current_submission()
+            return
+
         input_widget = self.query_one("#user-input", InputTextArea)
         if input_widget.has_focus:
             if event.key == "up":
@@ -254,6 +294,233 @@ class REPLScreen(Screen):
         self._current_text = ""
         self._current_assistant_widget = None
 
+    def _capture_turn_snapshot(
+        self,
+        message_list: MessageList,
+        submitted_text: str,
+        history_added: bool,
+    ) -> None:
+        """Capture transcript/query state so Escape can rewind the active turn."""
+        widget_count = message_list.get_message_count()
+        self._turn_snapshot = TurnRenderSnapshot(
+            state_snapshot=self.query_engine.create_state_snapshot(),
+            rollback_widget_count=widget_count,
+            rollback_message_count=len(self.query_engine.get_messages()),
+            rollback_messages=[],
+            rollback_latest_usage=self._clone_usage(self._latest_usage),
+            rollback_input_text=submitted_text,
+            rollback_remove_history_entry=history_added,
+        )
+
+    def _clear_turn_snapshot(self) -> None:
+        """Drop the active turn snapshot after the worker finishes."""
+        self._turn_snapshot = None
+
+    @staticmethod
+    def _clone_usage(usage):
+        """Create a detached Usage copy when usage data is available."""
+        if usage is None:
+            return None
+        return type(usage)(
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+        )
+
+    @staticmethod
+    def _assistant_message_has_text(message: Message) -> bool:
+        """Return True when an assistant message has visible text content."""
+        return any(
+            isinstance(block, TextContent) and block.text.strip()
+            for block in message.content
+        )
+
+    def _build_assistant_prefix_message(
+        self,
+        *,
+        thinking: str = "",
+        text: str = "",
+        message: Optional[Message] = None,
+        require_text: bool = False,
+    ) -> Optional[Message]:
+        """Build an assistant message from the stable prefix before the current node."""
+        prefix_blocks = []
+        stop_reason = None
+        usage = self._clone_usage(self._latest_usage)
+        has_text = False
+
+        if message is not None:
+            if message.message:
+                stop_reason = message.message.get("stop_reason")
+            usage = self._clone_usage(message.get_usage()) or usage
+            for block in message.content:
+                if isinstance(block, ToolUseContent):
+                    break
+                if isinstance(block, ThinkingContent) and block.thinking:
+                    prefix_blocks.append(ThinkingContent(thinking=block.thinking))
+                elif isinstance(block, TextContent) and block.text:
+                    prefix_blocks.append(TextContent(text=block.text))
+                    has_text = has_text or bool(block.text.strip())
+        else:
+            if thinking:
+                prefix_blocks.append(ThinkingContent(thinking=thinking))
+            if text:
+                prefix_blocks.append(TextContent(text=text))
+                has_text = bool(text.strip())
+
+        if not prefix_blocks:
+            return None
+        if require_text and not has_text:
+            return None
+
+        return Message.assistant_message(
+            prefix_blocks,
+            usage=usage,
+            stop_reason=stop_reason,
+        )
+
+    def _set_rollback_boundary(
+        self,
+        message_list: MessageList,
+        *,
+        rollback_message_count: int,
+        rollback_messages: Optional[list[Message]] = None,
+        rollback_latest_usage=None,
+        rollback_input_text: Optional[str] = None,
+        rollback_remove_history_entry: bool = False,
+        remove_current_assistant_widget: bool = False,
+    ) -> None:
+        """Remember the transcript prefix to restore when Escape cancels the active node."""
+        snapshot = self._turn_snapshot
+        if snapshot is None:
+            return
+
+        widget_count = message_list.get_message_count()
+        if remove_current_assistant_widget and self._current_assistant_widget is not None:
+            widget_count = max(widget_count - 1, 0)
+
+        snapshot.rollback_widget_count = widget_count
+        snapshot.rollback_message_count = max(
+            rollback_message_count,
+            snapshot.state_snapshot.message_count,
+        )
+        snapshot.rollback_messages = list(rollback_messages or [])
+        snapshot.rollback_latest_usage = self._clone_usage(rollback_latest_usage)
+        snapshot.rollback_input_text = rollback_input_text
+        snapshot.rollback_remove_history_entry = rollback_remove_history_entry
+
+    def _update_rollback_boundary(
+        self,
+        message_list: MessageList,
+        message: Message,
+    ) -> None:
+        """Advance the rollback target to the last stable assistant message."""
+        current_message_count = len(self.query_engine.get_messages())
+
+        if message.type != MessageRole.ASSISTANT:
+            return
+
+        if message.has_tool_uses():
+            restore_message = self._build_assistant_prefix_message(
+                message=message,
+                require_text=True,
+            )
+            if restore_message is None:
+                return
+            self._set_rollback_boundary(
+                message_list,
+                rollback_message_count=current_message_count - 1,
+                rollback_messages=[restore_message] if restore_message else [],
+                rollback_latest_usage=(
+                    restore_message.get_usage() if restore_message else self._latest_usage
+                ),
+                rollback_input_text=None,
+                remove_current_assistant_widget=True,
+            )
+            return
+
+        if not self._assistant_message_has_text(message):
+            return
+
+        self._set_rollback_boundary(
+            message_list,
+            rollback_message_count=current_message_count,
+            rollback_messages=[],
+            rollback_latest_usage=message.get_usage() or self._latest_usage,
+            rollback_input_text=None,
+        )
+
+    def _update_rollback_boundary_after_tool_batch(
+        self,
+        message_list: MessageList,
+    ) -> None:
+        """Commit a finished tool batch as the latest stable rollback target."""
+        self._set_rollback_boundary(
+            message_list,
+            rollback_message_count=len(self.query_engine.get_messages()),
+            rollback_messages=[],
+            rollback_latest_usage=self._latest_usage,
+            rollback_input_text=None,
+        )
+
+    def _should_handle_submission(self, submission_id: int) -> bool:
+        """Return True when streamed events still belong to the live submission."""
+        return (
+            self._current_submission_id == submission_id
+            and submission_id not in self._cancelled_submission_ids
+        )
+
+    async def _cancel_current_submission(self) -> None:
+        """Interrupt the active query and rewind the transcript to the last stable block."""
+        submission_id = self._current_submission_id
+        if submission_id is None or not self._is_processing:
+            return
+
+        self._cancelled_submission_ids.add(submission_id)
+        self.query_engine.interrupt("user-cancel")
+
+        if self._query_worker and not self._query_worker.is_finished:
+            self._query_worker.cancel()
+
+        await self._rollback_active_turn()
+        self._set_processing_state(False)
+        input_widget = self.query_one("#user-input", InputTextArea)
+        input_widget.focus()
+
+    async def _rollback_active_turn(self) -> None:
+        """Remove partial assistant output and restore query state after cancellation."""
+        snapshot = self._turn_snapshot
+        if snapshot is None:
+            return
+
+        message_list = self.query_one("#message-list", MessageList)
+        await message_list.truncate(snapshot.rollback_widget_count)
+
+        self.query_engine.rollback_to_snapshot(
+            snapshot.state_snapshot,
+            message_count=snapshot.rollback_message_count,
+        )
+        for message in snapshot.rollback_messages:
+            self.query_engine.state.add_message(message)
+            await message_list.add_message(message, auto_follow=False)
+
+        rollback_usage = self._clone_usage(snapshot.rollback_latest_usage)
+        if rollback_usage is not None:
+            self.query_engine.state.total_usage = rollback_usage
+        self._latest_usage = rollback_usage
+        self._refresh_context_usage_label()
+        self._reset_streaming_state()
+        self._tool_use_context = {}
+        self._tool_widget_context = {}
+
+        if snapshot.rollback_input_text is not None:
+            if snapshot.rollback_remove_history_entry:
+                self._remove_last_history_entry(snapshot.rollback_input_text)
+            input_widget = self.query_one("#user-input", InputTextArea)
+            input_widget.load_text(snapshot.rollback_input_text)
+            input_widget.move_cursor(input_widget.document.end)
+            self._history_index = -1
+            self._current_draft = snapshot.rollback_input_text
+
     def _start_message_submission(self, submitted_value: str) -> None:
         """Queue a prompt submission without blocking the UI event loop."""
         if self._is_processing:
@@ -273,7 +540,7 @@ class REPLScreen(Screen):
         self._hide_welcome_widget()
 
         # Add to history
-        self._add_to_history(submitted_value)
+        history_added = self._add_to_history(submitted_value)
 
         # Reset the document so the next prompt always starts from a clean single line.
         input_widget.load_text("")
@@ -282,34 +549,52 @@ class REPLScreen(Screen):
         self._tool_widget_context = {}
         try:
             message_list = self.query_one("#message-list", MessageList)
+            self._capture_turn_snapshot(message_list, submitted_value, history_added)
             message_list.reset_auto_follow_output()
         except Exception:
             pass
+        self.query_engine.clear_interrupt()
+        self._active_submission_id += 1
+        submission_id = self._active_submission_id
+        self._current_submission_id = submission_id
+        self._cancelled_submission_ids.discard(submission_id)
         self._set_processing_state(True)
         self.refresh()
-        self.run_worker(
-            self._process_message(user_text),
+        self._query_worker = self.run_worker(
+            self._process_message(user_text, submission_id),
             group="query",
             exclusive=True,
             exit_on_error=False,
         )
 
-    async def _process_message(self, user_text: str) -> None:
+    async def _process_message(self, user_text: str, submission_id: int) -> None:
         """Run a query in the background so the TUI stays responsive."""
         message_list = self.query_one("#message-list", MessageList)
         try:
             async for event in self.query_engine.submit_message(user_text):
-                await self._handle_query_event(event, message_list)
+                if not self._should_handle_submission(submission_id):
+                    break
+                await self._handle_query_event(event, message_list, submission_id)
                 await asyncio.sleep(0)
 
+        except asyncio.CancelledError:
+            if not self._should_handle_submission(submission_id):
+                return
+            raise
         except Exception as e:
-            error_msg = Message.system_message(f"Error: {str(e)}")
-            await message_list.add_message(error_msg)
+            if self._should_handle_submission(submission_id):
+                error_msg = Message.system_message(f"Error: {str(e)}")
+                await message_list.add_message(error_msg)
 
         finally:
-            self._set_processing_state(False)
-            input_widget = self.query_one("#user-input", InputTextArea)
-            input_widget.focus()
+            if self._current_submission_id == submission_id:
+                self._current_submission_id = None
+                self._query_worker = None
+                self._clear_turn_snapshot()
+                self._set_processing_state(False)
+                input_widget = self.query_one("#user-input", InputTextArea)
+                input_widget.focus()
+            self._cancelled_submission_ids.discard(submission_id)
 
     async def _ensure_assistant_widget(
         self,
@@ -328,7 +613,10 @@ class REPLScreen(Screen):
         return self._current_assistant_widget
 
     async def _handle_query_event(
-        self, event: QueryEvent, message_list: MessageList
+        self,
+        event: QueryEvent,
+        message_list: MessageList,
+        submission_id: int,
     ) -> None:
         """
         Handle a query event - aligned with TypeScript handleMessageFromStream in messages.ts
@@ -336,6 +624,9 @@ class REPLScreen(Screen):
         Key difference from before: we use AssistantMessageWidget which allows
         incremental updates without recreating the entire widget.
         """
+        if not self._should_handle_submission(submission_id):
+            return
+
         if isinstance(event, ThinkingEvent):
             auto_follow = message_list.should_auto_follow_output()
             # Accumulate thinking
@@ -433,14 +724,20 @@ class REPLScreen(Screen):
                         assistant_widget.get_tool_widgets()
                     )
                     self._current_text = event.message.get_text()
+                    self._update_rollback_boundary(message_list, event.message)
                     message_list.schedule_scroll_to_latest(auto_follow)
                 elif event.message.type != MessageRole.TOOL:
                     await message_list.add_message(
                         event.message,
                         auto_follow=auto_follow,
                     )
+                    self._update_rollback_boundary(message_list, event.message)
 
         elif isinstance(event, TurnCompleteEvent):
+            if self._tool_use_context:
+                self._update_rollback_boundary_after_tool_batch(message_list)
+            self._tool_use_context = {}
+            self._tool_widget_context = {}
             self._reset_streaming_state()
 
         elif isinstance(event, ErrorEvent):

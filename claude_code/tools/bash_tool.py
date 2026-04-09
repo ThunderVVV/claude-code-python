@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
 import shlex
@@ -269,6 +270,23 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
         # In a full implementation, this would check against permission rules
         return PermissionResult(behavior="allow", updated_input=input)
 
+    async def _terminate_process(
+        self,
+        process: asyncio.subprocess.Process,
+    ) -> None:
+        """Terminate an in-flight subprocess during timeout or cancellation."""
+        if process.returncode is not None:
+            return
+        try:
+            process.terminate()
+            await asyncio.wait_for(process.wait(), timeout=1.0)
+        except (ProcessLookupError, asyncio.TimeoutError):
+            try:
+                process.kill()
+                await process.wait()
+            except ProcessLookupError:
+                pass
+
     async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
         command = input.get("command", "")
         if not command:
@@ -284,6 +302,8 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
         workdir = context.working_directory
 
         try:
+            context.raise_if_cancelled()
+
             # Create subprocess
             process = await asyncio.create_subprocess_shell(
                 command,
@@ -294,23 +314,47 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
                 executable=shutil.which("bash") or "/bin/bash",
             )
 
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=timeout_seconds,
-                )
-            except asyncio.TimeoutError:
-                # Kill the process on timeout
-                try:
-                    process.kill()
-                    await process.wait()
-                except ProcessLookupError:
-                    pass
+            communicate_task = asyncio.create_task(process.communicate())
+            cancel_task: Optional[asyncio.Task[bool]] = None
+            if context.cancel_event is not None:
+                cancel_task = asyncio.create_task(context.cancel_event.wait())
 
-                return (
-                    f"Command timed out after {timeout_seconds:.1f} seconds\n\n"
-                    f"Command: {command}"
+            try:
+                wait_tasks = {communicate_task}
+                if cancel_task is not None:
+                    wait_tasks.add(cancel_task)
+
+                done, _pending = await asyncio.wait(
+                    wait_tasks,
+                    timeout=timeout_seconds,
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
+
+                if communicate_task in done:
+                    stdout, stderr = communicate_task.result()
+                elif cancel_task is not None and cancel_task in done:
+                    await self._terminate_process(process)
+                    raise asyncio.CancelledError
+                else:
+                    communicate_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await communicate_task
+                    await self._terminate_process(process)
+                    return (
+                        f"Command timed out after {timeout_seconds:.1f} seconds\n\n"
+                        f"Command: {command}"
+                    )
+            except asyncio.CancelledError:
+                communicate_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await communicate_task
+                await self._terminate_process(process)
+                raise
+            finally:
+                if cancel_task is not None:
+                    cancel_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await cancel_task
 
             # Decode output
             stdout_str = stdout.decode("utf-8", errors="replace") if stdout else ""

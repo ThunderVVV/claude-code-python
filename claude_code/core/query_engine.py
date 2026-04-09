@@ -66,6 +66,17 @@ class QueryResult:
     usage: Optional[Usage] = None
 
 
+@dataclass
+class QueryStateSnapshot:
+    """Snapshot of mutable query state used for turn rollback."""
+
+    message_count: int
+    tool_call_count: int
+    current_turn: int
+    total_usage: Usage
+    undo_operation_count: int = 0
+
+
 class QueryEngine:
     """
     Core query engine that handles the conversation loop.
@@ -91,6 +102,11 @@ class QueryEngine:
         self._client: Optional[OpenAIClient] = None
         self._session_id = generate_uuid()
         self._is_initialized = False
+        self._interrupt_reason: Optional[str] = None
+        self._active_task: Optional[asyncio.Task[Any]] = None
+        self._cancelled_tasks: set[asyncio.Task[Any]] = set()
+        self._cancel_event = asyncio.Event()
+        self._undo_operations: List[Callable[[], None]] = []
 
         # Working directory
         self._cwd = self.config.working_directory or os.getcwd()
@@ -132,7 +148,13 @@ class QueryEngine:
             working_directory=self._cwd,
             project_root=self._cwd,
             session_id=self._session_id,
+            cancel_event=self._cancel_event,
+            register_undo_operation=self._register_undo_operation,
         )
+
+    def _register_undo_operation(self, undo_operation: Callable[[], None]) -> None:
+        """Track a side-effect undo function for the current conversation state."""
+        self._undo_operations.append(undo_operation)
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt"""
@@ -155,6 +177,73 @@ class QueryEngine:
     def clear(self) -> None:
         """Clear the query state"""
         self.state.clear()
+        self._undo_operations = []
+        self.clear_interrupt()
+
+    def create_state_snapshot(self) -> QueryStateSnapshot:
+        """Capture mutable state so the current turn can be rolled back."""
+        usage = self.state.total_usage
+        return QueryStateSnapshot(
+            message_count=len(self.state.messages),
+            tool_call_count=len(self.state.tool_calls),
+            current_turn=self.state.current_turn,
+            total_usage=Usage(
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+            ),
+            undo_operation_count=len(self._undo_operations),
+        )
+
+    def rollback_to_snapshot(
+        self,
+        snapshot: QueryStateSnapshot,
+        message_count: Optional[int] = None,
+    ) -> None:
+        """Restore state captured before an interrupted turn."""
+        retained_messages = snapshot.message_count
+        if message_count is not None:
+            retained_messages = max(snapshot.message_count, message_count)
+
+        while len(self._undo_operations) > snapshot.undo_operation_count:
+            undo_operation = self._undo_operations.pop()
+            try:
+                undo_operation()
+            except Exception as exc:
+                logger.warning("Failed to roll back tool side effect: %s", exc)
+
+        self.state.messages = self.state.messages[:retained_messages]
+        self.state.tool_calls = self.state.tool_calls[: snapshot.tool_call_count]
+        self.state.current_turn = snapshot.current_turn
+        self.state.total_usage = Usage(
+            input_tokens=snapshot.total_usage.input_tokens,
+            output_tokens=snapshot.total_usage.output_tokens,
+        )
+        self.state.is_streaming = False
+        self.state.current_streaming_text = ""
+        self.clear_interrupt()
+
+    def interrupt(self, reason: str = "interrupt") -> None:
+        """Interrupt the in-flight query, matching the TypeScript QueryEngine API."""
+        self._interrupt_reason = reason
+        self._cancel_event.set()
+        if self._active_task and not self._active_task.done():
+            self._cancelled_tasks.add(self._active_task)
+            self._active_task.cancel()
+
+    def clear_interrupt(self) -> None:
+        """Reset interrupt state before a fresh query starts."""
+        self._interrupt_reason = None
+        if self._cancel_event.is_set():
+            self._cancel_event = asyncio.Event()
+
+    def get_interrupt_reason(self) -> Optional[str]:
+        """Return the current interrupt reason, if any."""
+        return self._interrupt_reason
+
+    def _raise_if_interrupted(self) -> None:
+        """Abort the current query loop when an interrupt has been requested."""
+        if self._interrupt_reason is not None:
+            raise asyncio.CancelledError
 
     async def submit_message(
         self,
@@ -177,14 +266,32 @@ class QueryEngine:
         if not self._is_initialized:
             await self.initialize()
 
-        # Create and add user message
-        user_message = Message.user_message(user_text)
-        self.state.add_message(user_message)
-        yield MessageCompleteEvent(message=user_message)
+        self._active_task = asyncio.current_task()
 
-        # Run the query loop
-        async for event in self._query_loop():
-            yield event
+        try:
+            self._raise_if_interrupted()
+
+            # Create and add user message
+            user_message = Message.user_message(user_text)
+            self.state.add_message(user_message)
+            yield MessageCompleteEvent(message=user_message)
+
+            # Run the query loop
+            async for event in self._query_loop():
+                yield event
+        except asyncio.CancelledError:
+            current_task = asyncio.current_task()
+            if current_task in self._cancelled_tasks or self._interrupt_reason is not None:
+                if current_task in self._cancelled_tasks:
+                    self._cancelled_tasks.discard(current_task)
+                return
+            raise
+        finally:
+            current_task = asyncio.current_task()
+            if current_task in self._cancelled_tasks:
+                self._cancelled_tasks.discard(current_task)
+            if self._active_task is current_task:
+                self._active_task = None
 
     async def _query_loop(self) -> AsyncGenerator[QueryEvent, None]:
         """
@@ -214,6 +321,7 @@ class QueryEngine:
             current_usage: Optional[Usage] = None
 
             try:
+                self._raise_if_interrupted()
                 # Yield request start event
                 yield RequestStartEvent()
 
@@ -224,6 +332,7 @@ class QueryEngine:
                     stream=self.config.stream,
                     system_prompt=system_prompt,
                 ):
+                    self._raise_if_interrupted()
                     if self.config.stream:
                         extract_usage = getattr(self._client, "extract_usage", None)
                         chunk_usage = (
@@ -313,6 +422,7 @@ class QueryEngine:
                         )
 
                 # Build content blocks
+                self._raise_if_interrupted()
                 content_blocks: List[ContentBlock] = []
 
                 if current_thinking:
@@ -351,6 +461,7 @@ class QueryEngine:
                 tool_results: List[tuple] = []
 
                 for tool_use in tool_use_blocks:
+                    self._raise_if_interrupted()
                     if not tool_use.id or not tool_use.name:
                         continue
 
@@ -396,6 +507,7 @@ class QueryEngine:
                         tool_results.append((tool_use.id, error_msg, True))
 
                 # Add tool result messages
+                self._raise_if_interrupted()
                 for tool_use_id, result, is_error in tool_results:
                     tool_msg = Message.tool_result_message(
                         tool_use_id, result, is_error
@@ -419,6 +531,11 @@ class QueryEngine:
                     logger.debug("Max turns reached, ending query")
                     return
 
+            except asyncio.CancelledError:
+                current_task = asyncio.current_task()
+                if current_task in self._cancelled_tasks or self._interrupt_reason is not None:
+                    return
+                raise
             except APINetworkError as e:
                 error_msg = f"Network error: {str(e)}"
                 yield ErrorEvent(error=error_msg, is_fatal=True)

@@ -18,6 +18,7 @@ from textual.widgets._markdown import MarkdownH2, MarkdownH4
 from claude_code.core.messages import (
     Message,
     MessageCompleteEvent,
+    MessageRole,
     TextContent,
     TextEvent,
     ThinkingContent,
@@ -28,6 +29,9 @@ from claude_code.core.messages import (
     TurnCompleteEvent,
     Usage,
 )
+from claude_code.core.query_engine import QueryConfig, QueryEngine, QueryStateSnapshot
+from claude_code.core.tools import BaseTool, ToolInputSchema, ToolRegistry
+from claude_code.services.openai_client import OpenAIClient, OpenAIClientConfig
 from claude_code.ui.app import ClaudeCodeApp
 from textual.content import Span
 from claude_code.ui.diff_view import DiffView
@@ -45,6 +49,21 @@ class FakeQueryEngine:
 
     def __init__(self, event_factory):
         self._event_factory = event_factory
+        self._messages: list[Message] = []
+        self._current_turn = 0
+        self._interrupt_reason: str | None = None
+        self._total_usage = Usage()
+        self.state = self._State(self)
+
+    class _State:
+        """Small mutable state shim used by REPL rollback tests."""
+
+        def __init__(self, engine: "FakeQueryEngine"):
+            self._engine = engine
+            self.total_usage = engine._total_usage
+
+        def add_message(self, message: Message) -> None:
+            self._engine._messages.append(message)
 
     async def initialize(self) -> None:
         """Match the real engine interface."""
@@ -54,10 +73,144 @@ class FakeQueryEngine:
 
     async def submit_message(self, user_text: str):
         for item in self._event_factory(user_text):
+            if self._interrupt_reason is not None:
+                return
+            if isinstance(item, (int, float)):
+                await asyncio.sleep(item)
+                continue
+            if isinstance(item, MessageCompleteEvent) and item.message:
+                self._messages.append(item.message)
+                if item.message.type == MessageRole.ASSISTANT:
+                    usage = item.message.get_usage()
+                    if usage is not None:
+                        self._total_usage = usage
+                        self.state.total_usage = usage
+            elif isinstance(item, TurnCompleteEvent):
+                self._current_turn = item.turn
+            yield item
+
+    def create_state_snapshot(self) -> QueryStateSnapshot:
+        return QueryStateSnapshot(
+            message_count=len(self._messages),
+            tool_call_count=0,
+            current_turn=self._current_turn,
+            total_usage=Usage(
+                input_tokens=self._total_usage.input_tokens,
+                output_tokens=self._total_usage.output_tokens,
+            ),
+        )
+
+    def rollback_to_snapshot(
+        self,
+        snapshot: QueryStateSnapshot,
+        message_count: int | None = None,
+    ) -> None:
+        retained_messages = snapshot.message_count
+        if message_count is not None:
+            retained_messages = max(snapshot.message_count, message_count)
+        self._messages = self._messages[:retained_messages]
+        self._current_turn = snapshot.current_turn
+        self._total_usage = Usage(
+            input_tokens=snapshot.total_usage.input_tokens,
+            output_tokens=snapshot.total_usage.output_tokens,
+        )
+        self.state.total_usage = self._total_usage
+        self.clear_interrupt()
+
+    def get_messages(self) -> list[Message]:
+        return list(self._messages)
+
+    def interrupt(self, reason: str = "interrupt") -> None:
+        self._interrupt_reason = reason
+
+    def clear_interrupt(self) -> None:
+        self._interrupt_reason = None
+
+
+class RecordingStreamingClient:
+    """Streaming client double that records the exact message list passed by QueryEngine."""
+
+    def __init__(self, scripts):
+        self._scripts = scripts
+        self.recorded_openai_messages: list[list[dict]] = []
+
+    async def close(self) -> None:
+        """Match the real client interface."""
+
+    async def chat_completion(
+        self,
+        messages,
+        tool_registry=None,
+        stream=True,
+        system_prompt=None,
+    ):
+        self.recorded_openai_messages.append(
+            OpenAIClient._convert_messages_to_openai_format(self, messages)
+        )
+        script = self._scripts[len(self.recorded_openai_messages) - 1]
+        for item in script:
             if isinstance(item, (int, float)):
                 await asyncio.sleep(item)
                 continue
             yield item
+
+    def parse_stream_chunk(self, chunk):
+        return OpenAIClient.parse_stream_chunk(self, chunk)
+
+    def accumulate_tool_calls(self, accumulated, new_deltas):
+        return OpenAIClient.accumulate_tool_calls(self, accumulated, new_deltas)
+
+    def tool_calls_to_content_blocks(self, tool_calls, allow_partial=False):
+        return OpenAIClient.tool_calls_to_content_blocks(
+            self,
+            tool_calls,
+            allow_partial=allow_partial,
+        )
+
+    def partial_tool_calls_to_content_blocks(self, tool_calls):
+        return OpenAIClient.partial_tool_calls_to_content_blocks(self, tool_calls)
+
+    def _parse_tool_call_arguments(self, arguments, allow_partial=False):
+        return OpenAIClient._parse_tool_call_arguments(
+            self,
+            arguments,
+            allow_partial=allow_partial,
+        )
+
+    def _extract_partial_string_fields(self, arguments):
+        return OpenAIClient._extract_partial_string_fields(self, arguments)
+
+    def extract_usage(self, payload):
+        return OpenAIClient.extract_usage(self, payload)
+
+
+class WaitingTool(BaseTool):
+    """Synthetic tool that waits until the surrounding query is cancelled."""
+
+    name = "Wait"
+    description = "Waits until interrupted"
+    input_schema = ToolInputSchema(properties={}, required=[])
+    aliases = []
+
+    async def call(self, input, context) -> str:
+        context.raise_if_cancelled()
+        if context.cancel_event is None:
+            await asyncio.sleep(0.5)
+            return "Done"
+        await context.cancel_event.wait()
+        raise asyncio.CancelledError
+
+
+class ImmediateTool(BaseTool):
+    """Synthetic tool that completes immediately with a stable result."""
+
+    name = "DoneTool"
+    description = "Completes immediately"
+    input_schema = ToolInputSchema(properties={}, required=[])
+    aliases = []
+
+    async def call(self, input, context) -> str:
+        return "Done"
 
 
 class TUITestCase(unittest.IsolatedAsyncioTestCase):
@@ -67,6 +220,12 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
     def _label_text(label: Label) -> str:
         rendered = label.render()
         return rendered.plain if hasattr(rendered, "plain") else str(rendered)
+
+    @staticmethod
+    def _widget_message_text(widget) -> str:
+        if hasattr(widget, "get_message"):
+            return widget.get_message().get_text()
+        return widget.message.get_text()
 
     async def test_only_literal_exit_quits_tui(self) -> None:
         submitted_messages: list[str] = []
@@ -316,7 +475,7 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
     async def test_context_usage_status_line_uses_assistant_usage(self) -> None:
         usage = Usage(
             input_tokens=45000,
-            output_tokens==5000,
+            output_tokens=5000,
         )
 
         def event_factory(user_text: str):
@@ -838,6 +997,681 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
 
             screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
             self.assertIn("Thinking through the full answer", screenshot)
+
+    async def test_escape_cancels_streaming_thinking_and_restores_editable_input(
+        self,
+    ) -> None:
+        engine = FakeQueryEngine(
+            lambda user_text: [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ThinkingEvent(thinking="Working through it"),
+                0.5,
+                MessageCompleteEvent(
+                    message=Message.assistant_message(
+                        [ThinkingContent(thinking="Working through it")]
+                    ),
+                ),
+            ]
+        )
+
+        app = ClaudeCodeApp(engine, model_name="test-model", save_history=False)
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "think first"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(10):
+                await pilot.pause(0.02)
+                if list(screen.query(".thinking-collapsible")):
+                    break
+
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+
+            message_list = screen.query_one("#message-list", MessageList)
+            self.assertFalse(input_widget.disabled)
+            self.assertEqual(input_widget.text, "think first")
+            self.assertEqual(len(list(message_list.children)), 0)
+            self.assertEqual(len(list(screen.query(".thinking-collapsible"))), 0)
+            self.assertEqual(engine.get_messages(), [])
+            self.assertEqual(screen._history, [])
+
+    async def test_escape_cancels_streaming_text_and_restores_editable_input(
+        self,
+    ) -> None:
+        engine = FakeQueryEngine(
+            lambda user_text: [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ThinkingEvent(thinking="Thinking first"),
+                0.02,
+                TextEvent(text="Partial answer"),
+                0.5,
+                MessageCompleteEvent(
+                    message=Message.assistant_message(
+                        [
+                            ThinkingContent(thinking="Thinking first"),
+                            TextContent(text="Partial answer"),
+                        ]
+                    ),
+                ),
+            ]
+        )
+
+        app = ClaudeCodeApp(engine, model_name="test-model", save_history=False)
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "answer now"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(10):
+                await pilot.pause(0.02)
+                screenshot = app.export_screenshot(simplify=True).replace(
+                    "&#160;", " "
+                )
+                if "Partial answer" in screenshot:
+                    break
+
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+
+            message_list = screen.query_one("#message-list", MessageList)
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertFalse(input_widget.disabled)
+            self.assertEqual(input_widget.text, "answer now")
+            self.assertEqual(len(list(message_list.children)), 0)
+            self.assertNotIn("Partial answer", screenshot)
+            self.assertEqual(len(list(screen.query(".thinking-collapsible"))), 0)
+            self.assertEqual(engine.get_messages(), [])
+            self.assertEqual(screen._history, [])
+
+    async def test_escape_cancels_tool_batch_without_completed_text_and_restores_editable_input(
+        self,
+    ) -> None:
+        engine = FakeQueryEngine(
+            lambda user_text: [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ThinkingEvent(thinking="Preparing commands"),
+                0.02,
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Bash",
+                    input={"command": "sleep 5"},
+                ),
+                0.5,
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Done",
+                    is_error=False,
+                ),
+            ]
+        )
+
+        app = ClaudeCodeApp(engine, model_name="test-model", save_history=False)
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "run tool"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(10):
+                await pilot.pause(0.02)
+                if list(screen.query(ToolUseWidget)):
+                    break
+
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+
+            message_list = screen.query_one("#message-list", MessageList)
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertFalse(input_widget.disabled)
+            self.assertEqual(input_widget.text, "run tool")
+            self.assertEqual(len(list(message_list.children)), 0)
+            self.assertEqual(len(list(screen.query(ToolUseWidget))), 0)
+            self.assertEqual(len(list(screen.query(".thinking-collapsible"))), 0)
+            self.assertNotIn("Preparing commands", screenshot)
+            self.assertEqual(engine.get_messages(), [])
+            self.assertEqual(screen._history, [])
+
+    async def test_escape_keeps_completed_assistant_text_when_cancelling_tool_batch(
+        self,
+    ) -> None:
+        completed_assistant = Message.assistant_message(
+            [
+                ThinkingContent(thinking="Working it out"),
+                TextContent(text="I found the right command."),
+                ToolUseContent(
+                    id="tool-1",
+                    name="Bash",
+                    input={"command": "sleep 5"},
+                ),
+            ]
+        )
+
+        engine = FakeQueryEngine(
+            lambda user_text: [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ThinkingEvent(thinking="Working it out"),
+                0.02,
+                TextEvent(text="I found the right command."),
+                0.02,
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Bash",
+                    input={"command": "sleep 5"},
+                ),
+                0.02,
+                MessageCompleteEvent(message=completed_assistant),
+                0.5,
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Done",
+                    is_error=False,
+                ),
+            ]
+        )
+
+        app = ClaudeCodeApp(engine, model_name="test-model", save_history=False)
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            input_widget.text = "run tool"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(20):
+                await pilot.pause(0.02)
+                screenshot = app.export_screenshot(simplify=True).replace(
+                    "&#160;", " "
+                )
+                if (
+                    "I found the right command." in screenshot
+                    and len(engine.get_messages()) == 2
+                ):
+                    break
+            await pilot.pause(0.05)
+
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+
+            message_list = screen.query_one("#message-list", MessageList)
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertFalse(input_widget.disabled)
+            self.assertEqual(len(list(message_list.children)), 2)
+            self.assertIn("I found the right command.", screenshot)
+            self.assertEqual(input_widget.text, "")
+            self.assertEqual(len(list(screen.query(ToolUseWidget))), 0)
+            self.assertEqual(len(list(screen.query(".thinking-collapsible"))), 1)
+
+            messages = engine.get_messages()
+            self.assertEqual(
+                [message.type for message in messages],
+                [MessageRole.USER, MessageRole.ASSISTANT],
+            )
+            assistant_blocks = messages[-1].content
+            self.assertEqual(
+                [type(block).__name__ for block in assistant_blocks],
+                ["ThinkingContent", "TextContent"],
+            )
+            self.assertEqual(messages[-1].get_text(), "I found the right command.")
+            self.assertEqual(screen._history, ["run tool"])
+
+    async def test_escape_cancels_next_cycle_thinking_and_keeps_completed_tool_batch(
+        self,
+    ) -> None:
+        completed_assistant = Message.assistant_message(
+            [
+                ThinkingContent(thinking="Working it out"),
+                TextContent(text="I found the right command."),
+                ToolUseContent(
+                    id="tool-1",
+                    name="Bash",
+                    input={"command": "sleep 5"},
+                ),
+            ]
+        )
+        completed_tool_result = Message.tool_result_message(
+            "tool-1",
+            "Done",
+            False,
+        )
+
+        engine = FakeQueryEngine(
+            lambda user_text: [
+                MessageCompleteEvent(message=Message.user_message(user_text)),
+                ThinkingEvent(thinking="Working it out"),
+                0.02,
+                TextEvent(text="I found the right command."),
+                0.02,
+                ToolUseEvent(
+                    tool_use_id="tool-1",
+                    tool_name="Bash",
+                    input={"command": "sleep 5"},
+                ),
+                0.02,
+                MessageCompleteEvent(message=completed_assistant),
+                0.02,
+                ToolResultEvent(
+                    tool_use_id="tool-1",
+                    result="Done",
+                    is_error=False,
+                ),
+                0.02,
+                MessageCompleteEvent(message=completed_tool_result),
+                TurnCompleteEvent(turn=1, has_more_turns=True, stop_reason="tool_use"),
+                ThinkingEvent(thinking="Checking what to do next"),
+                0.5,
+                MessageCompleteEvent(
+                    message=Message.assistant_message(
+                        [ThinkingContent(thinking="Checking what to do next")]
+                    ),
+                ),
+            ]
+        )
+
+        app = ClaudeCodeApp(engine, model_name="test-model", save_history=False)
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            message_list = screen.query_one("#message-list", MessageList)
+            input_widget.text = "run tool"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(20):
+                await pilot.pause(0.02)
+                if len(list(message_list.children)) == 3 and input_widget.disabled:
+                    break
+
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertFalse(input_widget.disabled)
+            self.assertEqual(input_widget.text, "")
+            self.assertEqual(len(list(message_list.children)), 2)
+            self.assertIn("I found the right command.", screenshot)
+            self.assertIn("Ran: sleep 5", screenshot)
+            self.assertNotIn("Checking what to do next", screenshot)
+            self.assertEqual(len(list(screen.query(ToolUseWidget))), 1)
+            self.assertEqual(len(list(screen.query(".thinking-collapsible"))), 1)
+
+            messages = engine.get_messages()
+            self.assertEqual(
+                [message.type for message in messages],
+                [MessageRole.USER, MessageRole.ASSISTANT, MessageRole.TOOL],
+            )
+            self.assertEqual(screen._history, ["run tool"])
+
+    async def test_escape_resend_keeps_tui_and_backend_messages_aligned_after_full_rewind(
+        self,
+    ) -> None:
+        client = RecordingStreamingClient(
+            [
+                [
+                    {
+                        "choices": [
+                            {
+                                "delta": {"reasoning_content": "Working through it"},
+                                "finish_reason": None,
+                            }
+                        ]
+                    },
+                    0.5,
+                    {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                ],
+                [
+                    0.5,
+                    {
+                        "choices": [
+                            {
+                                "delta": {"content": "Second try"},
+                                "finish_reason": None,
+                            }
+                        ]
+                    },
+                    {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                ],
+            ]
+        )
+        engine = QueryEngine(
+            OpenAIClientConfig(
+                api_url="http://localhost/v1",
+                api_key="test-key",
+                model_name="test-model",
+            ),
+            ToolRegistry(),
+            QueryConfig(max_turns=1, stream=True),
+        )
+        engine._client = client
+        engine._is_initialized = True
+
+        app = ClaudeCodeApp(engine, model_name="test-model", save_history=False)
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            message_list = screen.query_one("#message-list", MessageList)
+
+            input_widget.text = "first"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(10):
+                await pilot.pause(0.02)
+                if list(screen.query(".thinking-collapsible")):
+                    break
+
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+
+            self.assertEqual(
+                client.recorded_openai_messages[0],
+                [{"role": "user", "content": "first"}],
+            )
+            self.assertEqual(len(list(message_list.children)), 0)
+            self.assertEqual(input_widget.text, "first")
+
+            input_widget.text = "second"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(20):
+                await pilot.pause(0.02)
+                if len(client.recorded_openai_messages) == 2:
+                    break
+
+            screenshot = app.export_screenshot(simplify=True).replace("&#160;", " ")
+            self.assertEqual(
+                client.recorded_openai_messages[1],
+                [{"role": "user", "content": "second"}],
+            )
+            self.assertEqual(len(list(message_list.children)), 1)
+            self.assertIn("second", screenshot)
+            self.assertNotIn("first", screenshot)
+            self.assertNotIn("Second try", screenshot)
+
+            await pilot.pause(0.7)
+
+    async def test_escape_resend_keeps_tui_and_backend_messages_aligned_after_tool_rewind(
+        self,
+    ) -> None:
+        registry = ToolRegistry()
+        registry.register(WaitingTool())
+        client = RecordingStreamingClient(
+            [
+                [
+                    {
+                        "choices": [
+                            {
+                                "delta": {"content": "I found the command."},
+                                "finish_reason": None,
+                            }
+                        ]
+                    },
+                    {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "tool_calls": [
+                                        {
+                                            "index": 0,
+                                            "id": "tool-1",
+                                            "type": "function",
+                                            "function": {
+                                                "name": "Wait",
+                                                "arguments": "{}",
+                                            },
+                                        }
+                                    ]
+                                },
+                                "finish_reason": "tool_calls",
+                            }
+                        ]
+                    },
+                ],
+                [
+                    0.5,
+                    {
+                        "choices": [
+                            {
+                                "delta": {"content": "Retried."},
+                                "finish_reason": None,
+                            }
+                        ]
+                    },
+                    {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                ],
+            ]
+        )
+        engine = QueryEngine(
+            OpenAIClientConfig(
+                api_url="http://localhost/v1",
+                api_key="test-key",
+                model_name="test-model",
+            ),
+            registry,
+            QueryConfig(max_turns=1, stream=True),
+        )
+        engine._client = client
+        engine._is_initialized = True
+
+        app = ClaudeCodeApp(engine, model_name="test-model", save_history=False)
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            message_list = screen.query_one("#message-list", MessageList)
+
+            input_widget.text = "run tool"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(20):
+                await pilot.pause(0.02)
+                if len(engine.get_messages()) == 2 and input_widget.disabled:
+                    break
+
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+
+            transcript_widgets = list(message_list.children)
+            self.assertEqual(
+                client.recorded_openai_messages[0],
+                [{"role": "user", "content": "run tool"}],
+            )
+            self.assertEqual(len(transcript_widgets), 2)
+            self.assertEqual(transcript_widgets[0].message.get_text(), "run tool")
+            self.assertEqual(
+                self._widget_message_text(transcript_widgets[1]),
+                "I found the command.",
+            )
+            self.assertEqual(len(list(screen.query(ToolUseWidget))), 0)
+
+            input_widget.text = "retry"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(20):
+                await pilot.pause(0.02)
+                if len(client.recorded_openai_messages) == 2:
+                    break
+
+            transcript_widgets = list(message_list.children)
+            self.assertEqual(
+                client.recorded_openai_messages[1],
+                [
+                    {"role": "user", "content": "run tool"},
+                    {"role": "assistant", "content": "I found the command."},
+                    {"role": "user", "content": "retry"},
+                ],
+            )
+            self.assertEqual(len(transcript_widgets), 3)
+            self.assertEqual(transcript_widgets[0].message.get_text(), "run tool")
+            self.assertEqual(
+                self._widget_message_text(transcript_widgets[1]),
+                "I found the command.",
+            )
+            self.assertEqual(transcript_widgets[2].message.get_text(), "retry")
+            self.assertEqual(len(list(screen.query(ToolUseWidget))), 0)
+
+            await pilot.pause(0.7)
+
+    async def test_escape_resend_keeps_tui_and_backend_messages_aligned_after_completed_tool_batch(
+        self,
+    ) -> None:
+        registry = ToolRegistry()
+        registry.register(ImmediateTool())
+        client = RecordingStreamingClient(
+            [
+                [
+                    {
+                        "choices": [
+                            {
+                                "delta": {"content": "I found the command."},
+                                "finish_reason": None,
+                            }
+                        ]
+                    },
+                    {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "tool_calls": [
+                                        {
+                                            "index": 0,
+                                            "id": "tool-1",
+                                            "type": "function",
+                                            "function": {
+                                                "name": "DoneTool",
+                                                "arguments": "{}",
+                                            },
+                                        }
+                                    ]
+                                },
+                                "finish_reason": "tool_calls",
+                            }
+                        ]
+                    },
+                ],
+                [
+                    {
+                        "choices": [
+                            {
+                                "delta": {"reasoning_content": "Checking next step"},
+                                "finish_reason": None,
+                            }
+                        ]
+                    },
+                    0.5,
+                    {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                ],
+                [
+                    0.5,
+                    {
+                        "choices": [
+                            {
+                                "delta": {"content": "Retried."},
+                                "finish_reason": None,
+                            }
+                        ]
+                    },
+                    {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                ],
+            ]
+        )
+        engine = QueryEngine(
+            OpenAIClientConfig(
+                api_url="http://localhost/v1",
+                api_key="test-key",
+                model_name="test-model",
+            ),
+            registry,
+            QueryConfig(max_turns=2, stream=True),
+        )
+        engine._client = client
+        engine._is_initialized = True
+
+        app = ClaudeCodeApp(engine, model_name="test-model", save_history=False)
+
+        async with app.run_test(size=(90, 16)) as pilot:
+            await pilot.pause()
+            screen = app.screen
+            input_widget = screen.query_one("#user-input", InputTextArea)
+            message_list = screen.query_one("#message-list", MessageList)
+
+            input_widget.text = "run tool"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(30):
+                await pilot.pause(0.02)
+                if len(list(message_list.children)) == 3 and input_widget.disabled:
+                    break
+
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+
+            transcript_widgets = list(message_list.children)
+            self.assertEqual(len(client.recorded_openai_messages), 2)
+            self.assertEqual(len(transcript_widgets), 2)
+            self.assertEqual(transcript_widgets[0].message.get_text(), "run tool")
+            self.assertEqual(
+                self._widget_message_text(transcript_widgets[1]),
+                "I found the command.",
+            )
+            self.assertEqual(len(list(screen.query(ToolUseWidget))), 1)
+
+            input_widget.text = "retry"
+            input_widget._on_submit(input_widget.text)
+
+            for _ in range(20):
+                await pilot.pause(0.02)
+                if len(client.recorded_openai_messages) == 3:
+                    break
+
+            self.assertEqual(
+                client.recorded_openai_messages[2],
+                [
+                    {"role": "user", "content": "run tool"},
+                    {
+                        "role": "assistant",
+                        "content": "I found the command.",
+                        "tool_calls": [
+                            {
+                                "id": "tool-1",
+                                "type": "function",
+                                "function": {
+                                    "name": "DoneTool",
+                                    "arguments": "{}",
+                                },
+                            }
+                        ],
+                    },
+                    {"role": "tool", "tool_call_id": "tool-1", "content": "Done"},
+                    {"role": "user", "content": "retry"},
+                ],
+            )
+            transcript_widgets = list(message_list.children)
+            self.assertEqual(len(transcript_widgets), 3)
+            self.assertEqual(transcript_widgets[0].message.get_text(), "run tool")
+            self.assertEqual(
+                self._widget_message_text(transcript_widgets[1]),
+                "I found the command.",
+            )
+            self.assertEqual(
+                transcript_widgets[-1].message.get_text(),
+                "retry",
+            )
+            self.assertEqual(len(list(screen.query(ToolUseWidget))), 1)
+
+            await pilot.pause(0.7)
 
     async def test_markdown_headings_and_links_do_not_use_underlines(self) -> None:
         markdown_text = "## Heading\n\n#### Minor\n\n[link](https://example.com)\n"

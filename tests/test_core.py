@@ -1,6 +1,7 @@
 """Tests for core functionality"""
 
 import asyncio
+from pathlib import Path
 
 import pytest
 from claude_code.core.messages import (
@@ -294,6 +295,29 @@ class TestBashTool:
         assert not tool.is_error_result("Done")
         assert not tool.is_error_result("(No output)")
         assert not tool.is_error_result("[stderr]\nwarning only")
+
+    def test_bash_tool_raises_cancelled_error_when_query_is_interrupted(self):
+        """Cancellation should stop long-running shell commands instead of leaving them detached."""
+        async def run_test() -> None:
+            tool = BashTool()
+            cancel_event = asyncio.Event()
+            context = ToolContext(
+                working_directory=".",
+                project_root=".",
+                session_id="test-session",
+                cancel_event=cancel_event,
+            )
+
+            async def trigger_cancel() -> None:
+                await asyncio.sleep(0.05)
+                cancel_event.set()
+
+            asyncio.create_task(trigger_cancel())
+
+            with pytest.raises(asyncio.CancelledError):
+                await tool.call({"command": "sleep 5"}, context)
+
+        asyncio.run(run_test())
 
 
 class ErrorReportingTool(BaseTool):
@@ -602,6 +626,140 @@ def test_query_engine_marks_tool_results_as_errors_when_tool_reports_failure():
     tool_result_block = tool_message_event.message.content[0]
     assert isinstance(tool_result_block, ToolResultContent)
     assert tool_result_block.is_error is True
+
+
+def test_query_engine_snapshot_rolls_back_partial_assistant_turn():
+    """Rollback should preserve the submitted user message while dropping partial assistant/tool state."""
+    engine = QueryEngine(
+        OpenAIClientConfig(
+            api_url="http://localhost/v1",
+            api_key="test-key",
+            model_name="test-model",
+        ),
+        ToolRegistry(),
+        QueryConfig(max_turns=1, stream=True),
+    )
+
+    previous_message = Message.user_message("previous")
+    current_user_message = Message.user_message("current")
+    partial_assistant = Message.assistant_message(
+        [
+            ThinkingContent(thinking="plan"),
+            ToolUseContent(
+                id="tool-1",
+                name="Bash",
+                input={"command": "sleep 5"},
+            ),
+        ]
+    )
+
+    engine.state.add_message(previous_message)
+    snapshot = engine.create_state_snapshot()
+    engine.state.add_message(current_user_message)
+    engine.state.add_message(partial_assistant)
+
+    engine.rollback_to_snapshot(
+        snapshot,
+        message_count=snapshot.message_count + 1,
+    )
+
+    assert engine.get_messages() == [previous_message, current_user_message]
+
+
+def test_query_engine_rollback_restores_file_overwritten_by_write_tool(tmp_path: Path):
+    """Rollback should restore the previous file bytes for completed Write tool calls."""
+    file_path = tmp_path / "demo.txt"
+    file_path.write_text("before", encoding="utf-8")
+
+    engine = QueryEngine(
+        OpenAIClientConfig(
+            api_url="http://localhost/v1",
+            api_key="test-key",
+            model_name="test-model",
+        ),
+        ToolRegistry(),
+        QueryConfig(max_turns=1, stream=True),
+    )
+
+    snapshot = engine.create_state_snapshot()
+
+    asyncio.run(
+        WriteTool().call(
+            {"file_path": str(file_path), "content": "after"},
+            engine._get_tool_context(),
+        )
+    )
+
+    assert file_path.read_text(encoding="utf-8") == "after"
+
+    engine.rollback_to_snapshot(snapshot)
+
+    assert file_path.read_text(encoding="utf-8") == "before"
+
+
+def test_query_engine_rollback_deletes_new_file_created_by_write_tool(tmp_path: Path):
+    """Rollback should remove files that only exist because of the current Write tool call."""
+    file_path = tmp_path / "created.txt"
+
+    engine = QueryEngine(
+        OpenAIClientConfig(
+            api_url="http://localhost/v1",
+            api_key="test-key",
+            model_name="test-model",
+        ),
+        ToolRegistry(),
+        QueryConfig(max_turns=1, stream=True),
+    )
+
+    snapshot = engine.create_state_snapshot()
+
+    asyncio.run(
+        WriteTool().call(
+            {"file_path": str(file_path), "content": "hello"},
+            engine._get_tool_context(),
+        )
+    )
+
+    assert file_path.read_text(encoding="utf-8") == "hello"
+
+    engine.rollback_to_snapshot(snapshot)
+
+    assert not file_path.exists()
+
+
+def test_query_engine_rollback_restores_file_modified_by_edit_tool(tmp_path: Path):
+    """Rollback should restore the previous file contents for completed Edit tool calls."""
+    file_path = tmp_path / "demo.py"
+    file_path.write_text("value = 1\n", encoding="utf-8")
+
+    engine = QueryEngine(
+        OpenAIClientConfig(
+            api_url="http://localhost/v1",
+            api_key="test-key",
+            model_name="test-model",
+        ),
+        ToolRegistry(),
+        QueryConfig(max_turns=1, stream=True),
+    )
+
+    snapshot = engine.create_state_snapshot()
+
+    asyncio.run(
+        EditTool().call(
+            {
+                "file_path": str(file_path),
+                "old_string": "value = 1",
+                "new_string": "value = 2",
+            },
+            engine._get_tool_context(),
+        )
+    )
+
+    assert file_path.read_text(encoding="utf-8") == "value = 2\n"
+
+    engine.rollback_to_snapshot(snapshot)
+
+    assert file_path.read_text(encoding="utf-8") == "value = 1\n"
 
 
 if __name__ == "__main__":

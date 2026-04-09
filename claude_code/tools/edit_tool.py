@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any, Dict, Optional
 
@@ -150,6 +151,7 @@ Usage:
             return f"Error: File does not exist: {full_path}"
 
         try:
+            context.raise_if_cancelled()
             with open(full_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
@@ -171,11 +173,15 @@ Usage:
             else:
                 new_content = content.replace(actual_old_string, actual_new_string, 1)
 
+            context.capture_file_rollback(full_path)
+            context.raise_if_cancelled()
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
 
             return f"Successfully edited {full_path} (replaced {count} occurrence{'s' if count > 1 else ''})"
 
+        except asyncio.CancelledError:
+            raise
         except PermissionError:
             return f"Error: Permission denied editing file: {full_path}"
         except UnicodeDecodeError:

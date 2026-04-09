@@ -764,6 +764,10 @@ class MessageList(VerticalGroup):
         """Re-enable transcript auto-follow for a fresh user request."""
         self._auto_follow_output = True
 
+    def get_message_count(self) -> int:
+        """Return the number of transcript widgets currently mounted."""
+        return len(self._message_widgets)
+
     def schedule_scroll_to_latest(self, auto_follow: bool = True) -> None:
         """Scroll after the current DOM/layout update flushes."""
         if auto_follow:
@@ -804,6 +808,20 @@ class MessageList(VerticalGroup):
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)
         return widget
+
+    async def truncate(self, count: int, auto_follow: bool = True) -> None:
+        """Remove transcript widgets after the provided count."""
+        retained_count = max(count, 0)
+        widgets_to_remove = self._message_widgets[retained_count:]
+        self._message_widgets = self._message_widgets[:retained_count]
+
+        for widget in reversed(widgets_to_remove):
+            finish_streaming = getattr(widget, "finish_streaming", None)
+            if callable(finish_streaming):
+                await finish_streaming()
+            widget.remove()
+
+        self.schedule_scroll_to_latest(auto_follow)
 
     def clear(self) -> None:
         """Clear all messages"""

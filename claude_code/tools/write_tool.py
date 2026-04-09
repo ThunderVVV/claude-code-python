@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any, Dict, Optional
 
@@ -79,10 +80,13 @@ Usage:
         full_path = expand_path(file_path)
 
         try:
+            context.raise_if_cancelled()
             parent_dir = os.path.dirname(full_path)
             if parent_dir and not os.path.exists(parent_dir):
                 os.makedirs(parent_dir, exist_ok=True)
 
+            context.capture_file_rollback(full_path)
+            context.raise_if_cancelled()
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
@@ -91,6 +95,8 @@ Usage:
 
             return f"Successfully wrote to {full_path} ({line_count} lines, {file_size} bytes)"
 
+        except asyncio.CancelledError:
+            raise
         except PermissionError:
             return f"Error: Permission denied writing to file: {full_path}"
         except Exception as e:

@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, TypeVar, Generic, runtime_checkable
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Protocol, TypeVar, Generic, runtime_checkable
 
 
 @dataclass
@@ -47,10 +50,48 @@ class ToolContext:
     project_root: str
     session_id: str
     permissions: Dict[str, bool] = field(default_factory=dict)
+    cancel_event: Optional[asyncio.Event] = None
+    register_undo_operation: Optional[Callable[[Callable[[], None]], None]] = None
 
     def get_cwd(self) -> str:
         """Get current working directory"""
         return self.working_directory
+
+    def is_cancelled(self) -> bool:
+        """Return True when the surrounding query has been interrupted."""
+        return bool(self.cancel_event and self.cancel_event.is_set())
+
+    def raise_if_cancelled(self) -> None:
+        """Abort the current tool call when the surrounding query is cancelled."""
+        if self.is_cancelled():
+            raise asyncio.CancelledError
+
+    def register_undo(self, undo_operation: Callable[[], None]) -> None:
+        """Register an undo operation to run if the surrounding turn is rolled back."""
+        if self.register_undo_operation is not None:
+            self.register_undo_operation(undo_operation)
+
+    def capture_file_rollback(self, file_path: str) -> None:
+        """Snapshot a file's current bytes so Write/Edit can restore it on rollback."""
+        full_path = os.path.abspath(file_path)
+        path = Path(full_path)
+        existed_before = path.exists()
+        previous_bytes = path.read_bytes() if existed_before else None
+
+        def undo() -> None:
+            if existed_before:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(previous_bytes or b"")
+                return
+
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            except IsADirectoryError:
+                pass
+
+        self.register_undo(undo)
 
 
 @runtime_checkable

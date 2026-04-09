@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed - 2026-04-09
 
+#### Escape Rollback And Tool Undo
+- Fixed `Escape` turn rewind in the TUI so interrupted turns now restore the last stable transcript boundary instead of leaving the UI in a partial thinking or partial message state
+- When `Escape` semantically undoes the latest submit, the prompt returns to an editable draft and the just-added prompt history entry is removed
+- Finished tool batches now become the rollback boundary only after the batch completes, so rewinding from a later thinking phase preserves the last completed assistant/tool result state
+- `Bash` tool cancellation now terminates the in-flight subprocess immediately when a turn is interrupted
+- `Write` and `Edit` tool side effects are now rolled back on interrupted turns by restoring overwritten file contents or deleting newly created files
+- Added regression coverage for TUI rollback boundaries, transcript/backend message alignment after resend, and file restoration for interrupted `Write` / `Edit` tool calls
+
 #### Tool Error Status In Transcript
 - Fixed `ToolResultEvent.is_error` propagation so tool-specific failures no longer render with a success indicator in the TUI or CLI
 - Added per-tool error classification for `Bash`, `Read`, `Write`, `Edit`, `Glob`, and `Grep`
