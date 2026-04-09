@@ -3,6 +3,9 @@
 
 Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 
+1. 此项目仅用于学习 Claude Code 基本工具调用原理，不考虑其它特性，基本不再更新。
+2. 对于基于 Python 的终端 AI 编程助手，后续转向使用 [toad](https://github.com/batrachianai/toad)，一个基于 ACP 协议的通用 Python AI TUI 框架。
+
 `claude-code-python` 是对官方 TypeScript 版 Claude Code 的 Python 3.12 重写，当前聚焦核心 agent 能力：CLI/TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义。
 
 ![Claude Code Python TUI](docs/assets/tui.png)
