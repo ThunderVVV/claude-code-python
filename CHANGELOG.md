@@ -125,7 +125,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### TUI Input And Clipboard
 - Replaced the single-line `Input` prompt with a dedicated `InputTextArea`.
 - Added Enter-to-submit and Shift+Enter newline handling in the prompt widget.
-- Added persistent in-session prompt history navigation on Up/Down, with history saved to `~/.claude_code_history.json`.
+- Added persistent in-session prompt history navigation on Up/Down, with history saved to `~/.claude-code-python/input_history.json`.
 - Reset the prompt document cleanly after submit so follow-up prompts do not inherit stray newlines.
 - Collapse the prompt to a stable single-line height while a turn is processing, then restore automatic height afterward.
 - Added app-level copy bindings for `Ctrl+C`, `Ctrl+Shift+C`, and `Cmd+C` when the terminal forwards it.

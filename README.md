@@ -22,7 +22,7 @@ Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 - **上下文使用提示**：TUI 输入框下方显示当前上下文占用情况
 - **内联 Diff 展示**：`Edit` 和 `Write` 工具结果以 diff 格式呈现，而非原始内容预览
 - **多行输入支持**：Enter 提交，Shift+Enter 换行
-- **输入历史**：上下键导航历史输入，持久化到 `~/.claude_code_history.json`
+- **输入历史**：上下键导航历史输入，持久化到 `~/.claude-code-python/input_history.json`
 - **TUI Session 持久化与恢复**：每次 TUI 对话都会分配唯一 session id，记录持久化到 `~/.claude-code-python/sessions/`，支持 resume
 - 针对 TUI 的无头回归测试，覆盖工具优先响应、滚动、复制和输入状态
 

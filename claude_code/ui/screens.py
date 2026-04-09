@@ -102,7 +102,7 @@ class REPLScreen(Screen):
         self._history: list[str] = []
         self._history_index: int = -1
         self._current_draft: str = ""
-        self._history_file = Path.home() / ".claude_code_history.json"
+        self._history_file = Path.home() / ".claude-code-python/input_history.json"
         if save_history:
             self._load_history()
 

@@ -18,7 +18,7 @@ Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 - **Context Usage Indicator**: Shows current context usage below TUI input box
 - **Inline Diff Display**: `Edit` and `Write` tool results rendered in diff format instead of raw content preview
 - **Multi-line Input Support**: Enter to submit, Shift+Enter for newline
-- **Input History**: Navigate history with Up/Down arrows, persisted to `~/.claude_code_history.json`
+- **Input History**: Navigate history with Up/Down arrows, persisted to `~/.claude-code-python/input_history.json`
 - **TUI Session Persistence And Resume**: Each TUI conversation gets a unique session id, persisted under `~/.claude-code-python/sessions/`, and can be resumed later
 - Headless regression testing for TUI, covering tool-first responses, scrolling, copy, and input states
 
