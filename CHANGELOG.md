@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added - 2026-04-10
 
 #### TUI Session Switcher Command
-- Added "sessions" command in TUI to switch between saved sessions without restarting
+- Added "/sessions" command in TUI to switch between saved sessions without restarting
 - Created `SessionResumeModal` widget for interactive session selection
 - Added `_show_session_picker()` method to launch the session picker modal
 - Added `_load_session()` method to load and replace current session with selected one
@@ -18,8 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added regression test `test_session_picker_uses_compact_action_buttons` for modal UI
 
 #### TUI Clear Command For New Session
-- Added "clear" command in TUI to start a fresh session without restarting the app
-- Typing "clear" in the input now resets the session ID, clears all messages, and shows the welcome widget
+- Added "/clear" command in TUI to start a fresh session without restarting the app
+- Typing "/clear" in the input now resets the session ID, clears all messages, and shows the welcome widget
 - `QueryEngine.clear()` now generates a new session ID to ensure a clean slate
 - Added `_start_new_session()` method in REPLScreen to handle session reset
 - Added regression test `test_clear_command_starts_new_session` to verify clear behavior

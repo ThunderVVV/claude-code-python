@@ -2299,8 +2299,8 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
                 # Get the session ID before clear
                 session_id_before = screen.query_engine.get_session_id()
 
-                # Now type "clear" command
-                input_widget.text = "clear"
+                # Now type "/clear" command
+                input_widget.text = "/clear"
                 input_widget._on_submit(input_widget.text)
                 await pilot.pause(0.1)
 

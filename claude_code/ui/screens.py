@@ -558,18 +558,18 @@ class REPLScreen(Screen):
         if not user_text:
             return
 
-        # Only a literal "exit" command should close the TUI.
-        if user_text.lower() == "exit":
+        # Only a literal "/exit" command should close the TUI.
+        if user_text.lower() == "/exit":
             self.app.exit()
             return
 
-        # Handle "clear" command to start a new session
-        if user_text.lower() == "clear":
+        # Handle "/clear" or "/new" command to start a new session
+        if user_text.lower() == "/clear" or user_text.lower() == "/new":
             self._start_new_session()
             return
 
-        # Handle "sessions" command to show session picker
-        if user_text.lower() == "sessions":
+        # Handle "/sessions" command to show session picker
+        if user_text.lower() == "/sessions":
             self._show_session_picker()
             return
 

@@ -225,7 +225,7 @@ async def run_cli_mode(
                 )
 
                 # Handle exit commands
-                if user_input.lower() in ("quit", "exit", "q"):
+                if user_input.lower() in ("/exit"):
                     click.echo(click.style("\n  Goodbye! 👋", fg="yellow"))
                     break
 
