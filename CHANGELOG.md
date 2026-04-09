@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-10
+
+#### TUI Clear Command For New Session
+- Added "clear" command in TUI to start a fresh session without restarting the app
+- Typing "clear" in the input now resets the session ID, clears all messages, and shows the welcome widget
+- `QueryEngine.clear()` now generates a new session ID to ensure a clean slate
+- Added `_start_new_session()` method in REPLScreen to handle session reset
+- Added regression test `test_clear_command_starts_new_session` to verify clear behavior
+
+### Changed - 2026-04-10
+
+#### Session Timestamp Timezone
+- Changed session timestamps from UTC to local system timezone
+- Renamed `_utc_now()` to `_local_now()` in `SessionStore`
+- Timestamps now use `datetime.now().isoformat()` instead of `datetime.now(timezone.utc).isoformat()`
+
 ### Added - 2026-04-09
 
 #### TUI Session Persistence And Resume

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -93,7 +93,7 @@ class SessionStore:
     ) -> PersistedSession:
         """Persist a stable session snapshot to disk."""
         existing = self.load_session(session_id)
-        now = _utc_now()
+        now = _local_now()
         resolved_created_at = created_at or (existing.created_at if existing else now)
         resolved_title = (
             (title or "").strip()
@@ -205,9 +205,9 @@ class SessionStore:
         return self.sessions_dir / f"{session_id}.json"
 
 
-def _utc_now() -> str:
-    """Return a stable UTC timestamp."""
-    return datetime.now(timezone.utc).isoformat()
+def _local_now() -> str:
+    """Return a timestamp in local system timezone."""
+    return datetime.now().isoformat()
 
 
 def _clone_usage(usage: Optional[Usage]) -> Usage:

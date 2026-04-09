@@ -562,6 +562,11 @@ class REPLScreen(Screen):
             self.app.exit()
             return
 
+        # Handle "clear" command to start a new session
+        if user_text.lower() == "clear":
+            self._start_new_session()
+            return
+
         self._hide_welcome_widget()
 
         # Add to history
@@ -591,6 +596,52 @@ class REPLScreen(Screen):
             exclusive=True,
             exit_on_error=False,
         )
+
+    def _start_new_session(self) -> None:
+        """Clear the current session and start a fresh one.
+
+        This clears all messages, resets the session ID, and shows the welcome widget.
+        Equivalent to starting a new TUI session.
+        """
+        if self._is_processing:
+            return
+
+        # Clear the query engine state and generate new session ID
+        self.query_engine.clear()
+
+        # Clear the message list UI
+        message_list = self.query_one("#message-list", MessageList)
+        message_list.clear()
+
+        # Reset session metadata
+        self._session_title = None
+        self._session_created_at = None
+        self._latest_usage = None
+
+        # Reset internal state
+        self._reset_streaming_state()
+        self._tool_use_context = {}
+        self._tool_widget_context = {}
+        self._turn_snapshot = None
+        self._cancelled_submission_ids.clear()
+
+        # Clear input and show welcome widget
+        input_widget = self.query_one("#user-input", InputTextArea)
+        input_widget.load_text("")
+
+        # Show welcome widget again
+        self._show_welcome = True
+        try:
+            welcome_widget = self.query_one("#welcome-widget", WelcomeWidget)
+            welcome_widget.display = True
+        except Exception:
+            pass
+
+        # Refresh context usage label
+        self._refresh_context_usage_label()
+
+        # Focus input
+        input_widget.focus()
 
     async def _process_message(self, user_text: str, submission_id: int) -> None:
         """Run a query in the background so the TUI stays responsive."""

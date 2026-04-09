@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
@@ -151,6 +152,17 @@ class FakeQueryEngine:
 
     def clear_interrupt(self) -> None:
         self._interrupt_reason = None
+
+    def clear(self) -> None:
+        """Clear state and reset to a new session (for testing clear command)."""
+        self._messages = []
+        self._current_turn = 0
+        self._total_usage = Usage()
+        self.state.total_usage = self._total_usage
+        self.state.current_turn = 0
+        self._interrupt_reason = None
+        # Generate new session ID
+        self._session_id = str(uuid.uuid4())
 
 
 class RecordingStreamingClient:
@@ -2206,6 +2218,71 @@ class TUITestCase(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(list(screen.query(".tool-result-block"))), 0)
                 self.assertIn("pwd", str(tool_toggles[0].title))
                 self.assertEqual(self._label_text(context_label), "Context: 12/100 (12%)")
+
+    async def test_clear_command_starts_new_session(self) -> None:
+        """Typing 'clear' should reset the session and show welcome widget."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_store = SessionStore(Path(tmpdir))
+
+            def event_factory(user_text: str):
+                return [
+                    MessageCompleteEvent(message=Message.user_message(user_text)),
+                    MessageCompleteEvent(
+                        message=Message.assistant_message(
+                            [TextContent(text="Hello!")],
+                            usage=Usage(input_tokens=5, output_tokens=2),
+                        )
+                    ),
+                    TurnCompleteEvent(turn=1, has_more_turns=False, stop_reason="stop"),
+                ]
+
+            original_session_id = "session-before-clear"
+            app = ClaudeCodeApp(
+                FakeQueryEngine(
+                    event_factory,
+                    session_id=original_session_id,
+                    working_directory="/tmp/project",
+                ),
+                model_name="test-model",
+                context_window_tokens=100,
+                save_history=False,
+                session_store=session_store,
+            )
+
+            async with app.run_test(size=(90, 16)) as pilot:
+                await pilot.pause()
+                screen = app.screen
+                input_widget = screen.query_one("#user-input", InputTextArea)
+
+                # Submit a message to populate the session
+                input_widget.text = "Hello"
+                input_widget._on_submit(input_widget.text)
+                await pilot.pause(0.2)
+
+                # Verify session has messages
+                welcome_widget = screen.query_one("#welcome-widget", WelcomeWidget)
+                self.assertFalse(welcome_widget.display)
+                self.assertEqual(len(screen.query_engine.get_messages()), 2)
+
+                # Get the session ID before clear
+                session_id_before = screen.query_engine.get_session_id()
+
+                # Now type "clear" command
+                input_widget.text = "clear"
+                input_widget._on_submit(input_widget.text)
+                await pilot.pause(0.1)
+
+                # Verify session was cleared
+                welcome_widget = screen.query_one("#welcome-widget", WelcomeWidget)
+                self.assertTrue(welcome_widget.display)
+                self.assertEqual(len(screen.query_engine.get_messages()), 0)
+
+                # Verify session ID changed
+                session_id_after = screen.query_engine.get_session_id()
+                self.assertNotEqual(session_id_before, session_id_after)
+
+                # Verify input is empty and focused
+                self.assertEqual(input_widget.text, "")
 
 
 if __name__ == "__main__":

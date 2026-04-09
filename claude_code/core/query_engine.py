@@ -190,10 +190,17 @@ class QueryEngine:
         return "\n\n".join(parts)
 
     def clear(self) -> None:
-        """Clear the query state"""
+        """Clear the query state and reset to a new session.
+
+        This effectively starts a fresh conversation with a new session_id,
+        as if the user had started a new TUI session.
+        """
         self.state.clear()
         self._undo_operations = []
         self.clear_interrupt()
+        # Reset to a new session ID
+        self._session_id = generate_uuid()
+        self.state.session_id = self._session_id
 
     def create_state_snapshot(self) -> QueryStateSnapshot:
         """Capture mutable state so the current turn can be rolled back."""
