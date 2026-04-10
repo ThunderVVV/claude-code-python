@@ -593,7 +593,6 @@ class REPLScreen(Screen):
 
         message_list = self.query_one("#message-list", MessageList)
         await self._render_persisted_messages(message_list, session.messages)
-        message_list.schedule_scroll_to_latest(auto_follow=True)
 
         # Focus input
         input_widget = self.query_one("#user-input", InputTextArea)
@@ -787,7 +786,6 @@ class REPLScreen(Screen):
 
         message_list = self.query_one("#message-list", MessageList)
         await self._render_persisted_messages(message_list, session.messages)
-        message_list.schedule_scroll_to_latest(auto_follow=True)
 
     async def _render_persisted_messages(
         self,
@@ -800,10 +798,12 @@ class REPLScreen(Screen):
         tool_widget_context: dict[str, ToolUseWidget] = {}
 
         for message in messages:
+            auto_follow = message_list.should_auto_follow_output()
+            
             if message.type == MessageRole.ASSISTANT:
                 assistant_widget = await message_list.create_assistant_widget(
                     message=message,
-                    auto_follow=False,
+                    auto_follow=auto_follow,
                 )
                 tool_widget_context = assistant_widget.get_tool_widgets()
                 tool_use_context = {
@@ -844,14 +844,14 @@ class REPLScreen(Screen):
                         tool_input=tool_use.input if tool_use else {},
                         result=tool_result.content,
                         is_error=tool_result.is_error,
-                        auto_follow=False,
+                        auto_follow=auto_follow,
                     )
                 continue
 
             assistant_widget = None
             tool_use_context = {}
             tool_widget_context = {}
-            await message_list.add_message(message, auto_follow=False)
+            await message_list.add_message(message, auto_follow=auto_follow)
 
     def _persist_session_boundary(
         self,
