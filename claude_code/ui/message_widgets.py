@@ -179,13 +179,13 @@ class StreamingTextWidget(TranscriptMarkdownWidget):
         await self.set_markdown_text(text)
 
 
-class ThinkingWidget(TranscriptMarkdownWidget):
-    """Widget for displaying reasoning content in a collapsible block."""
+class ThinkingWidget(Static):
+    """Widget for displaying reasoning content as plain text (no markdown)."""
 
     def __init__(self, initial_thinking: str = "", **kwargs):
         super().__init__(
+            sanitize_terminal_text(initial_thinking),
             classes="thinking-content",
-            initial_text=initial_thinking,
             **kwargs,
         )
         self._thinking = initial_thinking
@@ -193,12 +193,16 @@ class ThinkingWidget(TranscriptMarkdownWidget):
     async def append_thinking(self, thinking: str) -> None:
         """Append streamed thinking content."""
         self._thinking += thinking
-        await self.append_markdown(thinking)
+        self.update(sanitize_terminal_text(self._thinking))
 
     async def update_thinking(self, thinking: str) -> None:
         """Update the displayed thinking content."""
         self._thinking = thinking
-        await self.set_markdown_text(thinking)
+        self.update(sanitize_terminal_text(thinking))
+
+    async def finish_streaming(self) -> None:
+        """No-op for plain text widget."""
+        pass
 
 
 class ThinkingBlockWidget(VerticalGroup):
