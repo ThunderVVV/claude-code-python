@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added - 2026-04-10
 
+#### System Prompt Chinese Translation
+- Added complete Chinese translation of system prompts in `docs/system_prompt_chinese_translation.md`
+- Provides full reference for Chinese-speaking users to understand the agent's behavior and guidelines
+
+#### File Expansion For User Messages
+- Implemented file expansion feature allowing users to reference files in messages using `@file_path` syntax
+- Created `claude_code/core/file_expansion.py` module with `FileExpander` class for handling file references
+- Added automatic file content embedding when user messages contain file references
+- TUI now displays expanded files with visual indicators showing file names and line counts
+- Added CSS styles for file expansion display in TUI
+- Updated session storage to preserve expanded file information for session persistence
+
 #### TUI Session Switcher Command
 - Added "/sessions" command in TUI to switch between saved sessions without restarting
 - Created `SessionResumeModal` widget for interactive session selection
@@ -26,6 +38,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2026-04-10
 
+#### Test Suite Consolidation
+- Removed redundant test files from root directory (`test_cli.py`, `test_core.py`, `test_tui.py`)
+- Moved essential test logic into `claude_code/core/query_engine.py` and `claude_code/ui/screens.py` as inline methods
+- Reduced test code by 3374 lines while preserving core functionality testing
+
 #### Session Timestamp Timezone
 - Changed session timestamps from UTC to local system timezone
 - Renamed `_utc_now()` to `_local_now()` in `SessionStore`
@@ -41,6 +58,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - TUI session snapshots now save at the same stable rollback boundaries used by `Escape`, so interrupted partial turns do not become resumable history
 - Resume now reconstructs prior assistant/tool transcript structure so each tool call still renders as a single collapsible block after reload
 - Added regression coverage for session save boundaries, resume transcript rebuild, and session-picker helpers
+
+### Fixed - 2026-04-10
+
+#### TUI Command Consistency
+- Updated TUI session commands to include leading slashes for consistency (`/sessions`, `/clear`)
+- Fixed command option naming in CLI help text for better clarity
+
+#### Project Name Consistency
+- Updated all references from 'claude-code' to 'claude-code-python' across documentation and code
+- Updated README files to reflect the correct project name
+- Cleaned up outdated content in README_EN.md
+
+#### Welcome Message Clarity
+- Updated welcome message in `WelcomeWidget` to clearly explain session commands
+
+#### System Prompt Guidelines
+- Refined guidelines in `get_simple_doing_tasks_section` for clarity on when to ask for user confirmation
+- Refined guidelines in `get_simple_tone_and_style_section` for more specific communication style instructions
+
+#### History Navigation Direction
+- Corrected navigation direction description in `_navigate_history` method (Up for older, Down for newer)
 
 ### Fixed - 2026-04-09
 
