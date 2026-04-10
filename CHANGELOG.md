@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed - 2026-04-11
+
+#### CLI Mode Removal
+- Removed CLI mode (`--cli` flag) - the project now exclusively uses TUI interface
+- Removed `run_cli_mode()` function and related CLI-specific helper functions (`print_tool_use_header`, `print_tool_result`)
+- Removed `--cli` and `--tui` command-line options (TUI is now the only mode)
+- Updated documentation to reflect TUI-only interface
+- Simplified entry point logic - no longer needs to choose between CLI and TUI modes
+
+### Added - 2026-04-11
+
+#### Web Search Support
+- Added `@web` syntax support for triggering web search capabilities
+- `@web` expands to reference `tavily-search` and `tavily-extract` skill files
+- Requires optional skills installation in `.claude/skills/` directory
+- Updated README with web feature description and skills installation instructions
+
 ### Added - 2026-04-10
 
 #### System Prompt Chinese Translation
