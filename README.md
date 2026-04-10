@@ -8,7 +8,16 @@ Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 
 `claude-code-python` 是对官方 TypeScript 版 Claude Code 的 Python 3.12 重写，当前聚焦核心 agent 能力：CLI/TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义。
 
-![Claude Code Python TUI](docs/assets/tui.png)
+<table>
+  <tr>
+    <td align="center"><b>1. 欢迎界面</b></td>
+    <td align="center"><b>2. 工作界面</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/tui_example1.png" alt="Claude Code Python TUI - 欢迎界面"/></td>
+    <td><img src="docs/assets/tui_example2.png" alt="Claude Code Python TUI - 工作界面"/></td>
+  </tr>
+</table>
 
 ## 当前范围
 
