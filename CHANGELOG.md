@@ -6,7 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Removed - 2026-04-11
+### Changed - 2025-04-11
+
+#### Code Refactoring
+- Removed unused `StreamEvent` subclasses and redundant tool helper functions
+- Extracted `setup_logging()` function and pagination helpers to reduce code duplication
+- Simplified environment variable handling and API URL normalization
+- Reduced ~126 lines of redundant code
+
+### Removed - 2025-04-11
 
 #### CLI Mode Removal
 - Removed CLI mode (`--cli` flag) - the project now exclusively uses TUI interface

@@ -144,6 +144,31 @@ def resolve_initial_tui_session(
     return session
 
 
+def setup_logging(log_path: Optional[str], debug: bool) -> None:
+    """Set up logging with file and/or console handlers."""
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    # Root logger - set to WARNING to suppress third-party library noise
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.WARNING)
+
+    # Enable DEBUG for our package only
+    claude_logger = logging.getLogger('claude_code')
+    claude_logger.setLevel(logging.DEBUG)
+
+    if log_path:
+        file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter(log_format))
+        claude_logger.addHandler(file_handler)
+
+    if debug:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.DEBUG)
+        console_handler.setFormatter(logging.Formatter(log_format))
+        claude_logger.addHandler(console_handler)
+
+
 @click.command()
 @click.option(
     "--api-url",
@@ -216,43 +241,16 @@ def main(
     A Python implementation of Claude Code that helps with software engineering tasks.
     Uses OpenAI-compatible APIs to connect to various LLM providers.
     """
-    # Set up logging
-    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
     # Determine log file path
     log_path = resolve_log_path(log_file, debug)
     ensure_log_directory(log_path)
 
     # Configure logging
+    setup_logging(log_path, debug)
+
     if log_path:
-        # File handler for debug logging
-        file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(log_format))
-
-        # Root logger - set to WARNING to suppress third-party library noise
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.WARNING)
-
-        # Enable DEBUG for our package only
-        claude_logger = logging.getLogger('claude_code')
-        claude_logger.setLevel(logging.DEBUG)
-        claude_logger.addHandler(file_handler)
-
-        if debug:
-            # Also log to console if --debug
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.DEBUG)
-            console_handler.setFormatter(logging.Formatter(log_format))
-            claude_logger.addHandler(console_handler)
-
         click.echo(click.style(f"Debug logging to: {log_path}", fg="yellow"))
     elif debug:
-        # Console only - suppress third-party noise
-        logging.basicConfig(level=logging.WARNING, format=log_format)
-        claude_logger = logging.getLogger('claude_code')
-        claude_logger.setLevel(logging.DEBUG)
-        claude_logger.addHandler(logging.StreamHandler())
         click.echo(click.style("Debug logging enabled", fg="yellow"))
 
     # Load environment variables
@@ -262,12 +260,9 @@ def main(
         load_dotenv()
 
     # Get configuration from environment if not provided
-    if not api_url:
-        api_url = os.environ.get("CLAUDE_CODE_API_URL")
-    if not api_key:
-        api_key = os.environ.get("CLAUDE_CODE_API_KEY")
-    if not model:
-        model = os.environ.get("CLAUDE_CODE_MODEL")
+    api_url = api_url or os.environ.get("CLAUDE_CODE_API_URL")
+    api_key = api_key or os.environ.get("CLAUDE_CODE_API_KEY")
+    model = model or os.environ.get("CLAUDE_CODE_MODEL")
     context_window_tokens = get_configured_context_window_tokens()
 
     # Validate configuration
@@ -289,10 +284,9 @@ def main(
         sys.exit(1)
 
     # Ensure API URL doesn't end with /chat/completions
-    if api_url.endswith("/chat/completions"):
-        api_url = api_url.rsplit("/chat/completions", 1)[0]
-    elif api_url.endswith("/v1/chat/completions"):
-        api_url = api_url.rsplit("/v1/chat/completions", 1)[0] + "/v1"
+    api_url = api_url.removesuffix("/chat/completions")
+    if api_url.endswith("/v1/chat/completions"):
+        api_url = api_url.removesuffix("/chat/completions") + "/v1"
 
     # Launch TUI
     try:

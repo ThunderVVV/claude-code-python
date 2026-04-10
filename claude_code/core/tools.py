@@ -244,29 +244,4 @@ class ToolRegistry:
         """Get tool definitions for OpenAI API"""
         return [tool.to_openai_tool() for tool in self.list_enabled_tools()]
 
-    def tool_matches_name(self, tool: BaseTool, name: str) -> bool:
-        """Check if tool matches name (including aliases)"""
-        if tool.name == name:
-            return True
-        return name in getattr(tool, 'aliases', [])
 
-    def find_tool_by_name(self, name: str) -> Optional[BaseTool]:
-        """Find a tool by name or alias"""
-        return self.get(name)
-
-
-def tool_matches_name(tool: BaseTool, name: str) -> bool:
-    """Check if tool matches name (including aliases)"""
-    return tool.name == name or name in getattr(tool, 'aliases', [])
-
-
-def find_tool_by_name(tools: List[BaseTool], name: str) -> Optional[BaseTool]:
-    """Find a tool by name from a list"""
-    for tool in tools:
-        if tool_matches_name(tool, name):
-            return tool
-    return None
-
-
-# Global registry instance
-registry = ToolRegistry()

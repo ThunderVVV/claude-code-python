@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from claude_code.core.tools import BaseTool, ToolContext, ToolInputSchema, ValidationResult
 from claude_code.tools.file_utils import expand_path
@@ -13,6 +13,33 @@ from claude_code.tools.ripgrep import (
     apply_head_limit,
     rip_grep,
 )
+
+
+def _format_pagination_info(
+    applied_limit: Optional[int],
+    offset: int,
+) -> str:
+    """Format pagination info string for display."""
+    limit_info = []
+    if applied_limit is not None:
+        limit_info.append(f"limit: {applied_limit}")
+    if offset > 0:
+        limit_info.append(f"offset: {offset}")
+    return f" with pagination = {', '.join(limit_info)}" if limit_info else ""
+
+
+def _make_relative_paths(
+    paths: List[str],
+    base_path: str,
+) -> List[str]:
+    """Convert absolute paths to relative paths from base_path."""
+    result = []
+    for path in paths:
+        try:
+            result.append(os.path.relpath(path, base_path))
+        except ValueError:
+            result.append(path)
+    return result
 
 
 class GrepTool(BaseTool):
@@ -244,14 +271,9 @@ class GrepTool(BaseTool):
                         final_lines.append(line)
 
                 content = "\n".join(final_lines)
-                limit_info = []
-                if applied_limit is not None:
-                    limit_info.append(f"limit: {applied_limit}")
-                if offset > 0:
-                    limit_info.append(f"offset: {offset}")
-
-                if limit_info:
-                    content += f"\n\n[Showing results with pagination = {', '.join(limit_info)}]"
+                pagination = _format_pagination_info(applied_limit, offset)
+                if pagination:
+                    content += f"\n\n[Showing results{pagination}]"
 
                 return content or "No matches found"
 
@@ -284,15 +306,8 @@ class GrepTool(BaseTool):
                         final_count_lines.append(line)
 
                 content = "\n".join(final_count_lines)
-                limit_info = []
-                if applied_limit is not None:
-                    limit_info.append(f"limit: {applied_limit}")
-                if offset > 0:
-                    limit_info.append(f"offset: {offset}")
-
-                summary = f"\n\nFound {total_matches} total {'occurrence' if total_matches == 1 else 'occurrences'} across {file_count} {'file' if file_count == 1 else 'files'}"
-                if limit_info:
-                    summary += f" with pagination = {', '.join(limit_info)}"
+                pagination = _format_pagination_info(applied_limit, offset)
+                summary = f"\n\nFound {total_matches} total {'occurrence' if total_matches == 1 else 'occurrences'} across {file_count} {'file' if file_count == 1 else 'files'}{pagination}"
 
                 return (content or "No matches found") + summary
 
@@ -301,28 +316,13 @@ class GrepTool(BaseTool):
             )
 
             sorted_matches = sorted(limited_results)
-
-            relative_matches = []
-            for match in sorted_matches:
-                try:
-                    rel_path = os.path.relpath(match, absolute_path)
-                    relative_matches.append(rel_path)
-                except ValueError:
-                    relative_matches.append(match)
+            relative_matches = _make_relative_paths(sorted_matches, absolute_path)
 
             if not relative_matches:
                 return "No files found"
 
-            limit_info = []
-            if applied_limit is not None:
-                limit_info.append(f"limit: {applied_limit}")
-            if offset > 0:
-                limit_info.append(f"offset: {offset}")
-
-            result = f"Found {len(relative_matches)} {'file' if len(relative_matches) == 1 else 'files'}"
-            if limit_info:
-                result += f" {', '.join(limit_info)}"
-            result += "\n" + "\n".join(relative_matches)
+            pagination = _format_pagination_info(applied_limit, offset)
+            result = f"Found {len(relative_matches)} {'file' if len(relative_matches) == 1 else 'files'}{pagination}\n" + "\n".join(relative_matches)
 
             return result
 

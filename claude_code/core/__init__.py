@@ -20,7 +20,6 @@ from claude_code.core.messages import (
     TurnCompleteEvent,
     RequestStartEvent,
     ErrorEvent,
-    StreamEvent,
 )
 from claude_code.core.query_engine import (
     QueryEngine,
@@ -36,9 +35,6 @@ from claude_code.core.tools import (
     ToolRegistry,
     PermissionResult,
     ValidationResult,
-    registry,
-    tool_matches_name,
-    find_tool_by_name,
 )
 
 __all__ = [
@@ -61,7 +57,6 @@ __all__ = [
     "TurnCompleteEvent",
     "RequestStartEvent",
     "ErrorEvent",
-    "StreamEvent",
     # Query Engine
     "QueryEngine",
     "QueryConfig",
@@ -75,7 +70,4 @@ __all__ = [
     "ToolRegistry",
     "PermissionResult",
     "ValidationResult",
-    "registry",
-    "tool_matches_name",
-    "find_tool_by_name",
 ]

@@ -33,7 +33,7 @@ from claude_code.core.messages import (
     ErrorEvent,
     generate_uuid,
 )
-from claude_code.core.tools import ToolContext, ToolRegistry, find_tool_by_name
+from claude_code.core.tools import ToolContext, ToolRegistry
 from claude_code.core.prompts import create_default_system_prompt, build_context_message
 from claude_code.core.file_expansion import expand_file_references
 from claude_code.services.openai_client import (
