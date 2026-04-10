@@ -194,7 +194,7 @@ class REPLScreen(Screen):
                 self._navigate_history(-1)  # Go to newer history (decrease index)
 
     def _navigate_history(self, direction: int) -> None:
-        """Navigate history (direction: -1 for up/older, 1 for down/newer)"""
+        """Navigate history (direction: 1 for up/older, -1 for down/newer)"""
         input_widget = self.query_one("#user-input", InputTextArea)
 
         # Save current draft when starting navigation
