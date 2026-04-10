@@ -2,6 +2,7 @@
 # Claude Code Python
 
 > Code Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
+
 > WARNING: 本项目绝大部分为AI生成代码
 
 1. 此项目仅用于个人探究 Claude Code 基本工具调用原理、系统提示词、工具提示词设计，仅用于个人学习，不保证更新和维护。
@@ -12,7 +13,7 @@
 <table>
   <tr>
     <td align="center"><b>欢迎界面</b></td>
-    <td align="center"><b>工作界面</b></td>
+    <td align="center"><b>Code Diff渲染</b></td>
   </tr>
   <tr>
     <td><img src="docs/assets/tui_welcome.png" alt="Claude Code Python TUI - 欢迎界面"/></td>
