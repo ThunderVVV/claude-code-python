@@ -177,6 +177,21 @@ class REPLScreen(Screen):
         """Handle submit from InputTextArea."""
         self._start_message_submission(text)
 
+    async def on_mouse_down(self, event: events.MouseDown) -> None:
+        """Keep focus on input area when clicking elsewhere."""
+        # Always refocus the input widget after any mouse click
+        # This ensures the cursor stays in the input box
+        input_widget = self.query_one("#user-input", InputTextArea)
+        if not input_widget.has_focus and not self._is_processing:
+            input_widget.focus()
+
+    async def on_mouse_up(self, event: events.MouseUp) -> None:
+        """Refocus input after drag operations complete."""
+        # Refocus after drag operations (selecting text, etc.)
+        input_widget = self.query_one("#user-input", InputTextArea)
+        if not input_widget.has_focus and not self._is_processing:
+            input_widget.focus()
+
     async def on_key(self, event: events.Key) -> None:
         """Handle keyboard events for history navigation"""
         if event.key == "escape" and self._is_processing:
