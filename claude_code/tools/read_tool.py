@@ -84,13 +84,6 @@ Usage:
             return os.path.basename(path)
         return self.name
 
-    def is_error_result(
-        self,
-        result: str,
-        input: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        return result.startswith("Error")
-
     async def validate_input(
         self,
         input: Dict[str, Any],

@@ -394,7 +394,3 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
             return f"Error: Permission denied executing command"
         except Exception as e:
             return f"Error executing command: {str(e)}"
-
-
-# Export for convenience
-Bash = BashTool()

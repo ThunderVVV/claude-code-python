@@ -284,9 +284,10 @@ def main(
         sys.exit(1)
 
     # Ensure API URL doesn't end with /chat/completions
-    api_url = api_url.removesuffix("/chat/completions")
     if api_url.endswith("/v1/chat/completions"):
-        api_url = api_url.removesuffix("/chat/completions") + "/v1"
+        api_url = api_url.removesuffix("/chat/completions")
+    else:
+        api_url = api_url.removesuffix("/chat/completions")
 
     # Launch TUI
     try:

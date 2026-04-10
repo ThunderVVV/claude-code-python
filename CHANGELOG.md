@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2025-04-12
+
+#### Code Cleanup
+- Removed unused `ToolProtocol` class and `ToolInputSchema.additional_properties` field
+- Removed redundant `QueryState.max_turns` field (duplicates `QueryConfig.max_turns`)
+- Removed redundant `is_error_result()` implementations in tool classes (now inherit from `BaseTool`)
+- Removed unused `Bash = BashTool()` global instance
+- Fixed API URL normalization bug in CLI
+- Reduced ~50 lines of redundant code
+
 ### Changed - 2025-04-11
 
 #### Code Refactoring

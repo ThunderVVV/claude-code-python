@@ -55,13 +55,6 @@ class GlobTool(BaseTool):
             return f"Searching for '{pattern}'"
         return "Searching for files"
 
-    def is_error_result(
-        self,
-        result: str,
-        input: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        return result.startswith("Error")
-
     async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
         pattern = input.get("pattern", "")
         if not pattern:

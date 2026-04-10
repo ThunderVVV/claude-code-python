@@ -272,7 +272,6 @@ class QueryState:
     messages: List[Message] = field(default_factory=list)
     tool_calls: List[ToolCallState] = field(default_factory=list)
     current_turn: int = 0
-    max_turns: int = 1000000
     is_streaming: bool = False
     current_streaming_text: str = ""
     session_id: str = field(default_factory=generate_uuid)

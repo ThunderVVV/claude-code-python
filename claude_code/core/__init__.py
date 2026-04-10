@@ -29,7 +29,6 @@ from claude_code.core.query_engine import (
 )
 from claude_code.core.tools import (
     BaseTool,
-    ToolProtocol,
     ToolContext,
     ToolInputSchema,
     ToolRegistry,
@@ -64,7 +63,6 @@ __all__ = [
     "ask",
     # Tools
     "BaseTool",
-    "ToolProtocol",
     "ToolContext",
     "ToolInputSchema",
     "ToolRegistry",

@@ -8,7 +8,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol, TypeVar, Generic, runtime_checkable
+from typing import Any, Callable, Dict, List, Optional
 
 
 @dataclass
@@ -17,7 +17,6 @@ class ToolInputSchema:
     type: str = "object"
     properties: Dict[str, Any] = field(default_factory=dict)
     required: List[str] = field(default_factory=list)
-    additional_properties: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -92,25 +91,6 @@ class ToolContext:
                 pass
 
         self.register_undo(undo)
-
-
-@runtime_checkable
-class ToolProtocol(Protocol):
-    """Protocol defining the interface all tools must implement"""
-    name: str
-    description: str
-    input_schema: ToolInputSchema
-
-    async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
-        """Execute the tool with given input and context"""
-        ...
-
-    def is_enabled(self) -> bool:
-        """Check if tool is enabled"""
-        ...
-
-
-T = TypeVar('T')
 
 
 class BaseTool(ABC):
@@ -188,8 +168,10 @@ class BaseTool(ABC):
         result: str,
         input: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """Check whether a tool result string should be treated as a failure."""
-        return False
+        """Check whether a tool result string should be treated as a failure.
+        Default implementation checks if result starts with 'Error'.
+        """
+        return result.startswith("Error")
 
     def to_openai_tool(self) -> Dict[str, Any]:
         """Convert to OpenAI tool format"""
