@@ -68,7 +68,7 @@ class QueryResult:
 
 
 @dataclass
-class QueryStateSnapshot:
+class EngineStateSnapshot:
     """Snapshot of mutable query state used for turn rollback."""
 
     message_count: int
@@ -203,10 +203,10 @@ class QueryEngine:
         self._session_id = generate_uuid()
         self.state.session_id = self._session_id
 
-    def create_state_snapshot(self) -> QueryStateSnapshot:
+    def create_state_snapshot(self) -> EngineStateSnapshot:
         """Capture mutable state so the current turn can be rolled back."""
         usage = self.state.total_usage
-        return QueryStateSnapshot(
+        return EngineStateSnapshot(
             message_count=len(self.state.messages),
             tool_call_count=len(self.state.tool_calls),
             current_turn=self.state.current_turn,
@@ -219,7 +219,7 @@ class QueryEngine:
 
     def rollback_to_snapshot(
         self,
-        snapshot: QueryStateSnapshot,
+        snapshot: EngineStateSnapshot,
         message_count: Optional[int] = None,
     ) -> None:
         """Restore state captured before an interrupted turn."""
@@ -489,7 +489,8 @@ class QueryEngine:
                     return
 
                 # Execute tool calls
-                logger.debug(f"Executing {len(tool_use_blocks)} tool calls")
+                logger.debug(f"Executing {len(tool_use_blocks)} tool calls"
+                             f"{[tool_use.name for tool_use in tool_use_blocks]}")
                 tool_results: List[tuple] = []
 
                 for tool_use in tool_use_blocks:
