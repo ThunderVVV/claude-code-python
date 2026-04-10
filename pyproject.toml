@@ -2,7 +2,7 @@
 name = "claude-code-python"
 version = "0.1.0"
 description = "Python port of Claude Code - AI programming assistant"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 authors = [
     { name = "Claude Code Python Port" }
 ]
@@ -44,7 +44,7 @@ line-length = 88
 target-version = "py312"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 

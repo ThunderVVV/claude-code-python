@@ -8,7 +8,7 @@
 1. 此项目仅用于个人探究 Claude Code 基本工具调用原理、系统提示词、工具提示词设计，仅用于个人学习，不保证更新和维护。
 2. 此项目的部分前端组件(例如代码diff view)参考了 [toad](https://github.com/batrachianai/toad)，也是一个Python AI TUI。
 
-`claude-code-python` 是利用 AI 对官方 TypeScript 版 Claude Code 的 Python 3.12 简化版重写，当前聚焦核心 agent 能力：TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
+`claude-code-python` 是利用 AI 对官方 TypeScript 版 Claude Code 的 Python 简化版重写，当前聚焦核心 agent 能力：TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
 
 <table>
   <tr>
@@ -58,7 +58,7 @@
 要求：
 
 - MacOS / Linux / Windows(仅支持WSL启动)
-- Python 3.12+，推荐使用pyenv安装
+- Python 3.14+，推荐使用pyenv安装
 - **ripgrep (rg)** - Grep 工具依赖
 
 > WSL下需要  export COLORTERM=truecolor，否则配色不正常
