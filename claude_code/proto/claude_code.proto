@@ -1,0 +1,223 @@
+syntax = "proto3";
+
+package claude_code;
+
+option python_package = "claude_code.proto";
+
+// ============ Common Types ============
+
+message Usage {
+    int32 input_tokens = 1;
+    int32 output_tokens = 2;
+}
+
+message TextContent {
+    string text = 1;
+}
+
+message ThinkingContent {
+    string thinking = 1;
+    string signature = 2;
+}
+
+message ToolUseContent {
+    string id = 1;
+    string name = 2;
+    string input_json = 3;
+}
+
+message ToolResultContent {
+    string tool_use_id = 1;
+    string content = 2;
+    bool is_error = 3;
+}
+
+message ContentBlock {
+    oneof block {
+        TextContent text = 1;
+        ThinkingContent thinking = 2;
+        ToolUseContent tool_use = 3;
+        ToolResultContent tool_result = 4;
+    }
+}
+
+enum MessageRole {
+    MESSAGE_ROLE_UNSPECIFIED = 0;
+    MESSAGE_ROLE_USER = 1;
+    MESSAGE_ROLE_ASSISTANT = 2;
+    MESSAGE_ROLE_SYSTEM = 3;
+    MESSAGE_ROLE_TOOL = 4;
+}
+
+message Message {
+    MessageRole role = 1;
+    repeated ContentBlock content = 2;
+    string uuid = 3;
+    int64 timestamp = 4;
+    string original_text = 5;
+}
+
+message FileExpansion {
+    string file_path = 1;
+    string content = 2;
+}
+
+// ============ Query Events (for streaming) ============
+
+message TextEvent {
+    string text = 1;
+}
+
+message ThinkingEvent {
+    string thinking = 1;
+}
+
+message ToolUseEvent {
+    string tool_use_id = 1;
+    string tool_name = 2;
+    string input_json = 3;
+}
+
+message ToolResultEvent {
+    string tool_use_id = 1;
+    string result = 2;
+    bool is_error = 3;
+}
+
+message MessageCompleteEvent {
+    Message message = 1;
+}
+
+message TurnCompleteEvent {
+    int32 turn = 1;
+    bool has_more_turns = 2;
+    string stop_reason = 3;
+}
+
+message RequestStartEvent {}
+
+message ErrorEvent {
+    string error = 1;
+    bool is_fatal = 2;
+}
+
+message QueryEvent {
+    oneof event {
+        TextEvent text_event = 1;
+        ThinkingEvent thinking_event = 2;
+        ToolUseEvent tool_use_event = 3;
+        ToolResultEvent tool_result_event = 4;
+        MessageCompleteEvent message_complete_event = 5;
+        TurnCompleteEvent turn_complete_event = 6;
+        RequestStartEvent request_start_event = 7;
+        ErrorEvent error_event = 8;
+    }
+}
+
+// ============ Chat Service ============
+
+message ChatRequest {
+    string session_id = 1;
+    string user_text = 2;
+    string working_directory = 3;
+}
+
+message ChatResponse {
+    QueryEvent event = 1;
+}
+
+message StreamChatRequest {
+    oneof request {
+        ChatRequest chat_request = 1;
+        string interrupt_signal = 2;
+    }
+}
+
+// ============ Session Service ============
+
+message CreateSessionRequest {
+    string working_directory = 1;
+}
+
+message CreateSessionResponse {
+    string session_id = 1;
+}
+
+message GetSessionRequest {
+    string session_id = 1;
+}
+
+message GetSessionResponse {
+    string session_id = 1;
+    repeated Message messages = 2;
+    int32 current_turn = 3;
+    Usage total_usage = 4;
+    string working_directory = 5;
+    string title = 6;
+}
+
+message ListSessionsRequest {}
+
+message SessionSummary {
+    string session_id = 1;
+    string title = 2;
+    int64 updated_at = 3;
+    string working_directory = 4;
+    int32 message_count = 5;
+}
+
+message ListSessionsResponse {
+    repeated SessionSummary sessions = 1;
+}
+
+message DeleteSessionRequest {
+    string session_id = 1;
+}
+
+message DeleteSessionResponse {
+    bool success = 1;
+}
+
+message ClearSessionRequest {
+    string session_id = 1;
+}
+
+message ClearSessionResponse {
+    bool success = 1;
+}
+
+message GetStateRequest {
+    string session_id = 1;
+}
+
+message GetStateResponse {
+    int32 message_count = 1;
+    int32 current_turn = 2;
+    bool is_streaming = 3;
+    Usage total_usage = 4;
+}
+
+message InterruptRequest {
+    string session_id = 1;
+    string reason = 2;
+}
+
+message InterruptResponse {
+    bool success = 1;
+}
+
+// ============ Services ============
+
+service ChatService {
+    rpc StreamChat(stream StreamChatRequest) returns (stream ChatResponse);
+    rpc GetState(GetStateRequest) returns (GetStateResponse);
+    rpc Interrupt(InterruptRequest) returns (InterruptResponse);
+}
+
+service SessionService {
+    rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+    rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+    rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+    rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
+    rpc ClearSession(ClearSessionRequest) returns (ClearSessionResponse);
+}

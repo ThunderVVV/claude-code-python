@@ -10,6 +10,37 @@
 
 `claude-code-python` 是利用 AI 对官方 TypeScript 版 Claude Code 的 Python 简化版重写，当前聚焦核心 agent 能力：TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
 
+## 架构说明
+
+本项目支持两种运行模式：
+
+### 1. 单体模式（默认）
+前后端集成在同一进程中，直接调用 OpenAI 兼容 API。
+
+```
+┌─────────────────────────────────────┐
+│           TUI (Textual)             │
+├─────────────────────────────────────┤
+│          QueryEngine                │
+├─────────────────────────────────────┤
+│        OpenAI Client                │
+└─────────────────────────────────────┘
+```
+
+### 2. 前后端分离模式（gRPC）
+后端作为独立服务运行，前端通过 gRPC 连接。
+
+```
+┌─────────────────────┐     gRPC      ┌─────────────────────┐
+│   TUI Client        │◄──────────────►│   gRPC Server       │
+│   (Textual)         │               │                     │
+├─────────────────────┤               ├─────────────────────┤
+│ GrpcQueryEngine     │               │ QueryEngine         │
+├─────────────────────┤               ├─────────────────────┤
+│ ClaudeCodeClient    │               │ OpenAI Client       │
+└─────────────────────┘               └─────────────────────┘
+```
+
 <table>
   <tr>
     <td align="center"><b>欢迎界面</b></td>
@@ -37,6 +68,7 @@
 - **OpenAI 兼容**：使用官方 OpenAI Python SDK，支持所有 OpenAI 兼容的 API
 - **工具集**：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
 - **系统提示词对齐**：与 TypeScript 版本保持一致的系统提示词和工具描述
+- **gRPC 前后端分离**：支持将后端部署为独立服务
 
 ### TUI 特性
 - **推理/思考内容支持**：显示模型的推理过程
@@ -58,7 +90,7 @@
 要求：
 
 - MacOS / Linux / Windows(仅支持WSL启动)
-- Python 3.14+，推荐使用pyenv安装
+- Python 3.12+
 - **ripgrep (rg)** - Grep 工具依赖
 
 > WSL下需要  export COLORTERM=truecolor，否则配色不正常
@@ -81,6 +113,14 @@ cd claude-code-python
 pip install -e .
 ```
 
+### 生成 gRPC 代码
+
+如果使用前后端分离模式，需要生成 gRPC Python 代码：
+
+```bash
+python scripts/generate_proto.py
+```
+
 ## 配置
 
 推荐在仓库根目录创建 `.env`：
@@ -90,11 +130,15 @@ CLAUDE_CODE_API_URL=https://api.openai.com/v1
 CLAUDE_CODE_API_KEY=your-api-key
 CLAUDE_CODE_MODEL=gpt-4.1
 CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
+
+# gRPC 模式配置（可选）
+CLAUDE_CODE_GRPC_HOST=localhost
+CLAUDE_CODE_GRPC_PORT=50051
 ```
 
-`CLAUDE_CODE_MAX_CONTEXT_TOKENS` 用于 TUI 输入框下方的上下文占用提示行，显示当前已用上下文 token 数 / 模型总上下文 token 数 / 百分比。这个值不会自动推断，需按你实际使用的模型在 `.env` 中显式填写。
-
 ## 运行
+
+### 单体模式（默认）
 
 启动 TUI：
 
@@ -108,27 +152,87 @@ claude-code-python
 cc-py
 ```
 
-### 可选 Skills
+### 前后端分离模式
 
-如需使用 `@web` Web 搜索功能，需安装以下 skills：
+**1. 启动 gRPC 服务端：**
 
-1. **tavily-search** - Web 搜索能力
-2. **tavily-extract** - Web 内容提取能力
-
-安装方式：在项目根目录创建 `.claude/skills/` 目录，并将 skill 文件放入其中：
-
-```
-.claude/
-└── skills/
-    ├── tavily-search/
-    │   └── SKILL.md
-    └── tavily-extract/
-        └── SKILL.md
+```bash
+cc-server --host 0.0.0.0 --port 50051
 ```
 
-> 注：skills 需要自行获取或编写，本项目不包含这些文件。
+服务端选项：
+- `--api-url`: OpenAI 兼容 API URL
+- `--api-key`: API 密钥
+- `--model`: 模型名称
+- `--host`: 绑定地址（默认 `[::]`）
+- `--port`: 端口（默认 50051）
 
-> 注意:本项目不支持skills系统，web功能通过解析固定路径 tavily-search 和 tavily-extract skills的SKILLS.md文件，附加到输入消息中实现）
+**2. 启动 TUI 客户端：**
+
+```bash
+cc-py --grpc --grpc-host localhost --grpc-port 50051
+```
+
+或通过环境变量：
+
+```bash
+export CLAUDE_CODE_GRPC_HOST=localhost
+export CLAUDE_CODE_GRPC_PORT=50051
+cc-py --grpc
+```
+
+**3. 使用命令行客户端：**
+
+```bash
+# 发送消息
+cc-client chat "你的问题"
+
+# 列出会话
+cc-client list-sessions
+
+# 创建新会话
+cc-client create-session
+
+# 删除会话
+cc-client delete-session <session_id>
+```
+
+## gRPC API
+
+### 服务定义
+
+#### ChatService
+
+```protobuf
+service ChatService {
+    rpc StreamChat(stream StreamChatRequest) returns (stream ChatResponse);
+    rpc GetState(GetStateRequest) returns (GetStateResponse);
+    rpc Interrupt(InterruptRequest) returns (InterruptResponse);
+}
+```
+
+#### SessionService
+
+```protobuf
+service SessionService {
+    rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+    rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+    rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+    rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
+    rpc ClearSession(ClearSessionRequest) returns (ClearSessionResponse);
+}
+```
+
+### 事件流
+
+`StreamChat` 返回的事件类型：
+- `TextEvent`: 文本内容
+- `ThinkingEvent`: 思考/推理内容
+- `ToolUseEvent`: 工具调用
+- `ToolResultEvent`: 工具结果
+- `MessageCompleteEvent`: 消息完成
+- `TurnCompleteEvent`: 回合完成
+- `ErrorEvent`: 错误
 
 ## sessions系统
 
@@ -159,6 +263,28 @@ claude-code-python --debug
 
 如果同时指定了 `--log-file`，调试日志会写到指定路径；否则会自动写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`。
 
+
+## 可选 Skills
+
+如需使用 `@web` Web 搜索功能，需安装以下 skills：
+
+1. **tavily-search** - Web 搜索能力
+2. **tavily-extract** - Web 内容提取能力
+
+安装方式：在项目根目录创建 `.claude/skills/` 目录，并将 skill 文件放入其中：
+
+```
+.claude/
+└── skills/
+    ├── tavily-search/
+    │   └── SKILL.md
+    └── tavily-extract/
+        └── SKILL.md
+```
+
+> 注：skills 需要自行获取或编写，本项目不包含这些文件。
+
+> 注意:本项目不支持skills系统，web功能通过解析固定路径 tavily-search 和 tavily-extract skills的SKILLS.md文件，附加到输入消息中实现）
 
 ## 许可证
 

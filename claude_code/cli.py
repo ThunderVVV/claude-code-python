@@ -1,4 +1,3 @@
-
 """CLI entry point for Claude Code Python - aligned with TypeScript main.tsx and cli.tsx"""
 
 from __future__ import annotations
@@ -15,7 +14,11 @@ from dotenv import load_dotenv
 
 from claude_code.core.context_window import get_configured_context_window_tokens
 from claude_code.core.query_engine import QueryEngine, QueryConfig
-from claude_code.core.session_store import PersistedSession, SessionStore, SessionSummary
+from claude_code.core.session_store import (
+    PersistedSession,
+    SessionStore,
+    SessionSummary,
+)
 from claude_code.core.tools import ToolRegistry
 from claude_code.services.openai_client import OpenAIClientConfig
 from claude_code.tools import (
@@ -29,7 +32,6 @@ from claude_code.tools.bash_tool import BashTool
 
 
 def create_tool_registry() -> ToolRegistry:
-    """Create and populate the tool registry with all available tools"""
     registry = ToolRegistry()
     registry.register(ReadTool())
     registry.register(WriteTool())
@@ -45,7 +47,6 @@ def resolve_log_path(
     debug: bool,
     now: Optional[datetime] = None,
 ) -> Optional[str]:
-    """Return the log file path for the current invocation."""
     if log_file:
         return log_file
     if not debug:
@@ -55,14 +56,12 @@ def resolve_log_path(
 
 
 def ensure_log_directory(log_path: Optional[str]) -> None:
-    """Create the parent directory for a log path when needed."""
     if not log_path:
         return
     Path(log_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
 
 def format_session_summary(index: int, session: SessionSummary) -> str:
-    """Format a saved session for terminal selection."""
     updated_at = session.updated_at.replace("T", " ")
     cwd = session.working_directory or "."
     return (
@@ -78,7 +77,6 @@ def resolve_session_choice(
     choice: str,
     sessions: list[SessionSummary],
 ) -> Optional[str]:
-    """Resolve a numeric picker choice or literal session ID."""
     normalized = choice.strip()
     if not normalized:
         return None
@@ -93,7 +91,6 @@ def resolve_session_choice(
 
 
 def prompt_for_session_selection(session_store: SessionStore) -> Optional[str]:
-    """Prompt in the terminal for a saved TUI session."""
     sessions = session_store.list_sessions()
     if not sessions:
         click.echo("No saved sessions found. Starting a new session.")
@@ -126,7 +123,6 @@ def resolve_initial_tui_session(
     session_id: Optional[str],
     use_sessions: bool,
 ) -> Optional[PersistedSession]:
-    """Resolve the initial TUI session from CLI flags."""
     if session_id and use_sessions:
         raise click.UsageError("--resume and --sessions cannot be used together.")
 
@@ -145,19 +141,16 @@ def resolve_initial_tui_session(
 
 
 def setup_logging(log_path: Optional[str], debug: bool) -> None:
-    """Set up logging with file and/or console handlers."""
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-    # Root logger - set to WARNING to suppress third-party library noise
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.WARNING)
 
-    # Enable DEBUG for our package only
-    claude_logger = logging.getLogger('claude_code')
+    claude_logger = logging.getLogger("claude_code")
     claude_logger.setLevel(logging.DEBUG)
 
     if log_path:
-        file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
+        file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter(log_format))
         claude_logger.addHandler(file_handler)
@@ -167,6 +160,106 @@ def setup_logging(log_path: Optional[str], debug: bool) -> None:
         console_handler.setLevel(logging.DEBUG)
         console_handler.setFormatter(logging.Formatter(log_format))
         claude_logger.addHandler(console_handler)
+
+
+def run_tui_local(
+    api_url: str,
+    api_key: str,
+    model: str,
+    system_prompt: Optional[str],
+    max_turns: int,
+    session_id: Optional[str],
+    sessions: bool,
+    context_window_tokens: Optional[int],
+    session_store: SessionStore,
+    initial_session: Optional[PersistedSession],
+) -> None:
+    registry = create_tool_registry()
+    client_config = OpenAIClientConfig(
+        api_url=api_url,
+        api_key=api_key,
+        model_name=model,
+    )
+    query_config = QueryConfig(
+        system_prompt=system_prompt or "",
+        stream=True,
+        max_turns=max_turns,
+        working_directory=(
+            initial_session.working_directory if initial_session else ""
+        ),
+    )
+    engine = QueryEngine(
+        client_config,
+        registry,
+        query_config,
+        session_id=(initial_session.session_id if initial_session else None),
+        initial_messages=(list(initial_session.messages) if initial_session else None),
+        initial_current_turn=(initial_session.current_turn if initial_session else 0),
+        initial_usage=(initial_session.total_usage if initial_session else None),
+    )
+    from claude_code.ui.app import ClaudeCodeApp
+
+    app = ClaudeCodeApp(
+        engine,
+        model_name=model,
+        context_window_tokens=context_window_tokens,
+        session_store=session_store,
+        initial_session=initial_session,
+    )
+    app.run()
+
+
+def run_tui_grpc(
+    grpc_host: str,
+    grpc_port: int,
+    session_id: Optional[str],
+    sessions: bool,
+    context_window_tokens: Optional[int],
+    working_directory: str,
+) -> None:
+    from claude_code.client.grpc_client import ClaudeCodeClient
+    from claude_code.client.grpc_engine import GrpcQueryEngine
+    from claude_code.ui.app import ClaudeCodeApp
+
+    client = ClaudeCodeClient(grpc_host, grpc_port)
+
+    async def get_session():
+        await client.connect()
+        if session_id:
+            return await client.get_session(session_id)
+        if sessions:
+            sessions_list = await client.list_sessions()
+            if sessions_list:
+                click.echo("Saved sessions:\n")
+                for i, s in enumerate(sessions_list, 1):
+                    click.echo(f"{i}. {s.title} ({s.session_id})")
+                choice = click.prompt("Select session", default="", type=str)
+                if choice.isdigit():
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(sessions_list):
+                        return await client.get_session(sessions_list[idx].session_id)
+        return None
+
+    import asyncio
+
+    session_info = asyncio.run(get_session())
+
+    engine = GrpcQueryEngine(
+        client,
+        session_id=(session_info.session_id if session_info else None),
+        working_directory=(
+            session_info.working_directory if session_info else working_directory
+        ),
+    )
+
+    app = ClaudeCodeApp(
+        engine,
+        model_name="grpc-remote",
+        context_window_tokens=context_window_tokens,
+        session_store=None,
+        initial_session=None,
+    )
+    app.run()
 
 
 @click.command()
@@ -223,7 +316,25 @@ def setup_logging(log_path: Optional[str], debug: bool) -> None:
     default=None,
     help="Path to write debug log file (default: .logs/claude-code-python-debug-<timestamp>.log if --debug)",
 )
-@click.version_option(version="0.1.0", prog_name="claude-code-python")
+@click.option(
+    "--grpc",
+    is_flag=True,
+    help="Connect to gRPC server instead of running locally",
+)
+@click.option(
+    "--grpc-host",
+    envvar="CLAUDE_CODE_GRPC_HOST",
+    default="localhost",
+    help="gRPC server host (default: localhost)",
+)
+@click.option(
+    "--grpc-port",
+    envvar="CLAUDE_CODE_GRPC_PORT",
+    type=int,
+    default=50051,
+    help="gRPC server port (default: 50051)",
+)
+@click.version_option(version="0.2.0", prog_name="claude-code-python")
 def main(
     api_url: Optional[str],
     api_key: Optional[str],
@@ -235,17 +346,20 @@ def main(
     max_turns: int,
     debug: bool,
     log_file: Optional[str],
+    grpc: bool,
+    grpc_host: str,
+    grpc_port: int,
 ) -> None:
     """Claude Code Python - AI programming assistant with TUI interface
 
     A Python implementation of Claude Code that helps with software engineering tasks.
     Uses OpenAI-compatible APIs to connect to various LLM providers.
+
+    With --grpc flag, connects to a remote gRPC server instead of running locally.
     """
-    # Determine log file path
     log_path = resolve_log_path(log_file, debug)
     ensure_log_directory(log_path)
 
-    # Configure logging
     setup_logging(log_path, debug)
 
     if log_path:
@@ -253,23 +367,37 @@ def main(
     elif debug:
         click.echo(click.style("Debug logging enabled", fg="yellow"))
 
-    # Load environment variables
     if env_file:
         load_dotenv(env_file)
     else:
         load_dotenv()
 
-    # Get configuration from environment if not provided
+    context_window_tokens = get_configured_context_window_tokens()
+
+    if grpc:
+        click.echo(
+            click.style(
+                f"Connecting to gRPC server at {grpc_host}:{grpc_port}", fg="green"
+            )
+        )
+        run_tui_grpc(
+            grpc_host=grpc_host,
+            grpc_port=grpc_port,
+            session_id=session_id,
+            sessions=sessions,
+            context_window_tokens=context_window_tokens,
+            working_directory=os.getcwd(),
+        )
+        return
+
     api_url = api_url or os.environ.get("CLAUDE_CODE_API_URL")
     api_key = api_key or os.environ.get("CLAUDE_CODE_API_KEY")
     model = model or os.environ.get("CLAUDE_CODE_MODEL")
-    context_window_tokens = get_configured_context_window_tokens()
 
-    # Validate configuration
     if not api_url or not api_key or not model:
         click.echo(
-            click.style("Error: ", fg="red", bold=True) +
-            "API URL, API key, and model must be provided either via "
+            click.style("Error: ", fg="red", bold=True)
+            + "API URL, API key, and model must be provided either via "
             "command line options or environment variables.",
             err=True,
         )
@@ -277,69 +405,37 @@ def main(
         click.echo("  CLAUDE_CODE_API_URL   - API endpoint URL", err=True)
         click.echo("  CLAUDE_CODE_API_KEY   - API authentication key", err=True)
         click.echo("  CLAUDE_CODE_MODEL     - Model name to use", err=True)
-        click.echo("\nExample:", err=True)
-        click.echo("  export CLAUDE_CODE_API_URL=https://api.openai.com/v1", err=True)
-        click.echo("  export CLAUDE_CODE_API_KEY=sk-...", err=True)
-        click.echo("  export CLAUDE_CODE_MODEL=gpt-4", err=True)
+        click.echo("\nOr use --grpc to connect to a gRPC server.", err=True)
         sys.exit(1)
 
-    # Ensure API URL doesn't end with /chat/completions
     if api_url.endswith("/v1/chat/completions"):
         api_url = api_url.removesuffix("/chat/completions")
     else:
         api_url = api_url.removesuffix("/chat/completions")
 
-    # Launch TUI
     try:
-        from claude_code.ui.app import ClaudeCodeApp
-
-        registry = create_tool_registry()
         session_store = SessionStore()
         initial_session = resolve_initial_tui_session(
             session_store,
             session_id,
             sessions,
         )
-        client_config = OpenAIClientConfig(
+        run_tui_local(
             api_url=api_url,
             api_key=api_key,
-            model_name=model,
-        )
-        query_config = QueryConfig(
-            system_prompt=system_prompt or "",
-            stream=True,
+            model=model,
+            system_prompt=system_prompt,
             max_turns=max_turns,
-            working_directory=(
-                initial_session.working_directory if initial_session else ""
-            ),
-        )
-        engine = QueryEngine(
-            client_config,
-            registry,
-            query_config,
-            session_id=(initial_session.session_id if initial_session else None),
-            initial_messages=(
-                list(initial_session.messages) if initial_session else None
-            ),
-            initial_current_turn=(
-                initial_session.current_turn if initial_session else 0
-            ),
-            initial_usage=(
-                initial_session.total_usage if initial_session else None
-            ),
-        )
-        app = ClaudeCodeApp(
-            engine,
-            model_name=model,
+            session_id=session_id,
+            sessions=sessions,
             context_window_tokens=context_window_tokens,
             session_store=session_store,
             initial_session=initial_session,
         )
-        app.run()
     except ImportError as e:
         click.echo(
-            click.style("Error: ", fg="red", bold=True) +
-            f"Textual is required for TUI mode. Install it with 'pip install textual'.\n"
+            click.style("Error: ", fg="red", bold=True)
+            + f"Textual is required for TUI mode. Install it with 'pip install textual'.\n"
             f"Import error: {e}",
             err=True,
         )

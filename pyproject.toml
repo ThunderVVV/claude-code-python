@@ -1,8 +1,8 @@
 [project]
 name = "claude-code-python"
-version = "0.1.0"
-description = "Python port of Claude Code - AI programming assistant"
-requires-python = ">=3.14"
+version = "0.2.0"
+description = "Python port of Claude Code - AI programming assistant with gRPC support"
+requires-python = ">=3.12"
 authors = [
     { name = "Claude Code Python Port" }
 ]
@@ -13,6 +13,9 @@ dependencies = [
     "click>=8.1.7",
     "python-dotenv>=1.0.0",
     "openai>=1.30.0",
+    "grpcio>=1.60.0",
+    "grpcio-tools>=1.60.0",
+    "protobuf>=4.25.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +30,8 @@ dev = [
 [project.scripts]
 claude-code-python = "claude_code.cli:main"
 cc-py = "claude_code.cli:main"
+cc-server = "claude_code.server.cli:main"
+cc-client = "claude_code.client.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -44,7 +49,7 @@ line-length = 88
 target-version = "py312"
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 
