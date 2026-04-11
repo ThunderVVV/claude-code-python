@@ -78,10 +78,7 @@ class REPLScreen(Screen):
         self._latest_usage: Optional[Usage] = None
         self._is_processing = False
         self._current_assistant_widget: Optional[AssistantMessageWidget] = None
-        self._current_thinking = ""
-        self._current_text = ""
         self._show_welcome = True
-        self._tool_use_context: dict[str, ToolUseContent] = {}
         self._tool_widget_context: dict[str, ToolUseWidget] = {}
         self._query_worker: Optional[Worker] = None
 
@@ -245,9 +242,11 @@ class REPLScreen(Screen):
         label.update(self._context_usage_text())
 
     def _reset_streaming_state(self) -> None:
-        self._current_thinking = ""
-        self._current_text = ""
         self._current_assistant_widget = None
+
+    def _reset_tool_contexts(self) -> None:
+        """Reset tool widget contexts."""
+        self._tool_widget_context = {}
 
     def _start_message_submission(self, submitted_value: str) -> None:
         if self._is_processing:
@@ -276,8 +275,7 @@ class REPLScreen(Screen):
 
         input_widget.load_text("")
         self._reset_streaming_state()
-        self._tool_use_context = {}
-        self._tool_widget_context = {}
+        self._reset_tool_contexts()
 
         self._set_processing_state(True)
         self.refresh()
@@ -303,8 +301,7 @@ class REPLScreen(Screen):
         self._session_title = None
         self._latest_usage = None
         self._reset_streaming_state()
-        self._tool_use_context = {}
-        self._tool_widget_context = {}
+        self._reset_tool_contexts()
 
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.load_text("")
@@ -347,8 +344,7 @@ class REPLScreen(Screen):
         self._session_title = session_info.title
         self._latest_usage = session_info.total_usage
         self._reset_streaming_state()
-        self._tool_use_context = {}
-        self._tool_widget_context = {}
+        self._reset_tool_contexts()
 
         self._hide_welcome_widget()
 
@@ -380,8 +376,7 @@ class REPLScreen(Screen):
 
         self._set_processing_state(False)
         self._reset_streaming_state()
-        self._tool_use_context = {}
-        self._tool_widget_context = {}
+        self._reset_tool_contexts()
 
         message_list = self.query_one("#message-list", MessageList)
         message_list.reset_auto_follow_output()
@@ -426,8 +421,7 @@ class REPLScreen(Screen):
             self._query_worker = None
             self._set_processing_state(False)
             self._reset_streaming_state()
-            self._tool_use_context = {}
-            self._tool_widget_context = {}
+            self._reset_tool_contexts()
 
             input_widget = self.query_one("#user-input", InputTextArea)
             input_widget.focus()
@@ -450,7 +444,6 @@ class REPLScreen(Screen):
     ) -> None:
         if isinstance(event, ThinkingEvent):
             auto_follow = message_list.should_auto_follow_output()
-            self._current_thinking += event.thinking
 
             assistant_widget = await self._ensure_assistant_widget(
                 message_list, auto_follow=auto_follow
@@ -460,7 +453,6 @@ class REPLScreen(Screen):
 
         elif isinstance(event, TextEvent):
             auto_follow = message_list.should_auto_follow_output()
-            self._current_text += event.text
 
             assistant_widget = await self._ensure_assistant_widget(
                 message_list, auto_follow=auto_follow
@@ -475,7 +467,6 @@ class REPLScreen(Screen):
                 name=event.tool_name,
                 input=event.input,
             )
-            self._tool_use_context[event.tool_use_id] = tool_use
 
             assistant_widget = await self._ensure_assistant_widget(
                 message_list, auto_follow=auto_follow
@@ -505,7 +496,6 @@ class REPLScreen(Screen):
                         if self._current_assistant_widget
                         else {}
                     )
-                    self._current_text = event.message.get_text()
                     message_list.schedule_scroll_to_latest(auto_follow)
                 elif (
                     event.message.type != MessageRole.TOOL
@@ -517,8 +507,7 @@ class REPLScreen(Screen):
                     )
 
         elif isinstance(event, TurnCompleteEvent):
-            self._tool_use_context = {}
-            self._tool_widget_context = {}
+            self._reset_tool_contexts()
             self._current_assistant_widget = None
 
         elif isinstance(event, ErrorEvent):

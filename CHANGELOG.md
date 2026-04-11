@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2025-04-13
 
+#### UI Code Cleanup
+- Removed unused variables: `_current_thinking`, `_current_text`, `_tool_use_context`
+- Refactored tool context reset logic into `_reset_tool_contexts()` method
+- Reduced code duplication by consolidating 6 duplicate reset blocks
+- Improved code maintainability by eliminating 3 unused state variables
+
+### Changed - 2025-04-13
+
 #### gRPC Interface Simplification
 - Simplified `StreamChat` RPC from streaming request to unary request
 - Removed `StreamChatRequest` wrapper message, now using `ChatRequest` directly
