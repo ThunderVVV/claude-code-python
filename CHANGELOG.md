@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-11
+
+#### gRPC Verbose Log Suppression
+- Added `suppress_grpc_logs()` function to suppress verbose gRPC C++ core library logs
+- Fixed "FD from fork parent still in poll list" warnings appearing in stderr when executing bash commands
+- Set `GRPC_VERBOSITY=ERROR` and `GRPC_TRACE=none` environment variables to suppress INFO-level internal logs
+- These logs come from gRPC's internal event polling mechanism and are not controlled by Python's logging system
+
 ### Changed - 2026-04-11
 
 #### Architecture Refactor: Pure gRPC Frontend/Backend Separation

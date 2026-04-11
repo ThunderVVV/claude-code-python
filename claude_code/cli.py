@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import os
 import socket
-import subprocess
 import sys
-import time
 from typing import Optional
 
 import click
@@ -24,31 +22,6 @@ def check_server_available(host: str, port: int, timeout: float = 1.0) -> bool:
         return result == 0
     except Exception:
         return False
-
-
-def start_server(host: str, port: int) -> subprocess.Popen:
-    return subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "claude_code.server.cli",
-            "--host",
-            host,
-            "--port",
-            str(port),
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-
-def wait_for_server(host: str, port: int, timeout: float = 10.0) -> bool:
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        if check_server_available(host, port):
-            return True
-        time.sleep(0.2)
-    return False
 
 
 @click.command()
@@ -106,23 +79,17 @@ def main(
     else:
         load_dotenv()
 
-    server_process = None
     if not check_server_available(grpc_host, grpc_port):
         click.echo(
-            click.style(
-                f"gRPC server not running, starting on {grpc_host}:{grpc_port}",
-                fg="yellow",
-            )
+            click.style("Error: ", fg="red", bold=True)
+            + f"gRPC server not running at {grpc_host}:{grpc_port}",
+            err=True,
         )
-        server_process = start_server(grpc_host, grpc_port)
-        if not wait_for_server(grpc_host, grpc_port):
-            click.echo(
-                click.style("Error: ", fg="red", bold=True)
-                + f"Failed to start gRPC server on {grpc_host}:{grpc_port}",
-                err=True,
-            )
-            sys.exit(1)
-        click.echo(click.style("gRPC server started", fg="green"))
+        click.echo(
+            click.style("Please start the server first with:", fg="yellow")
+            + " cc-server"
+        )
+        sys.exit(1)
 
     click.echo(
         click.style(f"Connecting to gRPC server at {grpc_host}:{grpc_port}", fg="green")
@@ -140,14 +107,6 @@ def main(
             err=True,
         )
         sys.exit(1)
-    finally:
-        if server_process is not None:
-            server_process.terminate()
-            try:
-                server_process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                server_process.kill()
-            click.echo(click.style("gRPC server stopped", fg="yellow"))
 
 
 def run_tui(
