@@ -4,14 +4,10 @@ from __future__ import annotations
 
 import logging
 from typing import List, Optional
-from markdown_it import MarkdownIt
-from textual.await_complete import AwaitComplete
 from textual.app import ComposeResult
 from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
-from textual.highlight import highlight as highlight_code
-from textual.widgets import _markdown as textual_markdown
-from textual.widgets import Collapsible, Label, Markdown, Static
+from textual.widgets import Collapsible, Label, Static
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +20,7 @@ from claude_code.core.messages import (
     ToolResultContent,
 )
 from claude_code.ui.diff_view import DiffView
+from claude_code.ui.streaming_markdown import StreamingTextWidget
 from claude_code.ui.utils import (
     sanitize_terminal_text,
     summarize_tool_result,
@@ -32,117 +29,6 @@ from claude_code.ui.utils import (
     truncate_preview_line,
 )
 from claude_code.utils.logging_config import log_full_exception
-
-
-def _create_markdown_parser() -> MarkdownIt:
-    """Build a Markdown parser aligned with the TypeScript implementation."""
-    return MarkdownIt("gfm-like", {"linkify": False}).disable("strikethrough")
-
-
-class TranscriptMarkdownFence(textual_markdown.MarkdownFence):
-    """Markdown fence that treats untyped code blocks as plain text."""
-
-    @classmethod
-    def highlight(cls, code: str, language: str) -> Content:
-        return highlight_code(code, language=language or "text")
-
-
-class TranscriptMarkdownWidget(Markdown):
-    """Markdown widget wrapper that disables hover tooltips in transcript content."""
-
-    def __init__(self, initial_text: str = "", **kwargs):
-        normalized = sanitize_terminal_text(initial_text)
-        self._markdown_text = normalized
-        self._stream: textual_markdown.MarkdownStream | None = None
-        super().__init__(
-            normalized,
-            parser_factory=_create_markdown_parser,
-            open_links = False,
-            **kwargs,
-        )
-
-    def get_block_class(
-        self,
-        block_name: str,
-    ) -> type[textual_markdown.MarkdownBlock]:
-        """Use a plain-text fallback for fenced code blocks without a language."""
-        if block_name in {"fence", "code_block"}:
-            return TranscriptMarkdownFence
-        return super().get_block_class(block_name)
-
-    def update(self, markdown: str) -> AwaitComplete:
-        """Update markdown content and strip any built-in hover tooltips."""
-        normalized = sanitize_terminal_text(markdown)
-        self._markdown_text = normalized
-        update = super().update(normalized)
-        return update
-
-    def _get_stream(self) -> textual_markdown.MarkdownStream:
-        """Lazily create a Textual markdown stream for high-frequency appends."""
-        if self._stream is None:
-            self._stream = Markdown.get_stream(self)
-        return self._stream
-
-    async def finish_streaming(self) -> None:
-        """Stop the background markdown stream, flushing any queued fragments."""
-        if self._stream is None:
-            return
-        stream = self._stream
-        self._stream = None
-        await stream.stop()
-
-    async def append_markdown(self, markdown: str) -> None:
-        """Append a markdown fragment using Textual's streaming helper."""
-        normalized = sanitize_terminal_text(markdown)
-        if not normalized:
-            return
-        self._markdown_text += normalized
-        if not self.is_mounted:
-            self._initial_markdown = self._markdown_text
-            return
-        await self._get_stream().write(normalized)
-
-    async def set_markdown_text(self, text: str) -> None:
-        """Reconcile the widget with the provided full markdown text."""
-        normalized = sanitize_terminal_text(text)
-        previous = self._markdown_text
-
-        if normalized == previous:
-            return
-
-        if not self.is_mounted:
-            self._markdown_text = normalized
-            self._initial_markdown = normalized
-            return
-
-        if normalized.startswith(previous):
-            await self.append_markdown(normalized[len(previous) :])
-            return
-
-        await self.finish_streaming()
-        await self.update(normalized)
-
-    async def _on_unmount(self) -> None:
-        await self.finish_streaming()
-
-
-class StreamingTextWidget(TranscriptMarkdownWidget):
-    """Widget for assistant markdown content that updates in place."""
-
-    def __init__(self, initial_text: str = "", **kwargs):
-        super().__init__(
-            classes="streaming-content",
-            initial_text=initial_text,
-            **kwargs,
-        )
-
-    async def append_text(self, text: str) -> None:
-        """Append streamed text."""
-        await self.append_markdown(text)
-
-    async def update_text(self, text: str) -> None:
-        """Update the displayed text."""
-        await self.set_markdown_text(text)
 
 
 class ThinkingWidget(Static):

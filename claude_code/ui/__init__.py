@@ -3,8 +3,11 @@
 from claude_code.ui.app import ClaudeCodeApp
 from claude_code.ui.screens import REPLScreen
 from claude_code.ui.widgets import Clawd, WelcomeWidget
-from claude_code.ui.message_widgets import (
+from claude_code.ui.streaming_markdown import (
+    TranscriptMarkdownWidget,
     StreamingTextWidget,
+)
+from claude_code.ui.message_widgets import (
     ToolUseWidget,
     AssistantMessageWidget,
     MessageWidget,
@@ -23,6 +26,7 @@ __all__ = [
     "REPLScreen",
     "Clawd",
     "WelcomeWidget",
+    "TranscriptMarkdownWidget",
     "StreamingTextWidget",
     "ToolUseWidget",
     "AssistantMessageWidget",

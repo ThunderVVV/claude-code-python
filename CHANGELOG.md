@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2025-04-13
 
+#### Extract Streaming Markdown Component to Separate Module
+- Created new `claude_code/ui/streaming_markdown.py` module for streaming markdown widgets
+- Moved `TranscriptMarkdownWidget` and `StreamingTextWidget` from `message_widgets.py` to dedicated module
+- Updated `message_widgets.py` to import from new module
+- Updated `ui/__init__.py` to export markdown components from new location
+- Improved code organization by isolating markdown rendering logic into standalone component
+- No functional changes - purely structural refactoring for better maintainability
+
 #### Tooltip Global Disable via Monkey Patch
 - Added monkey patch in `claude_code/__init__.py` to override `textual.widget.Widget.with_tooltip` method
 - All tooltip calls now set `self.tooltip = None` globally, effectively disabling all tooltips
