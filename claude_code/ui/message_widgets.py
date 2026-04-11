@@ -36,7 +36,7 @@ from claude_code.utils.logging_config import log_full_exception
 
 def _create_markdown_parser() -> MarkdownIt:
     """Build a Markdown parser aligned with the TypeScript implementation."""
-    return MarkdownIt("gfm-like").disable("strikethrough")
+    return MarkdownIt("gfm-like", {"linkify": False}).disable("strikethrough")
 
 
 class TranscriptMarkdownFence(textual_markdown.MarkdownFence):
@@ -57,6 +57,7 @@ class TranscriptMarkdownWidget(Markdown):
         super().__init__(
             normalized,
             parser_factory=_create_markdown_parser,
+            open_links = False,
             **kwargs,
         )
 
