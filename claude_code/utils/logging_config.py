@@ -20,8 +20,8 @@ def suppress_grpc_logs() -> None:
     # Suppress INFO level logs from gRPC C++ core
     # Options: ERROR, WARNING, INFO, DEBUG
     os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
-    # Optionally suppress specific log messages
-    os.environ.setdefault("GRPC_TRACE", "none")
+    # Disable gRPC tracing (empty string means no tracers enabled)
+    os.environ.setdefault("GRPC_TRACE", "")
 
 
 def setup_server_logging(log_dir: str = ".logs", debug: bool = True) -> None:
