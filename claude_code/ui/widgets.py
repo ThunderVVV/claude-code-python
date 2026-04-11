@@ -38,6 +38,18 @@ class InputTextArea(TextArea):
             self.insert("\n")
             return
 
+        if event.key == "shift+up":
+            event.stop()
+            event.prevent_default()
+            self.action_cursor_up()
+            return
+
+        if event.key == "shift+down":
+            event.stop()
+            event.prevent_default()
+            self.action_cursor_down()
+            return
+
         await super()._on_key(event)
 
     def set_on_submit(self, callback) -> None:

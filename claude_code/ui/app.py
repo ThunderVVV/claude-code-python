@@ -13,7 +13,7 @@ from claude_code.ui.styles import TUI_CSS
 from claude_code.ui.screens import REPLScreen
 
 if TYPE_CHECKING:
-    from claude_code.client.grpc_client import ClaudeCodeClient, SessionInfo
+    from claude_code.client.grpc_client import ClaudeCodeClient
 
 
 class ClaudeCodeApp(App):
@@ -45,19 +45,14 @@ class ClaudeCodeApp(App):
 
     async def on_mount(self) -> None:
         await self.client.connect()
-        session_info, session_id = await self._init_session()
+        session_id = await self.client.create_session(self.working_directory)
         await self.push_screen(
             REPLScreen(
                 client=self.client,
                 session_id=session_id,
-                initial_session=session_info,
                 working_directory=self.working_directory,
             )
         )
-
-    async def _init_session(self):
-        new_session_id = await self.client.create_session(self.working_directory)
-        return None, new_session_id
 
     async def on_unmount(self) -> None:
         """Clean up resources on exit."""

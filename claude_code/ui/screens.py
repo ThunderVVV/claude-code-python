@@ -46,11 +46,11 @@ from claude_code.ui.message_widgets import (
     ToolUseWidget,
 )
 from claude_code.ui.session_resume_modal import SessionResumeModal
-from claude_code.utils.logging_config import log_exception
+from claude_code.utils.logging_config import log_full_exception
 from claude_code.core.file_expansion import expand_file_references
 
 if TYPE_CHECKING:
-    from claude_code.client.grpc_client import ClaudeCodeClient, SessionInfo
+    from claude_code.client.grpc_client import ClaudeCodeClient
 
 
 class REPLScreen(Screen):
@@ -67,14 +67,12 @@ class REPLScreen(Screen):
         self,
         client: "ClaudeCodeClient",
         session_id: str,
-        initial_session: Optional["SessionInfo"] = None,
         working_directory: str = "",
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.client = client
         self.session_id = session_id
-        self.initial_session = initial_session
         self.working_directory = working_directory or ""
 
         self._latest_usage: Optional[Usage] = None
@@ -88,12 +86,12 @@ class REPLScreen(Screen):
         self._query_worker: Optional[Worker] = None
 
         self._history: list[str] = []
-        self._history_index: int = -1
-        self._current_draft: str = ""
+        self._history_index: int = 0
+        self._nav_items: list[str] = []
         self._history_file = Path.home() / ".claude-code-python/input_history.json"
         self._load_history()
 
-        self._session_title = initial_session.title if initial_session else None
+        self._session_title: Optional[str] = None
 
         self._context_window_tokens = get_configured_context_window_tokens()
 
@@ -104,6 +102,7 @@ class REPLScreen(Screen):
                     self._history = json.load(f)
             except Exception:
                 self._history = []
+        self._reset_nav_buffer()
 
     def _save_history(self) -> None:
         try:
@@ -118,8 +117,11 @@ class REPLScreen(Screen):
             if len(self._history) > 1000:
                 self._history = self._history[-1000:]
             self._save_history()
-        self._history_index = -1
-        self._current_draft = ""
+        self._reset_nav_buffer()
+
+    def _reset_nav_buffer(self) -> None:
+        self._nav_items = self._history.copy() + [""]
+        self._history_index = len(self._nav_items) - 1
 
     def compose(self) -> ComposeResult:
         with ScrollableContainer(id="content-area"):
@@ -149,7 +151,6 @@ class REPLScreen(Screen):
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.set_on_submit(self._on_input_submit)
         input_widget.focus()
-        await self._restore_initial_session()
 
     def _on_input_submit(self, text: str) -> None:
         self._start_message_submission(text)
@@ -182,23 +183,14 @@ class REPLScreen(Screen):
     def _navigate_history(self, direction: int) -> None:
         input_widget = self.query_one("#user-input", InputTextArea)
 
-        if self._history_index == -1:
-            self._current_draft = input_widget.text
+        self._nav_items[self._history_index] = input_widget.text
 
-        new_index = self._history_index + direction
-
-        if new_index < -1:
-            new_index = -1
-        elif new_index >= len(self._history):
-            new_index = len(self._history) - 1
-
-        self._history_index = new_index
-
-        if self._history_index == -1:
-            input_widget.text = self._current_draft
+        if direction == 1:
+            self._history_index = max(self._history_index - 1, 0)
         else:
-            input_widget.text = self._history[-(self._history_index + 1)]
+            self._history_index = min(self._history_index + 1, len(self._nav_items) - 1)
 
+        input_widget.text = self._nav_items[self._history_index]
         input_widget.move_cursor(input_widget.document.end)
 
     def _hide_welcome_widget(self) -> None:
@@ -359,12 +351,21 @@ class REPLScreen(Screen):
         self._tool_widget_context = {}
 
         self._hide_welcome_widget()
-        await self._render_messages(message_list, session_info.messages)
+
+        messages = session_info.messages
+        pending_user_text: Optional[str] = None
+
+        if messages and messages[-1].type == MessageRole.USER:
+            last_message = messages[-1]
+            pending_user_text = last_message.original_text or last_message.get_text()
+            messages = messages[:-1]
+
+        await self._render_messages(message_list, messages)
 
         self._refresh_context_usage_label()
 
         input_widget = self.query_one("#user-input", InputTextArea)
-        input_widget.load_text("")
+        input_widget.load_text(pending_user_text or "")
         input_widget.focus()
 
     async def _cancel_current_query(self) -> None:
@@ -396,7 +397,8 @@ class REPLScreen(Screen):
             expanded_text, file_expansions = expand_file_references(
                 user_text, self.working_directory
             )
-            logger.debug(f"file_expansions={file_expansions}")
+            if file_expansions:
+                logger.debug(f"expanded {len(file_expansions)} files")
             user_message = Message.user_message(
                 text=expanded_text,
                 file_expansions=file_expansions,
@@ -415,7 +417,7 @@ class REPLScreen(Screen):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            log_exception(logger, "Query error in _run_query", e)
+            log_full_exception(logger, "Query error in _run_query", e)
             if self._is_processing:
                 error_msg = Message.system_message(f"Error: {str(e)}")
                 await message_list.add_message(error_msg)
@@ -505,7 +507,10 @@ class REPLScreen(Screen):
                     )
                     self._current_text = event.message.get_text()
                     message_list.schedule_scroll_to_latest(auto_follow)
-                elif event.message.type != MessageRole.TOOL and event.message.type != MessageRole.USER:
+                elif (
+                    event.message.type != MessageRole.TOOL
+                    and event.message.type != MessageRole.USER
+                ):
                     # tool message is already added in ToolResultEvent, user message is already added in _process_message
                     await message_list.add_message(
                         event.message, auto_follow=auto_follow
@@ -517,20 +522,9 @@ class REPLScreen(Screen):
             self._current_assistant_widget = None
 
         elif isinstance(event, ErrorEvent):
+            logger.debug(f"ErrorEvent received: {event.error}")
             error_msg = Message.system_message(f"Error: {event.error}")
             await message_list.add_message(error_msg)
-
-    async def _restore_initial_session(self) -> None:
-        """Render initial session messages if resuming."""
-        if not self.initial_session or not self.initial_session.messages:
-            return
-
-        self._hide_welcome_widget()
-        self._latest_usage = self.initial_session.total_usage
-        self._refresh_context_usage_label()
-
-        message_list = self.query_one("#message-list", MessageList)
-        await self._render_messages(message_list, self.initial_session.messages)
 
     async def _render_messages(
         self,

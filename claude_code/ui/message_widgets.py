@@ -31,7 +31,7 @@ from claude_code.ui.utils import (
     format_tool_input_details,
     truncate_preview_line,
 )
-from claude_code.utils.logging_config import log_exception
+from claude_code.utils.logging_config import log_full_exception
 
 
 def _create_markdown_parser() -> MarkdownIt:
@@ -82,7 +82,7 @@ class TranscriptMarkdownWidget(Markdown):
             try:
                 self.call_after_refresh(self._clear_tooltips)
             except Exception as e:
-                log_exception(logger, "Failed to clear tooltips", e)
+                log_full_exception(logger, "Failed to clear tooltips", e)
 
         future.add_done_callback(cleanup_callback)
 
@@ -100,15 +100,6 @@ class TranscriptMarkdownWidget(Markdown):
         normalized = sanitize_terminal_text(markdown)
         self._markdown_text = normalized
         update = super().update(normalized)
-        self._schedule_tooltip_cleanup(update)
-        return update
-
-    def append(self, markdown: str) -> AwaitComplete:
-        """Append markdown content and strip any built-in hover tooltips."""
-        normalized = sanitize_terminal_text(markdown)
-        if not normalized:
-            return AwaitComplete.nothing()
-        update = super().append(normalized)
         self._schedule_tooltip_cleanup(update)
         return update
 
@@ -565,19 +556,6 @@ class AssistantMessageWidget(VerticalGroup):
         if tool_widget:
             tool_widget.update_tool_input(tool_use.name, tool_use.input)
 
-    def add_tool_result(
-        self,
-        tool_use_id: str,
-        result: str,
-        is_error: bool,
-    ) -> bool:
-        """Attach a tool result to an existing tool-use widget."""
-        tool_widget = self._tool_widgets_by_id.get(tool_use_id)
-        if not tool_widget:
-            return False
-        tool_widget.set_result(result, is_error)
-        return True
-
     def get_tool_widgets(self) -> dict[str, ToolUseWidget]:
         """Expose rendered tool widgets by tool-use id."""
         return dict(self._tool_widgets_by_id)
@@ -588,16 +566,6 @@ class AssistantMessageWidget(VerticalGroup):
             await self._thinking_widget.finish_streaming()
         if self._streaming_widget:
             await self._streaming_widget.finish_streaming()
-
-    def get_message(self) -> Message:
-        """Build the current message from accumulated content"""
-        content: List = []
-        if self._thinking_content:
-            content.append(ThinkingContent(thinking=self._thinking_content))
-        if self._text_content:
-            content.append(TextContent(text=self._text_content))
-        content.extend(self._tool_uses)
-        return Message.assistant_message(content)
 
 
 class MessageWidget(VerticalGroup):
@@ -615,10 +583,9 @@ class MessageWidget(VerticalGroup):
         role_label, role_class = self._get_role_label()
         if self.message.type not in {MessageRole.USER, MessageRole.ASSISTANT}:
             yield Label(role_label, classes=f"message-role {role_class}", markup=False)
-
-        # For user messages, show file expansions first (abbreviated)
-        logger.debug(f"{len(self.message.file_expansions)} file expansions found for message")
+            
         if self.message.type == MessageRole.USER and self.message.file_expansions:
+            logger.debug(f"Rendering: {len(self.message.file_expansions)} file expansions found for message")
             for expansion in self.message.file_expansions:
                 yield Static(
                     self._format_file_expansion(expansion),
@@ -700,11 +667,6 @@ class MessageWidget(VerticalGroup):
 
         return result
 
-    async def update_streaming_text(self, text: str) -> None:
-        """Update streaming text content for assistant messages"""
-        if self._streaming_widget:
-            await self._streaming_widget.update_text(text)
-
     def _get_role_label(self) -> tuple[str, str]:
         role_map = {
             MessageRole.USER: ("You", "role-user"),
@@ -741,7 +703,7 @@ class MessageList(VerticalGroup):
             content_area = self.screen.query_one("#content-area", ScrollableContainer)
             self.watch(content_area, "scroll_y", self._on_content_scroll, init=False)
         except Exception as e:
-            log_exception(logger, "Failed to setup scroll tracking", e)
+            log_full_exception(logger, "Failed to setup scroll tracking", e)
 
     def _on_content_scroll(self, _scroll_y: float) -> None:
         """Disable auto-follow when the user scrolls away from the bottom."""
@@ -753,7 +715,7 @@ class MessageList(VerticalGroup):
                 content_area.max_scroll_y - 1, 0
             )
         except Exception as e:
-            log_exception(logger, "Failed to check scroll position", e)
+            log_full_exception(logger, "Failed to check scroll position", e)
             self._auto_follow_output = True
 
     def _scroll_to_latest(self) -> None:
@@ -769,7 +731,7 @@ class MessageList(VerticalGroup):
             )
             self.set_timer(0.001, self._finish_programmatic_scroll)
         except Exception as e:
-            log_exception(logger, "Failed to scroll to latest", e)
+            log_full_exception(logger, "Failed to scroll to latest", e)
             self._suppress_scroll_tracking = False
 
     def _finish_programmatic_scroll(self) -> None:
@@ -785,10 +747,6 @@ class MessageList(VerticalGroup):
         """Re-enable transcript auto-follow for a fresh user request."""
         self._auto_follow_output = True
 
-    def get_message_count(self) -> int:
-        """Return the number of transcript widgets currently mounted."""
-        return len(self._message_widgets)
-
     def schedule_scroll_to_latest(self, auto_follow: bool = True) -> None:
         """Scroll after the current DOM/layout update flushes."""
         if auto_follow:
@@ -797,23 +755,6 @@ class MessageList(VerticalGroup):
     async def add_message(self, message: Message, auto_follow: bool = True) -> None:
         """Add a message to the list"""
         widget = MessageWidget(message)
-        await self.mount(widget)
-        self._message_widgets.append(widget)
-        self.schedule_scroll_to_latest(auto_follow)
-
-    async def add_tool_result(
-        self,
-        tool_name: str,
-        tool_input: dict,
-        result: str,
-        is_error: bool,
-        auto_follow: bool = True,
-    ) -> None:
-        """Add a fallback tool result using the same single-collapsible tool UI."""
-        widget = ToolUseWidget(
-            tool_name=tool_name, tool_input=tool_input, tool_use_id=""
-        )
-        widget.set_result(result, is_error)
         await self.mount(widget)
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)
@@ -829,20 +770,6 @@ class MessageList(VerticalGroup):
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)
         return widget
-
-    async def truncate(self, count: int, auto_follow: bool = True) -> None:
-        """Remove transcript widgets after the provided count."""
-        retained_count = max(count, 0)
-        widgets_to_remove = self._message_widgets[retained_count:]
-        self._message_widgets = self._message_widgets[:retained_count]
-
-        for widget in reversed(widgets_to_remove):
-            finish_streaming = getattr(widget, "finish_streaming", None)
-            if callable(finish_streaming):
-                await finish_streaming()
-            widget.remove()
-
-        self.schedule_scroll_to_latest(auto_follow)
 
     def clear(self) -> None:
         """Clear all messages"""
