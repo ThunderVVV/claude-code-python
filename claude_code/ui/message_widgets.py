@@ -240,6 +240,10 @@ class ToolUseWidget(VerticalGroup):
         if not file_path:
             return None
 
+        # 首先确定基础的 old_text 和 new_text（使用原始方法）
+        old_text = ""
+        new_text = ""
+        
         if self.tool_name == "Edit":
             old_string = self.tool_input.get("old_string")
             new_string = self.tool_input.get("new_string")
@@ -254,13 +258,52 @@ class ToolUseWidget(VerticalGroup):
         else:
             return None
 
-        return DiffView(
-            file_path,
-            file_path,
-            sanitize_terminal_text(old_text),
-            sanitize_terminal_text(new_text),
-            classes="tool-edit-diff",
-        )
+        # 尝试获取完整文件内容
+        try:
+            from claude_code.tools.file_utils import expand_path
+            
+            full_path = expand_path(file_path)
+            
+            if self.tool_name == "Edit":
+                # 尝试读取修改后的文件并重建原始文件
+                try:
+                    replace_all = self.tool_input.get("replace_all", False)
+                    
+                    # 读取修改后的文件
+                    with open(full_path, "r", encoding="utf-8") as f:
+                        current_content = f.read()
+                    
+                    # 尝试反向替换：从当前内容替换 new_string 为 old_string
+                    # 先使用工具输入中的字符串
+                    test_old = current_content
+                    if replace_all:
+                        test_old = test_old.replace(new_string, old_string)
+                    else:
+                        test_old = test_old.replace(new_string, old_string, 1)
+                    
+                    # 只有当替换确实生效时才使用完整文件
+                    if test_old != current_content:
+                        old_text = test_old
+                        new_text = current_content
+                except Exception:
+                    # 如果失败，保持使用原始片段
+                    pass
+        
+        except Exception:
+            # 任何错误都继续使用原始方法
+            pass
+
+        # 最后返回 DiffView
+        try:
+            return DiffView(
+                file_path,
+                file_path,
+                sanitize_terminal_text(old_text),
+                sanitize_terminal_text(new_text),
+                classes="tool-edit-diff",
+            )
+        except Exception:
+            return None
 
     def _render_details(self) -> None:
         """Re-render the detail widgets."""
