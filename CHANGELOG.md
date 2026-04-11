@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2025-04-13
 
+#### Refactor Streaming Markdown Component
+- Renamed `TranscriptMarkdownWidget` to `StreamingMarkdownWidget` for clarity
+- Removed redundant `StreamingTextWidget` class (was just a thin wrapper)
+- Removed unnecessary alias methods `append_text()` and `update_text()` (over-engineering)
+- Updated all call sites to use `append_markdown()` and `set_markdown_text()` directly
+- Simplified API by consolidating to single class with clear method names
+
 #### Extract Streaming Markdown Component to Separate Module
 - Created new `claude_code/ui/streaming_markdown.py` module for streaming markdown widgets
 - Moved `TranscriptMarkdownWidget` and `StreamingTextWidget` from `message_widgets.py` to dedicated module

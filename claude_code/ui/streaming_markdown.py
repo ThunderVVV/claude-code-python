@@ -25,8 +25,8 @@ class TranscriptMarkdownFence(textual_markdown.MarkdownFence):
         return highlight_code(code, language=language or "text")
 
 
-class TranscriptMarkdownWidget(Markdown):
-    """Markdown widget wrapper for streaming markdown content with terminal sanitization."""
+class StreamingMarkdownWidget(Markdown):
+    """Markdown widget for streaming markdown content with terminal sanitization."""
 
     def __init__(self, initial_text: str = "", **kwargs):
         normalized = sanitize_terminal_text(initial_text)
@@ -102,22 +102,3 @@ class TranscriptMarkdownWidget(Markdown):
 
     async def _on_unmount(self) -> None:
         await self.finish_streaming()
-
-
-class StreamingTextWidget(TranscriptMarkdownWidget):
-    """Widget for assistant markdown content that updates in place."""
-
-    def __init__(self, initial_text: str = "", **kwargs):
-        super().__init__(
-            classes="streaming-content",
-            initial_text=initial_text,
-            **kwargs,
-        )
-
-    async def append_text(self, text: str) -> None:
-        """Append streamed text."""
-        await self.append_markdown(text)
-
-    async def update_text(self, text: str) -> None:
-        """Update the displayed text."""
-        await self.set_markdown_text(text)

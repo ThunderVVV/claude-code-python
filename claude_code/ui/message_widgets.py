@@ -20,7 +20,7 @@ from claude_code.core.messages import (
     ToolResultContent,
 )
 from claude_code.ui.diff_view import DiffView
-from claude_code.ui.streaming_markdown import StreamingTextWidget
+from claude_code.ui.streaming_markdown import StreamingMarkdownWidget
 from claude_code.ui.utils import (
     sanitize_terminal_text,
     summarize_tool_result,
@@ -291,7 +291,7 @@ class AssistantMessageWidget(VerticalGroup):
         self._tool_use_ids: set[str] = set()
         self._tool_widgets_by_id: dict[str, ToolUseWidget] = {}
         self._thinking_widget: Optional[ThinkingBlockWidget] = None
-        self._streaming_widget: Optional[StreamingTextWidget] = None
+        self._streaming_widget: Optional[StreamingMarkdownWidget] = None
         self._tool_widgets: List[ToolUseWidget] = []
         self._content_container: Optional[VerticalGroup] = None
         self.add_class("message-block")
@@ -319,7 +319,7 @@ class AssistantMessageWidget(VerticalGroup):
                 self._thinking_widget = ThinkingBlockWidget(self._thinking_content)
                 yield self._thinking_widget
             if self._text_content:
-                self._streaming_widget = StreamingTextWidget(self._text_content)
+                self._streaming_widget = StreamingMarkdownWidget(self._text_content)
                 yield self._streaming_widget
             for tool_use in self._tool_uses:
                 tool_widget = ToolUseWidget(
@@ -361,9 +361,9 @@ class AssistantMessageWidget(VerticalGroup):
             return
         self._text_content += text
         if self._streaming_widget:
-            await self._streaming_widget.append_text(text)
+            await self._streaming_widget.append_markdown(text)
         elif self._content_container:
-            self._streaming_widget = StreamingTextWidget(self._text_content)
+            self._streaming_widget = StreamingMarkdownWidget(self._text_content)
             await self._content_container.mount(self._streaming_widget)
             self.refresh(layout=True)
 
@@ -371,10 +371,10 @@ class AssistantMessageWidget(VerticalGroup):
         """Update the streaming text content"""
         self._text_content = text
         if self._streaming_widget:
-            await self._streaming_widget.update_text(text)
+            await self._streaming_widget.set_markdown_text(text)
             self.refresh(layout=True)
         elif text and self._content_container:
-            self._streaming_widget = StreamingTextWidget(text)
+            self._streaming_widget = StreamingMarkdownWidget(text)
             await self._content_container.mount(self._streaming_widget)
             self.refresh(layout=True)
 
@@ -431,7 +431,7 @@ class MessageWidget(VerticalGroup):
     def __init__(self, message: Message, **kwargs):
         super().__init__(**kwargs)
         self.message = message
-        self._streaming_widget: Optional[StreamingTextWidget] = None
+        self._streaming_widget: Optional[StreamingMarkdownWidget] = None
         self.add_class("message-block")
         self.add_class(self._get_role_block_class())
 
@@ -457,9 +457,9 @@ class MessageWidget(VerticalGroup):
                     yield ThinkingBlockWidget(block.thinking)
             elif isinstance(block, TextContent):
                 if block.text.strip():
-                    # Use StreamingTextWidget for assistant messages to allow updates
+                    # Use StreamingMarkdownWidget for assistant messages to allow updates
                     if self.message.type == MessageRole.ASSISTANT:
-                        self._streaming_widget = StreamingTextWidget(block.text)
+                        self._streaming_widget = StreamingMarkdownWidget(block.text)
                         yield self._streaming_widget
                     else:
                         # For user messages with file expansions, show only the original text
