@@ -8,14 +8,14 @@ import re
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-from openai import AsyncOpenAI, APIError as OpenAIAPIError
+from openai import AsyncOpenAI, APIError
+from claude_code.utils.logging_config import log_full_exception
 
 from claude_code.core.messages import (
     Message,
     MessageRole,
     ToolUseContent,
     ToolResultContent,
-    ThinkingContent,
     Usage,
 )
 from claude_code.core.tools import ToolRegistry
@@ -200,10 +200,9 @@ class OpenAIClient:
                 response = await self._client.chat.completions.create(**request_params)
                 yield response.model_dump()
 
-        except OpenAIAPIError as e:
-            raise APIError(f"API error: {e}") from e
         except Exception as e:
-            raise APINetworkError(f"Request failed: {e}") from e
+            log_full_exception(logger, "API error in chat completion", e)
+            raise APIError(f"API error: {e}") from e
 
     def parse_stream_chunk(
         self,
@@ -355,7 +354,9 @@ class OpenAIClient:
                     logger.warning(f"Failed to parse tool call arguments: {e}")
                     args = {}
 
-                logger.debug(f"Tool call parsed: {tc.name}, id: {tc.id}")
+                args_full_str = str(args)
+                args_str = args_full_str[:50] + "..." if len(args_full_str) > 50 else args_full_str
+                logger.debug(f"Tool call parsed: {tc.name}, id: {tc.id}, args: {args_str}")
                 blocks.append(
                     ToolUseContent(
                         id=tc.id,
@@ -425,11 +426,5 @@ class OpenAIClient:
 
 class APIError(Exception):
     """Base exception for API errors"""
-
-    pass
-
-
-class APINetworkError(APIError):
-    """Exception for network-related errors (connection, timeout, etc.)"""
 
     pass
