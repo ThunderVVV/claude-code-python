@@ -11,11 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### UI Code Cleanup
 - Removed unused variables: `_current_thinking`, `_current_text`, `_tool_use_context`
 - Removed unused local variable `tool_use_context` in `_render_messages` method
+- Removed redundant `_text` variable in `StreamingTextWidget` (duplicate of `_markdown_text`)
 - Refactored tool context reset logic into `_reset_tool_contexts()` method
 - Consolidated 6 duplicate reset blocks into single method call
 - Extracted duplicate mouse event handlers into `_focus_input_if_needed()` method
 - Reduced code duplication by eliminating redundant state variables
-- Improved code maintainability by removing 11 lines of unused code
+- Improved code maintainability by removing 15 lines of unused/redundant code
 
 ### Changed - 2025-04-13
 

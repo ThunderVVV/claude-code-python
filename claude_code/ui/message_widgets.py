@@ -161,16 +161,13 @@ class StreamingTextWidget(TranscriptMarkdownWidget):
             initial_text=initial_text,
             **kwargs,
         )
-        self._text = initial_text
 
     async def append_text(self, text: str) -> None:
         """Append streamed text."""
-        self._text += text
         await self.append_markdown(text)
 
     async def update_text(self, text: str) -> None:
         """Update the displayed text."""
-        self._text = text
         await self.set_markdown_text(text)
 
 
