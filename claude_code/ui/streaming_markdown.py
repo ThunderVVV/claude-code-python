@@ -69,7 +69,7 @@ class StreamingMarkdownWidget(Markdown):
         self._stream = None
         await stream.stop()
 
-    async def append_markdown(self, markdown: str) -> None:
+    async def append_text(self, markdown: str) -> None:
         """Append a markdown fragment using Textual's streaming helper."""
         normalized = sanitize_terminal_text(markdown)
         if not normalized:
@@ -94,7 +94,7 @@ class StreamingMarkdownWidget(Markdown):
             return
 
         if normalized.startswith(previous):
-            await self.append_markdown(normalized[len(previous) :])
+            await self.append_text(normalized[len(previous) :])
             return
 
         await self.finish_streaming()

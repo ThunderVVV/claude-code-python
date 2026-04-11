@@ -361,7 +361,7 @@ class AssistantMessageWidget(VerticalGroup):
             return
         self._text_content += text
         if self._streaming_widget:
-            await self._streaming_widget.append_markdown(text)
+            await self._streaming_widget.append_text(text)
         elif self._content_container:
             self._streaming_widget = StreamingMarkdownWidget(self._text_content)
             await self._content_container.mount(self._streaming_widget)

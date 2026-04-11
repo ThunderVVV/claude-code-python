@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Renamed `TranscriptMarkdownWidget` to `StreamingMarkdownWidget` for clarity
 - Removed redundant `StreamingTextWidget` class (was just a thin wrapper)
 - Removed unnecessary alias methods `append_text()` and `update_text()` (over-engineering)
-- Updated all call sites to use `append_markdown()` and `set_markdown_text()` directly
+- Updated all call sites to use `append_text()` and `set_markdown_text()` directly
 - Simplified API by consolidating to single class with clear method names
 
 #### Extract Streaming Markdown Component to Separate Module

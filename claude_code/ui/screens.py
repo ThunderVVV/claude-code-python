@@ -459,7 +459,7 @@ class REPLScreen(Screen):
             assistant_widget = await self._ensure_assistant_widget(
                 message_list, auto_follow=auto_follow
             )
-            await assistant_widget.append_markdown(event.text)
+            await assistant_widget.append_text(event.text)
             message_list.schedule_scroll_to_latest(auto_follow)
 
         elif isinstance(event, ToolUseEvent):
