@@ -36,15 +36,10 @@ class ChatServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.StreamChat = channel.stream_stream(
+        self.StreamChat = channel.unary_stream(
                 '/claude_code.ChatService/StreamChat',
-                request_serializer=claude__code__pb2.StreamChatRequest.SerializeToString,
+                request_serializer=claude__code__pb2.ChatRequest.SerializeToString,
                 response_deserializer=claude__code__pb2.ChatResponse.FromString,
-                _registered_method=True)
-        self.GetState = channel.unary_unary(
-                '/claude_code.ChatService/GetState',
-                request_serializer=claude__code__pb2.GetStateRequest.SerializeToString,
-                response_deserializer=claude__code__pb2.GetStateResponse.FromString,
                 _registered_method=True)
         self.Interrupt = channel.unary_unary(
                 '/claude_code.ChatService/Interrupt',
@@ -58,13 +53,7 @@ class ChatServiceServicer(object):
 
     """
 
-    def StreamChat(self, request_iterator, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetState(self, request, context):
+    def StreamChat(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -79,15 +68,10 @@ class ChatServiceServicer(object):
 
 def add_ChatServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'StreamChat': grpc.stream_stream_rpc_method_handler(
+            'StreamChat': grpc.unary_stream_rpc_method_handler(
                     servicer.StreamChat,
-                    request_deserializer=claude__code__pb2.StreamChatRequest.FromString,
+                    request_deserializer=claude__code__pb2.ChatRequest.FromString,
                     response_serializer=claude__code__pb2.ChatResponse.SerializeToString,
-            ),
-            'GetState': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetState,
-                    request_deserializer=claude__code__pb2.GetStateRequest.FromString,
-                    response_serializer=claude__code__pb2.GetStateResponse.SerializeToString,
             ),
             'Interrupt': grpc.unary_unary_rpc_method_handler(
                     servicer.Interrupt,
@@ -108,7 +92,7 @@ class ChatService(object):
     """
 
     @staticmethod
-    def StreamChat(request_iterator,
+    def StreamChat(request,
             target,
             options=(),
             channel_credentials=None,
@@ -118,39 +102,12 @@ class ChatService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(
-            request_iterator,
-            target,
-            '/claude_code.ChatService/StreamChat',
-            claude__code__pb2.StreamChatRequest.SerializeToString,
-            claude__code__pb2.ChatResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetState(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
+        return grpc.experimental.unary_stream(
             request,
             target,
-            '/claude_code.ChatService/GetState',
-            claude__code__pb2.GetStateRequest.SerializeToString,
-            claude__code__pb2.GetStateResponse.FromString,
+            '/claude_code.ChatService/StreamChat',
+            claude__code__pb2.ChatRequest.SerializeToString,
+            claude__code__pb2.ChatResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -213,16 +170,6 @@ class SessionServiceStub(object):
                 request_serializer=claude__code__pb2.ListSessionsRequest.SerializeToString,
                 response_deserializer=claude__code__pb2.ListSessionsResponse.FromString,
                 _registered_method=True)
-        self.DeleteSession = channel.unary_unary(
-                '/claude_code.SessionService/DeleteSession',
-                request_serializer=claude__code__pb2.DeleteSessionRequest.SerializeToString,
-                response_deserializer=claude__code__pb2.DeleteSessionResponse.FromString,
-                _registered_method=True)
-        self.ClearSession = channel.unary_unary(
-                '/claude_code.SessionService/ClearSession',
-                request_serializer=claude__code__pb2.ClearSessionRequest.SerializeToString,
-                response_deserializer=claude__code__pb2.ClearSessionResponse.FromString,
-                _registered_method=True)
 
 
 class SessionServiceServicer(object):
@@ -246,18 +193,6 @@ class SessionServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DeleteSession(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ClearSession(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_SessionServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -275,16 +210,6 @@ def add_SessionServiceServicer_to_server(servicer, server):
                     servicer.ListSessions,
                     request_deserializer=claude__code__pb2.ListSessionsRequest.FromString,
                     response_serializer=claude__code__pb2.ListSessionsResponse.SerializeToString,
-            ),
-            'DeleteSession': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteSession,
-                    request_deserializer=claude__code__pb2.DeleteSessionRequest.FromString,
-                    response_serializer=claude__code__pb2.DeleteSessionResponse.SerializeToString,
-            ),
-            'ClearSession': grpc.unary_unary_rpc_method_handler(
-                    servicer.ClearSession,
-                    request_deserializer=claude__code__pb2.ClearSessionRequest.FromString,
-                    response_serializer=claude__code__pb2.ClearSessionResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -368,60 +293,6 @@ class SessionService(object):
             '/claude_code.SessionService/ListSessions',
             claude__code__pb2.ListSessionsRequest.SerializeToString,
             claude__code__pb2.ListSessionsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DeleteSession(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/claude_code.SessionService/DeleteSession',
-            claude__code__pb2.DeleteSessionRequest.SerializeToString,
-            claude__code__pb2.DeleteSessionResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ClearSession(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/claude_code.SessionService/ClearSession',
-            claude__code__pb2.ClearSessionRequest.SerializeToString,
-            claude__code__pb2.ClearSessionResponse.FromString,
             options,
             channel_credentials,
             insecure,

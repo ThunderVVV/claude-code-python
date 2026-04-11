@@ -122,13 +122,6 @@ message ChatResponse {
     QueryEvent event = 1;
 }
 
-message StreamChatRequest {
-    oneof request {
-        ChatRequest chat_request = 1;
-        string interrupt_signal = 2;
-    }
-}
-
 // ============ Session Service ============
 
 message CreateSessionRequest {
@@ -166,33 +159,6 @@ message ListSessionsResponse {
     repeated SessionSummary sessions = 1;
 }
 
-message DeleteSessionRequest {
-    string session_id = 1;
-}
-
-message DeleteSessionResponse {
-    bool success = 1;
-}
-
-message ClearSessionRequest {
-    string session_id = 1;
-}
-
-message ClearSessionResponse {
-    bool success = 1;
-}
-
-message GetStateRequest {
-    string session_id = 1;
-}
-
-message GetStateResponse {
-    int32 message_count = 1;
-    int32 current_turn = 2;
-    bool is_streaming = 3;
-    Usage total_usage = 4;
-}
-
 message InterruptRequest {
     string session_id = 1;
     string reason = 2;
@@ -205,8 +171,7 @@ message InterruptResponse {
 // ============ Services ============
 
 service ChatService {
-    rpc StreamChat(stream StreamChatRequest) returns (stream ChatResponse);
-    rpc GetState(GetStateRequest) returns (GetStateResponse);
+    rpc StreamChat(ChatRequest) returns (stream ChatResponse);
     rpc Interrupt(InterruptRequest) returns (InterruptResponse);
 }
 
@@ -214,6 +179,4 @@ service SessionService {
     rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
     rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
     rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
-    rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
-    rpc ClearSession(ClearSessionRequest) returns (ClearSessionResponse);
 }

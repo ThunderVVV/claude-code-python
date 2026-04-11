@@ -24,15 +24,15 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11\x63laude_code.proto\x12\x0b\x63laude_code\"4\n\x05Usage\x12\x14\n\x0cinput_tokens\x18\x01 \x01(\x05\x12\x15\n\routput_tokens\x18\x02 \x01(\x05\"\x1b\n\x0bTextContent\x12\x0c\n\x04text\x18\x01 \x01(\t\"6\n\x0fThinkingContent\x12\x10\n\x08thinking\x18\x01 \x01(\t\x12\x11\n\tsignature\x18\x02 \x01(\t\">\n\x0eToolUseContent\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x12\n\ninput_json\x18\x03 \x01(\t\"K\n\x11ToolResultContent\x12\x13\n\x0btool_use_id\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x10\n\x08is_error\x18\x03 \x01(\x08\"\xdb\x01\n\x0c\x43ontentBlock\x12(\n\x04text\x18\x01 \x01(\x0b\x32\x18.claude_code.TextContentH\x00\x12\x30\n\x08thinking\x18\x02 \x01(\x0b\x32\x1c.claude_code.ThinkingContentH\x00\x12/\n\x08tool_use\x18\x03 \x01(\x0b\x32\x1b.claude_code.ToolUseContentH\x00\x12\x35\n\x0btool_result\x18\x04 \x01(\x0b\x32\x1e.claude_code.ToolResultContentH\x00\x42\x07\n\x05\x62lock\"\xb8\x01\n\x07Message\x12&\n\x04role\x18\x01 \x01(\x0e\x32\x18.claude_code.MessageRole\x12*\n\x07\x63ontent\x18\x02 \x03(\x0b\x32\x19.claude_code.ContentBlock\x12\x0c\n\x04uuid\x18\x03 \x01(\t\x12\x11\n\ttimestamp\x18\x04 \x01(\x03\x12\x15\n\roriginal_text\x18\x05 \x01(\t\x12!\n\x05usage\x18\x06 \x01(\x0b\x32\x12.claude_code.Usage\"3\n\rFileExpansion\x12\x11\n\tfile_path\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"\x19\n\tTextEvent\x12\x0c\n\x04text\x18\x01 \x01(\t\"!\n\rThinkingEvent\x12\x10\n\x08thinking\x18\x01 \x01(\t\"J\n\x0cToolUseEvent\x12\x13\n\x0btool_use_id\x18\x01 \x01(\t\x12\x11\n\ttool_name\x18\x02 \x01(\t\x12\x12\n\ninput_json\x18\x03 \x01(\t\"H\n\x0fToolResultEvent\x12\x13\n\x0btool_use_id\x18\x01 \x01(\t\x12\x0e\n\x06result\x18\x02 \x01(\t\x12\x10\n\x08is_error\x18\x03 \x01(\x08\"=\n\x14MessageCompleteEvent\x12%\n\x07message\x18\x01 \x01(\x0b\x32\x14.claude_code.Message\"N\n\x11TurnCompleteEvent\x12\x0c\n\x04turn\x18\x01 \x01(\x05\x12\x16\n\x0ehas_more_turns\x18\x02 \x01(\x08\x12\x13\n\x0bstop_reason\x18\x03 \x01(\t\"-\n\nErrorEvent\x12\r\n\x05\x65rror\x18\x01 \x01(\t\x12\x10\n\x08is_fatal\x18\x02 \x01(\x08\"\x9d\x03\n\nQueryEvent\x12,\n\ntext_event\x18\x01 \x01(\x0b\x32\x16.claude_code.TextEventH\x00\x12\x34\n\x0ethinking_event\x18\x02 \x01(\x0b\x32\x1a.claude_code.ThinkingEventH\x00\x12\x33\n\x0etool_use_event\x18\x03 \x01(\x0b\x32\x19.claude_code.ToolUseEventH\x00\x12\x39\n\x11tool_result_event\x18\x04 \x01(\x0b\x32\x1c.claude_code.ToolResultEventH\x00\x12\x43\n\x16message_complete_event\x18\x05 \x01(\x0b\x32!.claude_code.MessageCompleteEventH\x00\x12=\n\x13turn_complete_event\x18\x06 \x01(\x0b\x32\x1e.claude_code.TurnCompleteEventH\x00\x12.\n\x0b\x65rror_event\x18\x07 \x01(\x0b\x32\x17.claude_code.ErrorEventH\x00\x42\x07\n\x05\x65vent\"O\n\x0b\x43hatRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tuser_text\x18\x02 \x01(\t\x12\x19\n\x11working_directory\x18\x03 \x01(\t\"6\n\x0c\x43hatResponse\x12&\n\x05\x65vent\x18\x01 \x01(\x0b\x32\x17.claude_code.QueryEvent\"l\n\x11StreamChatRequest\x12\x30\n\x0c\x63hat_request\x18\x01 \x01(\x0b\x32\x18.claude_code.ChatRequestH\x00\x12\x1a\n\x10interrupt_signal\x18\x02 \x01(\tH\x00\x42\t\n\x07request\"1\n\x14\x43reateSessionRequest\x12\x19\n\x11working_directory\x18\x01 \x01(\t\"+\n\x15\x43reateSessionResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\'\n\x11GetSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\xb9\x01\n\x12GetSessionResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12&\n\x08messages\x18\x02 \x03(\x0b\x32\x14.claude_code.Message\x12\x14\n\x0c\x63urrent_turn\x18\x03 \x01(\x05\x12\'\n\x0btotal_usage\x18\x04 \x01(\x0b\x32\x12.claude_code.Usage\x12\x19\n\x11working_directory\x18\x05 \x01(\t\x12\r\n\x05title\x18\x06 \x01(\t\"\x15\n\x13ListSessionsRequest\"y\n\x0eSessionSummary\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x12\n\nupdated_at\x18\x03 \x01(\x03\x12\x19\n\x11working_directory\x18\x04 \x01(\t\x12\x15\n\rmessage_count\x18\x05 \x01(\x05\"E\n\x14ListSessionsResponse\x12-\n\x08sessions\x18\x01 \x03(\x0b\x32\x1b.claude_code.SessionSummary\"*\n\x14\x44\x65leteSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"(\n\x15\x44\x65leteSessionResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\")\n\x13\x43learSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\'\n\x14\x43learSessionResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"%\n\x0fGetStateRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"~\n\x10GetStateResponse\x12\x15\n\rmessage_count\x18\x01 \x01(\x05\x12\x14\n\x0c\x63urrent_turn\x18\x02 \x01(\x05\x12\x14\n\x0cis_streaming\x18\x03 \x01(\x08\x12\'\n\x0btotal_usage\x18\x04 \x01(\x0b\x32\x12.claude_code.Usage\"6\n\x10InterruptRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0e\n\x06reason\x18\x02 \x01(\t\"$\n\x11InterruptResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08*\x8e\x01\n\x0bMessageRole\x12\x1c\n\x18MESSAGE_ROLE_UNSPECIFIED\x10\x00\x12\x15\n\x11MESSAGE_ROLE_USER\x10\x01\x12\x1a\n\x16MESSAGE_ROLE_ASSISTANT\x10\x02\x12\x17\n\x13MESSAGE_ROLE_SYSTEM\x10\x03\x12\x15\n\x11MESSAGE_ROLE_TOOL\x10\x04\x32\xef\x01\n\x0b\x43hatService\x12K\n\nStreamChat\x12\x1e.claude_code.StreamChatRequest\x1a\x19.claude_code.ChatResponse(\x01\x30\x01\x12G\n\x08GetState\x12\x1c.claude_code.GetStateRequest\x1a\x1d.claude_code.GetStateResponse\x12J\n\tInterrupt\x12\x1d.claude_code.InterruptRequest\x1a\x1e.claude_code.InterruptResponse2\xb9\x03\n\x0eSessionService\x12V\n\rCreateSession\x12!.claude_code.CreateSessionRequest\x1a\".claude_code.CreateSessionResponse\x12M\n\nGetSession\x12\x1e.claude_code.GetSessionRequest\x1a\x1f.claude_code.GetSessionResponse\x12S\n\x0cListSessions\x12 .claude_code.ListSessionsRequest\x1a!.claude_code.ListSessionsResponse\x12V\n\rDeleteSession\x12!.claude_code.DeleteSessionRequest\x1a\".claude_code.DeleteSessionResponse\x12S\n\x0c\x43learSession\x12 .claude_code.ClearSessionRequest\x1a!.claude_code.ClearSessionResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11\x63laude_code.proto\x12\x0b\x63laude_code\"4\n\x05Usage\x12\x14\n\x0cinput_tokens\x18\x01 \x01(\x05\x12\x15\n\routput_tokens\x18\x02 \x01(\x05\"\x1b\n\x0bTextContent\x12\x0c\n\x04text\x18\x01 \x01(\t\"6\n\x0fThinkingContent\x12\x10\n\x08thinking\x18\x01 \x01(\t\x12\x11\n\tsignature\x18\x02 \x01(\t\">\n\x0eToolUseContent\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x12\n\ninput_json\x18\x03 \x01(\t\"K\n\x11ToolResultContent\x12\x13\n\x0btool_use_id\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x10\n\x08is_error\x18\x03 \x01(\x08\"\xdb\x01\n\x0c\x43ontentBlock\x12(\n\x04text\x18\x01 \x01(\x0b\x32\x18.claude_code.TextContentH\x00\x12\x30\n\x08thinking\x18\x02 \x01(\x0b\x32\x1c.claude_code.ThinkingContentH\x00\x12/\n\x08tool_use\x18\x03 \x01(\x0b\x32\x1b.claude_code.ToolUseContentH\x00\x12\x35\n\x0btool_result\x18\x04 \x01(\x0b\x32\x1e.claude_code.ToolResultContentH\x00\x42\x07\n\x05\x62lock\"\xb8\x01\n\x07Message\x12&\n\x04role\x18\x01 \x01(\x0e\x32\x18.claude_code.MessageRole\x12*\n\x07\x63ontent\x18\x02 \x03(\x0b\x32\x19.claude_code.ContentBlock\x12\x0c\n\x04uuid\x18\x03 \x01(\t\x12\x11\n\ttimestamp\x18\x04 \x01(\x03\x12\x15\n\roriginal_text\x18\x05 \x01(\t\x12!\n\x05usage\x18\x06 \x01(\x0b\x32\x12.claude_code.Usage\"3\n\rFileExpansion\x12\x11\n\tfile_path\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"\x19\n\tTextEvent\x12\x0c\n\x04text\x18\x01 \x01(\t\"!\n\rThinkingEvent\x12\x10\n\x08thinking\x18\x01 \x01(\t\"J\n\x0cToolUseEvent\x12\x13\n\x0btool_use_id\x18\x01 \x01(\t\x12\x11\n\ttool_name\x18\x02 \x01(\t\x12\x12\n\ninput_json\x18\x03 \x01(\t\"H\n\x0fToolResultEvent\x12\x13\n\x0btool_use_id\x18\x01 \x01(\t\x12\x0e\n\x06result\x18\x02 \x01(\t\x12\x10\n\x08is_error\x18\x03 \x01(\x08\"=\n\x14MessageCompleteEvent\x12%\n\x07message\x18\x01 \x01(\x0b\x32\x14.claude_code.Message\"N\n\x11TurnCompleteEvent\x12\x0c\n\x04turn\x18\x01 \x01(\x05\x12\x16\n\x0ehas_more_turns\x18\x02 \x01(\x08\x12\x13\n\x0bstop_reason\x18\x03 \x01(\t\"-\n\nErrorEvent\x12\r\n\x05\x65rror\x18\x01 \x01(\t\x12\x10\n\x08is_fatal\x18\x02 \x01(\x08\"\x9d\x03\n\nQueryEvent\x12,\n\ntext_event\x18\x01 \x01(\x0b\x32\x16.claude_code.TextEventH\x00\x12\x34\n\x0ethinking_event\x18\x02 \x01(\x0b\x32\x1a.claude_code.ThinkingEventH\x00\x12\x33\n\x0etool_use_event\x18\x03 \x01(\x0b\x32\x19.claude_code.ToolUseEventH\x00\x12\x39\n\x11tool_result_event\x18\x04 \x01(\x0b\x32\x1c.claude_code.ToolResultEventH\x00\x12\x43\n\x16message_complete_event\x18\x05 \x01(\x0b\x32!.claude_code.MessageCompleteEventH\x00\x12=\n\x13turn_complete_event\x18\x06 \x01(\x0b\x32\x1e.claude_code.TurnCompleteEventH\x00\x12.\n\x0b\x65rror_event\x18\x07 \x01(\x0b\x32\x17.claude_code.ErrorEventH\x00\x42\x07\n\x05\x65vent\"O\n\x0b\x43hatRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tuser_text\x18\x02 \x01(\t\x12\x19\n\x11working_directory\x18\x03 \x01(\t\"6\n\x0c\x43hatResponse\x12&\n\x05\x65vent\x18\x01 \x01(\x0b\x32\x17.claude_code.QueryEvent\"1\n\x14\x43reateSessionRequest\x12\x19\n\x11working_directory\x18\x01 \x01(\t\"+\n\x15\x43reateSessionResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\'\n\x11GetSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\xb9\x01\n\x12GetSessionResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12&\n\x08messages\x18\x02 \x03(\x0b\x32\x14.claude_code.Message\x12\x14\n\x0c\x63urrent_turn\x18\x03 \x01(\x05\x12\'\n\x0btotal_usage\x18\x04 \x01(\x0b\x32\x12.claude_code.Usage\x12\x19\n\x11working_directory\x18\x05 \x01(\t\x12\r\n\x05title\x18\x06 \x01(\t\"\x15\n\x13ListSessionsRequest\"y\n\x0eSessionSummary\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x12\n\nupdated_at\x18\x03 \x01(\x03\x12\x19\n\x11working_directory\x18\x04 \x01(\t\x12\x15\n\rmessage_count\x18\x05 \x01(\x05\"E\n\x14ListSessionsResponse\x12-\n\x08sessions\x18\x01 \x03(\x0b\x32\x1b.claude_code.SessionSummary\"6\n\x10InterruptRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0e\n\x06reason\x18\x02 \x01(\t\"$\n\x11InterruptResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08*\x8e\x01\n\x0bMessageRole\x12\x1c\n\x18MESSAGE_ROLE_UNSPECIFIED\x10\x00\x12\x15\n\x11MESSAGE_ROLE_USER\x10\x01\x12\x1a\n\x16MESSAGE_ROLE_ASSISTANT\x10\x02\x12\x17\n\x13MESSAGE_ROLE_SYSTEM\x10\x03\x12\x15\n\x11MESSAGE_ROLE_TOOL\x10\x04\x32\x9e\x01\n\x0b\x43hatService\x12\x43\n\nStreamChat\x12\x18.claude_code.ChatRequest\x1a\x19.claude_code.ChatResponse0\x01\x12J\n\tInterrupt\x12\x1d.claude_code.InterruptRequest\x1a\x1e.claude_code.InterruptResponse2\x8c\x02\n\x0eSessionService\x12V\n\rCreateSession\x12!.claude_code.CreateSessionRequest\x1a\".claude_code.CreateSessionResponse\x12M\n\nGetSession\x12\x1e.claude_code.GetSessionRequest\x1a\x1f.claude_code.GetSessionResponse\x12S\n\x0cListSessions\x12 .claude_code.ListSessionsRequest\x1a!.claude_code.ListSessionsResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'claude_code_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_MESSAGEROLE']._serialized_start=2815
-  _globals['_MESSAGEROLE']._serialized_end=2957
+  _globals['_MESSAGEROLE']._serialized_start=2368
+  _globals['_MESSAGEROLE']._serialized_end=2510
   _globals['_USAGE']._serialized_start=34
   _globals['_USAGE']._serialized_end=86
   _globals['_TEXTCONTENT']._serialized_start=88
@@ -69,40 +69,26 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CHATREQUEST']._serialized_end=1673
   _globals['_CHATRESPONSE']._serialized_start=1675
   _globals['_CHATRESPONSE']._serialized_end=1729
-  _globals['_STREAMCHATREQUEST']._serialized_start=1731
-  _globals['_STREAMCHATREQUEST']._serialized_end=1839
-  _globals['_CREATESESSIONREQUEST']._serialized_start=1841
-  _globals['_CREATESESSIONREQUEST']._serialized_end=1890
-  _globals['_CREATESESSIONRESPONSE']._serialized_start=1892
-  _globals['_CREATESESSIONRESPONSE']._serialized_end=1935
-  _globals['_GETSESSIONREQUEST']._serialized_start=1937
-  _globals['_GETSESSIONREQUEST']._serialized_end=1976
-  _globals['_GETSESSIONRESPONSE']._serialized_start=1979
-  _globals['_GETSESSIONRESPONSE']._serialized_end=2164
-  _globals['_LISTSESSIONSREQUEST']._serialized_start=2166
-  _globals['_LISTSESSIONSREQUEST']._serialized_end=2187
-  _globals['_SESSIONSUMMARY']._serialized_start=2189
-  _globals['_SESSIONSUMMARY']._serialized_end=2310
-  _globals['_LISTSESSIONSRESPONSE']._serialized_start=2312
-  _globals['_LISTSESSIONSRESPONSE']._serialized_end=2381
-  _globals['_DELETESESSIONREQUEST']._serialized_start=2383
-  _globals['_DELETESESSIONREQUEST']._serialized_end=2425
-  _globals['_DELETESESSIONRESPONSE']._serialized_start=2427
-  _globals['_DELETESESSIONRESPONSE']._serialized_end=2467
-  _globals['_CLEARSESSIONREQUEST']._serialized_start=2469
-  _globals['_CLEARSESSIONREQUEST']._serialized_end=2510
-  _globals['_CLEARSESSIONRESPONSE']._serialized_start=2512
-  _globals['_CLEARSESSIONRESPONSE']._serialized_end=2551
-  _globals['_GETSTATEREQUEST']._serialized_start=2553
-  _globals['_GETSTATEREQUEST']._serialized_end=2590
-  _globals['_GETSTATERESPONSE']._serialized_start=2592
-  _globals['_GETSTATERESPONSE']._serialized_end=2718
-  _globals['_INTERRUPTREQUEST']._serialized_start=2720
-  _globals['_INTERRUPTREQUEST']._serialized_end=2774
-  _globals['_INTERRUPTRESPONSE']._serialized_start=2776
-  _globals['_INTERRUPTRESPONSE']._serialized_end=2812
-  _globals['_CHATSERVICE']._serialized_start=2960
-  _globals['_CHATSERVICE']._serialized_end=3199
-  _globals['_SESSIONSERVICE']._serialized_start=3202
-  _globals['_SESSIONSERVICE']._serialized_end=3643
+  _globals['_CREATESESSIONREQUEST']._serialized_start=1731
+  _globals['_CREATESESSIONREQUEST']._serialized_end=1780
+  _globals['_CREATESESSIONRESPONSE']._serialized_start=1782
+  _globals['_CREATESESSIONRESPONSE']._serialized_end=1825
+  _globals['_GETSESSIONREQUEST']._serialized_start=1827
+  _globals['_GETSESSIONREQUEST']._serialized_end=1866
+  _globals['_GETSESSIONRESPONSE']._serialized_start=1869
+  _globals['_GETSESSIONRESPONSE']._serialized_end=2054
+  _globals['_LISTSESSIONSREQUEST']._serialized_start=2056
+  _globals['_LISTSESSIONSREQUEST']._serialized_end=2077
+  _globals['_SESSIONSUMMARY']._serialized_start=2079
+  _globals['_SESSIONSUMMARY']._serialized_end=2200
+  _globals['_LISTSESSIONSRESPONSE']._serialized_start=2202
+  _globals['_LISTSESSIONSRESPONSE']._serialized_end=2271
+  _globals['_INTERRUPTREQUEST']._serialized_start=2273
+  _globals['_INTERRUPTREQUEST']._serialized_end=2327
+  _globals['_INTERRUPTRESPONSE']._serialized_start=2329
+  _globals['_INTERRUPTRESPONSE']._serialized_end=2365
+  _globals['_CHATSERVICE']._serialized_start=2513
+  _globals['_CHATSERVICE']._serialized_end=2671
+  _globals['_SESSIONSERVICE']._serialized_start=2674
+  _globals['_SESSIONSERVICE']._serialized_end=2942
 # @@protoc_insertion_point(module_scope)
