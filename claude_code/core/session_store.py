@@ -76,7 +76,9 @@ class SessionStore:
     """Read and write persisted TUI sessions."""
 
     def __init__(self, base_dir: Optional[Path] = None):
-        self.base_dir = Path(base_dir) if base_dir is not None else DEFAULT_SESSION_BASE_DIR
+        self.base_dir = (
+            Path(base_dir) if base_dir is not None else DEFAULT_SESSION_BASE_DIR
+        )
         self.sessions_dir = self.base_dir / "sessions"
 
     def save_snapshot(
@@ -108,8 +110,12 @@ class SessionStore:
             updated_at=now,
             working_directory=working_directory,
             current_turn=current_turn,
-            model_name=model_name if model_name is not None else (existing.model_name if existing else None),
-            total_usage=_clone_usage(total_usage or (existing.total_usage if existing else None)),
+            model_name=model_name
+            if model_name is not None
+            else (existing.model_name if existing else None),
+            total_usage=_clone_usage(
+                total_usage or (existing.total_usage if existing else None)
+            ),
             messages=list(messages),
         )
         self.save_session(session)
@@ -307,11 +313,8 @@ def _message_to_dict(message: Message) -> dict[str, Any]:
         "timestamp": message.timestamp.isoformat(),
         "is_meta": message.is_meta,
         "is_compact_summary": message.is_compact_summary,
-        "tool_use_result": message.tool_use_result,
         "is_visible_in_transcript_only": message.is_visible_in_transcript_only,
-        "message": message.message,
     }
-    # Save file expansion info for user messages
     if message.file_expansions:
         result["file_expansions"] = [
             {
@@ -326,6 +329,40 @@ def _message_to_dict(message: Message) -> dict[str, Any]:
     return result
 
 
+def _reconstruct_message_dict(
+    role: MessageRole, content: list[Any], original_text: str
+) -> dict[str, Any]:
+    """Reconstruct message dict from content blocks."""
+    if role == MessageRole.USER:
+        text = ""
+        for block in content:
+            if isinstance(block, TextContent):
+                text = block.text
+                break
+        return {"role": "user", "content": text}
+    elif role == MessageRole.ASSISTANT:
+        return {
+            "role": "assistant",
+            "content": [block.to_api_format() for block in content],
+        }
+    elif role == MessageRole.SYSTEM:
+        text = ""
+        for block in content:
+            if isinstance(block, TextContent):
+                text = block.text
+                break
+        return {"role": "system", "content": text}
+    elif role == MessageRole.TOOL:
+        for block in content:
+            if isinstance(block, ToolResultContent):
+                return {
+                    "role": "tool",
+                    "content": block.content,
+                    "tool_call_id": block.tool_use_id,
+                }
+    return {"role": role.value, "content": ""}
+
+
 def _message_from_dict(data: dict[str, Any]) -> Message:
     timestamp_value = data.get("timestamp")
     timestamp = (
@@ -334,19 +371,73 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
         else datetime.now()
     )
     role_value = str(data.get("type", MessageRole.USER.value))
+    role = MessageRole(role_value)
+
+    file_expansions = []
+    expansions_data = data.get("file_expansions", [])
+    if isinstance(expansions_data, list):
+        from claude_code.core.file_expansion import FileExpansion
+
+        for exp_data in expansions_data:
+            if isinstance(exp_data, dict):
+                file_expansions.append(
+                    FileExpansion(
+                        file_path=str(exp_data.get("file_path", "")),
+                        content=str(exp_data.get("content", "")),
+                        display_path=str(exp_data.get("display_path", "")),
+                    )
+                )
+
+    original_text = str(data.get("original_text", ""))
+    content = [
+        _content_block_from_dict(block_data)
+        for block_data in data.get("content", [])
+        if isinstance(block_data, dict)
+    ]
+
+    message_dict = data.get("message")
+    if not isinstance(message_dict, dict):
+        message_dict = _reconstruct_message_dict(role, content, original_text)
+
+    tool_use_result = data.get("tool_use_result")
+    if tool_use_result is None and role == MessageRole.TOOL:
+        for block in content:
+            if isinstance(block, ToolResultContent):
+                tool_use_result = block.content
+                break
+
+    return Message(
+        type=role,
+        content=content,
+        uuid=str(data.get("uuid", "")) or generate_uuid(),
+        timestamp=timestamp,
+        is_meta=bool(data.get("is_meta", False)),
+        is_compact_summary=bool(data.get("is_compact_summary", False)),
+        tool_use_result=tool_use_result,
+        is_visible_in_transcript_only=bool(
+            data.get("is_visible_in_transcript_only", False)
+        ),
+        message=message_dict,
+        file_expansions=file_expansions,
+        original_text=original_text,
+    )
+    role_value = str(data.get("type", MessageRole.USER.value))
 
     # Restore file expansions
     file_expansions = []
     expansions_data = data.get("file_expansions", [])
     if isinstance(expansions_data, list):
         from claude_code.core.file_expansion import FileExpansion
+
         for exp_data in expansions_data:
             if isinstance(exp_data, dict):
-                file_expansions.append(FileExpansion(
-                    file_path=str(exp_data.get("file_path", "")),
-                    content=str(exp_data.get("content", "")),
-                    display_path=str(exp_data.get("display_path", "")),
-                ))
+                file_expansions.append(
+                    FileExpansion(
+                        file_path=str(exp_data.get("file_path", "")),
+                        content=str(exp_data.get("content", "")),
+                        display_path=str(exp_data.get("display_path", "")),
+                    )
+                )
 
     original_text = str(data.get("original_text", ""))
 

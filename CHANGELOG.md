@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-11
+
+#### Session Storage Optimization
+- Removed redundant `message` field from persisted messages (can be reconstructed from `content`)
+- Removed redundant `tool_use_result` field from persisted messages (can be derived from `content[0].content`)
+- Added `_reconstruct_message_dict()` function to rebuild message dict from content blocks on load
+- Maintained backward compatibility: old JSON files with `message`/`tool_use_result` fields still load correctly
+- Reduces JSON file size by ~39 bytes per message
+
 ### Changed - 2025-04-13
 
 #### Tool Result Display Refactor with Log Widget
