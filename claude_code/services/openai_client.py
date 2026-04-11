@@ -356,7 +356,7 @@ class OpenAIClient:
 
                 args_full_str = str(args)
                 args_str = args_full_str[:50] + "..." if len(args_full_str) > 50 else args_full_str
-                logger.debug(f"Tool call parsed: {tc.name}, id: {tc.id}, args: {args_str}")
+                logger.debug(f"Full tool call parsed: {tc.name}, id: {tc.id}, args: {args_str}")
                 blocks.append(
                     ToolUseContent(
                         id=tc.id,

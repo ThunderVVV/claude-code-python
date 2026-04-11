@@ -418,7 +418,7 @@ class QueryEngine:
                                     continue
                                 previewed_tool_use_ids.add(tool_use.id)
                                 logger.debug(
-                                    f"Previewing tool use: tool_use.name={tool_use.name}, tool_use.id={tool_use.id}, tool_use.input: {tool_use.input}"
+                                    f"Previewing partial tool use: tool_use.name={tool_use.name}, tool_use.id={tool_use.id}, tool_use.input: {tool_use.input}"
                                 )
                                 yield ToolUseEvent(
                                     tool_use_id=tool_use.id,
