@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-12
+
+#### Web UI Refactoring and Bug Fixes
+- Extracted inline CSS and JavaScript from `index.html` to separate files (`styles.css`, `app.js`)
+- Added routes in `server.py` to serve static CSS and JS files
+- Fixed message ordering issue: thinking content now appears in correct order (FIFO)
+- Fixed code diff not displaying during real-time streaming:
+  - Store tool name and input in DOM data attributes for later retrieval
+  - Always save tool info to `pendingToolUses` even if block already exists
+  - Use `updateToolResult` consistently for diff rendering
+- Marked Web UI as experimental feature in README
+
 ### Changed - 2026-04-11
 
 #### UI Utils Simplification - Remove Over-engineering

@@ -97,6 +97,18 @@ async def index(request):
     return web.FileResponse(html_path)
 
 
+@routes.get("/styles.css")
+async def styles(request):
+    css_path = Path(__file__).parent / "styles.css"
+    return web.FileResponse(css_path)
+
+
+@routes.get("/app.js")
+async def app_js(request):
+    js_path = Path(__file__).parent / "app.js"
+    return web.FileResponse(js_path)
+
+
 @routes.post("/api/chat")
 async def chat(request):
     data = await request.json()
