@@ -6,6 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2025-04-13
+
+#### gRPC Interface Simplification
+- Simplified `StreamChat` RPC from streaming request to unary request
+- Removed `StreamChatRequest` wrapper message, now using `ChatRequest` directly
+- Removed unused RPC methods: `GetState`, `DeleteSession`, `ClearSession`
+- Removed unused message types: `GetStateRequest`, `GetStateResponse`, `DeleteSessionRequest`, `DeleteSessionResponse`, `ClearSessionRequest`, `ClearSessionResponse`
+
+#### Client API Cleanup
+- Removed unused client methods: `get_state()`, `delete_session()`, `clear_session()`
+- Simplified `stream_chat()` to use unary request instead of generator
+- Added debug logging for all gRPC requests (session creation, chat, interrupt, etc.)
+- Removed `delete-session` CLI command
+
+#### Server Implementation Simplification
+- Added port availability check to prevent duplicate server instances
+- Removed unused RPC implementations: `GetState`, `DeleteSession`, `ClearSession`
+- Simplified `StreamChat` to handle unary request
+- Added comprehensive debug/info logging for all incoming requests
+- Improved error handling with `log_full_exception`
+
+#### Query Engine Refactoring
+- Removed unused `QueryResult` dataclass
+- Removed unused `ask()` convenience function
+- Removed unused `run()` method with callbacks
+- Simplified error handling: removed `APINetworkError`, using unified `APIError`
+- Added debug logging for tool use preview and execution
+- Auto-save session on API errors
+
+#### Logging Configuration Improvements
+- Renamed `log_exception()` to `log_full_exception()` for clarity
+- Reorganized logging setup: file logging only enabled in debug mode
+- Non-debug mode: console logging at INFO level only
+- Debug mode: both file and console logging at DEBUG level
+- Improved exception logging format
+
+#### UI/UX Improvements
+- Improved command history navigation with proper buffer management
+- Added `Shift+Up/Down` shortcuts for cursor navigation in input area
+- Simplified session initialization: removed `initial_session` parameter
+- Improved session resume: handle pending user text correctly
+- Removed unused UI methods: `truncate()`, `add_tool_result()`, `get_message()`, etc.
+- Fixed error handling to use `log_full_exception`
+- Added debug logging for file expansions
+- Cleaned up message rendering logic
+
+#### API Client Error Handling
+- Removed `APINetworkError`, using unified `APIError` for all errors
+- Added `log_full_exception` for better error diagnostics
+- Improved tool call logging with truncated args preview
+- Simplified exception handling in chat completion stream
+
 ### Fixed - 2026-04-11
 
 #### gRPC Verbose Log Suppression
