@@ -26,35 +26,18 @@ from claude_code.ui.utils import (
     summarize_tool_result,
     summarize_tool_use,
     format_tool_input_details,
-    truncate_preview_line,
+    TOOL_RESULT_TRUNCATE_LENGTH,
 )
 from claude_code.utils.logging_config import log_full_exception
 
 
-class ThinkingWidget(Static):
-    """Widget for displaying reasoning content as plain text (no markdown)."""
-
-    def __init__(self, initial_thinking: str = "", **kwargs):
-        super().__init__(
-            sanitize_terminal_text(initial_thinking),
-            classes="thinking-content",
-            **kwargs,
-        )
-        self._thinking = initial_thinking
-
-    async def append_thinking(self, thinking: str) -> None:
-        """Append streamed thinking content."""
-        self._thinking += thinking
-        self.update(sanitize_terminal_text(self._thinking))
-
-    async def update_thinking(self, thinking: str) -> None:
-        """Update the displayed thinking content."""
-        self._thinking = thinking
-        self.update(sanitize_terminal_text(thinking))
-
-    async def finish_streaming(self) -> None:
-        """No-op for plain text widget."""
-        pass
+# Role configuration - single source of truth
+ROLE_CONFIG = {
+    MessageRole.USER: {"label": "You", "role_class": "role-user", "block_class": "user-message-block"},
+    MessageRole.ASSISTANT: {"label": "Claude", "role_class": "role-assistant", "block_class": "assistant-message-block"},
+    MessageRole.SYSTEM: {"label": "System", "role_class": "role-system", "block_class": "system-message-block"},
+    MessageRole.TOOL: {"label": "Tool", "role_class": "role-tool", "block_class": "tool-result-block"},
+}
 
 
 class ThinkingBlockWidget(VerticalGroup):
@@ -63,7 +46,7 @@ class ThinkingBlockWidget(VerticalGroup):
     def __init__(self, initial_thinking: str = "", **kwargs):
         super().__init__(**kwargs)
         self._thinking = initial_thinking
-        self._thinking_widget: Optional[ThinkingWidget] = None
+        self._content_widget: Optional[Static] = None
         self.add_class("thinking-block")
 
     def compose(self) -> ComposeResult:
@@ -74,26 +57,28 @@ class ThinkingBlockWidget(VerticalGroup):
             expanded_symbol="v",
             classes="thinking-collapsible",
         ):
-            self._thinking_widget = ThinkingWidget(self._thinking)
-            yield self._thinking_widget
+            self._content_widget = Static(
+                sanitize_terminal_text(self._thinking),
+                classes="thinking-content",
+            )
+            yield self._content_widget
 
     async def append_thinking(self, thinking: str) -> None:
         """Append streamed thinking content."""
         self._thinking += thinking
-        if self._thinking_widget:
-            await self._thinking_widget.append_thinking(thinking)
+        if self._content_widget:
+            self._content_widget.update(sanitize_terminal_text(self._thinking))
 
     async def update_thinking(self, thinking: str) -> None:
         """Update the thinking content."""
         self._thinking = thinking
-        if self._thinking_widget:
-            await self._thinking_widget.update_thinking(thinking)
+        if self._content_widget:
+            self._content_widget.update(sanitize_terminal_text(thinking))
             self.refresh(layout=True)
 
     async def finish_streaming(self) -> None:
-        """Flush and stop the markdown stream used by the thinking widget."""
-        if self._thinking_widget:
-            await self._thinking_widget.finish_streaming()
+        """No-op for plain text widget."""
+        pass
 
 
 class ToolResultLogWidget(Log):
@@ -134,109 +119,111 @@ class ToolUseWidget(VerticalGroup):
         self.tool_name = tool_name
         self.tool_input = tool_input
         self.tool_use_id = tool_use_id
+        self._result: Optional[tuple[str, bool]] = None  # (summary, is_error)
+        self._output_lines: List[str] = []
+        self._collapsible: Optional[Collapsible] = None
+        self._container: Optional[VerticalGroup] = None
         self._did_auto_expand = False
-        self._result_summary: Optional[str] = None
-        self._result_output_lines: List[str] = []
-        self._result_is_error = False
-        self._details_collapsible: Optional[Collapsible] = None
-        self._details_container: Optional[VerticalGroup] = None
-        self._pending_result_render: bool = False
         self.add_class("tool-use-block")
 
     def compose(self) -> ComposeResult:
         with Collapsible(
-            title=self._collapsible_title(),
+            title=self._build_title(),
             collapsed=not self._should_auto_expand(),
             collapsed_symbol=">",
             expanded_symbol="v",
             classes="tool-collapsible tool-use-details",
         ) as collapsible:
-            self._details_collapsible = collapsible
+            self._collapsible = collapsible
             with VerticalGroup(classes="tool-detail-body") as container:
-                self._details_container = container
-                yield from self._compose_detail_widgets()
+                self._container = container
+                yield from self._compose_details()
 
     def set_result(self, result: str, is_error: bool) -> None:
         """Attach the tool result to the existing tool-use block."""
-        self._result_is_error = is_error
-        self._result_summary, self._result_output_lines = summarize_tool_result(
+        summary, output_lines = summarize_tool_result(
             self.tool_name,
             self.tool_input,
             result,
             is_error,
         )
-        if self._details_collapsible:
-            self._details_collapsible.title = self._collapsible_title()
-            self._maybe_auto_expand()
-        if self._details_container:
-            if self._details_container.is_mounted:
-                self._render_detail_widgets()
-            else:
-                self._pending_result_render = True
+        self._result = (summary, is_error)
+        self._output_lines = output_lines
+        
+        if self._collapsible:
+            self._collapsible.title = self._build_title()
+            self._auto_expand_once()
+        if self._container and self._container.is_mounted:
+            self._render_details()
 
     def update_tool_input(self, tool_name: str, tool_input: dict) -> None:
         """Refresh the tool summary/details when fuller input arrives later."""
         self.tool_name = tool_name
         self.tool_input = tool_input
-        if self._details_collapsible:
-            self._details_collapsible.title = self._collapsible_title()
-            self._maybe_auto_expand()
-        if self._details_container and self._details_container.is_mounted:
-            self._render_detail_widgets()
+        if self._collapsible:
+            self._collapsible.title = self._build_title()
+            self._auto_expand_once()
+        if self._container and self._container.is_mounted:
+            self._render_details()
 
     def on_mount(self) -> None:
-        """Refresh the single collapsible after mount in case results arrived early."""
-        if self._details_collapsible:
-            self._details_collapsible.title = self._collapsible_title()
-            self._maybe_auto_expand()
-        if self._details_container and self._details_container.is_mounted:
-            if self._pending_result_render or self._result_summary is not None:
-                self._render_detail_widgets()
-                self._pending_result_render = False
+        """Refresh after mount in case results arrived early."""
+        if self._collapsible:
+            self._collapsible.title = self._build_title()
+            self._auto_expand_once()
+        if self._container and self._container.is_mounted and self._result:
+            self._render_details()
 
-    def _collapsible_title(self) -> Content:
+    def _build_title(self) -> Content:
         """Return the current single-line title for the tool call."""
-        if self._result_summary is None:
+        if self._result is None:
             return Content.from_text(
-                sanitize_terminal_text(
-                    summarize_tool_use(self.tool_name, self.tool_input)
-                ),
+                sanitize_terminal_text(summarize_tool_use(self.tool_name, self.tool_input)),
                 markup=False,
             )
-        summary = sanitize_terminal_text(self._result_summary)
-        status_style = "$error" if self._result_is_error else "$success"
-        return Content(
-            f"● {summary}",
-            spans=[Span(0, 1, status_style)],
-        )
+        summary, is_error = self._result
+        summary = sanitize_terminal_text(summary)
+        status_style = "$error" if is_error else "$success"
+        return Content(f"● {summary}", spans=[Span(0, 1, status_style)])
 
-    def _compose_detail_widgets(self) -> ComposeResult:
-        detail_lines = format_tool_input_details(
-            self.tool_input,
-            exclude_keys=self._detail_input_exclusions(),
-        )
+    def _should_auto_expand(self) -> bool:
+        """Return True when this tool block should start expanded."""
+        return self.tool_name in {"Edit", "Write"}
+
+    def _auto_expand_once(self) -> None:
+        """Expand Edit blocks once without overriding later manual collapse."""
+        if self._did_auto_expand or not self._should_auto_expand():
+            return
+        if self._collapsible:
+            self._collapsible.collapsed = False
+            self._did_auto_expand = True
+
+    def _compose_details(self) -> ComposeResult:
+        """Compose the detail widgets."""
+        # Input parameters
+        exclude_keys = self._get_input_exclusions()
+        detail_lines = format_tool_input_details(self.tool_input, exclude_keys)
         if detail_lines:
             for line in detail_lines:
                 yield Static(line, classes="tool-param", markup=False)
-        elif self._result_summary is None:
+        elif self._result is None:
             yield Static("No input parameters", classes="tool-param", markup=False)
 
+        # Diff view or output
         diff_view = self._build_diff_view()
         if diff_view is not None:
             yield diff_view
-        elif self._result_summary is not None:
+        elif self._result is not None:
             yield Static("Output:", classes="tool-output-label", markup=False)
-            if self._result_output_lines:
-                # Use Log widget for tool output with 6-line height limit
+            if self._output_lines:
                 log_widget = ToolResultLogWidget(classes="tool-result-log")
                 yield log_widget
             else:
                 yield Static("(no output)", classes="tool-result-preview", markup=False)
 
-    def _detail_input_exclusions(self) -> set[str]:
+    def _get_input_exclusions(self) -> set[str]:
         """Hide raw diff payloads once a diff view is available."""
-        diff_view = self._build_diff_view()
-        if diff_view is None:
+        if self._build_diff_view() is None:
             return set()
         if self.tool_name == "Edit":
             return {"old_string", "new_string"}
@@ -244,43 +231,26 @@ class ToolUseWidget(VerticalGroup):
             return {"content"}
         return set()
 
-    def _should_auto_expand(self) -> bool:
-        """Return True when this tool block should start expanded."""
-        return self.tool_name in {"Edit", "Write"}
-
-    def _maybe_auto_expand(self) -> None:
-        """Expand Edit blocks once without overriding later manual collapse."""
-        if self._did_auto_expand or not self._should_auto_expand():
-            return
-        if self._details_collapsible:
-            self._details_collapsible.collapsed = False
-            self._did_auto_expand = True
-
     def _build_diff_view(self) -> DiffView | None:
         """Build an inline diff widget for successful file-editing tool calls."""
-        if self._result_summary is None or self._result_is_error:
+        if self._result is None or self._result[1]:  # No result or error
             return None
 
         file_path = str(self.tool_input.get("file_path", "")).strip()
         if not file_path:
             return None
 
-        old_text: str
-        new_text: str
-
         if self.tool_name == "Edit":
             old_string = self.tool_input.get("old_string")
             new_string = self.tool_input.get("new_string")
             if not isinstance(old_string, str) or not isinstance(new_string, str):
                 return None
-            old_text = old_string
-            new_text = new_string
+            old_text, new_text = old_string, new_string
         elif self.tool_name == "Write":
             content = self.tool_input.get("content")
             if not isinstance(content, str):
                 return None
-            old_text = ""
-            new_text = content
+            old_text, new_text = "", content
         else:
             return None
 
@@ -292,49 +262,58 @@ class ToolUseWidget(VerticalGroup):
             classes="tool-edit-diff",
         )
 
-    def _render_detail_widgets(self) -> None:
-        if not self._details_container:
+    def _render_details(self) -> None:
+        """Re-render the detail widgets."""
+        if not self._container:
             return
-        for child in list(self._details_container.children):
+        for child in list(self._container.children):
             child.remove()
-        for widget in self._compose_detail_widgets():
-            self._details_container.mount(widget)
+        for widget in self._compose_details():
+            self._container.mount(widget)
         
         # Write output lines to the Log widget if present
-        if self._result_output_lines:
+        if self._output_lines:
             try:
-                log_widget = self._details_container.query_one(ToolResultLogWidget)
-                for line in self._result_output_lines:
+                log_widget = self._container.query_one(ToolResultLogWidget)
+                for line in self._output_lines:
                     log_widget.write_line(line)
             except Exception:
-                pass  # Log widget not found, skip
+                pass
 
 
-class AssistantMessageWidget(VerticalGroup):
+class MessageWidget(VerticalGroup):
     """
-    Widget for displaying an assistant message with streaming support.
-    This widget allows incremental updates of text and tool uses without recreating the entire widget.
-    Aligned with TypeScript's approach to streaming message display.
+    Widget for displaying a message with optional streaming support.
+    Consolidates both static and streaming message display.
     """
 
-    def __init__(self, message: Optional[Message] = None, **kwargs):
+    def __init__(self, message: Optional[Message] = None, streaming: bool = False, **kwargs):
         super().__init__(**kwargs)
+        self._streaming = streaming
+        self._message = message
+        
+        # Internal state for streaming
         self._thinking_content: str = ""
         self._text_content: str = ""
         self._tool_uses: List[ToolUseContent] = []
         self._tool_use_ids: set[str] = set()
         self._tool_widgets_by_id: dict[str, ToolUseWidget] = {}
+        
+        # Widget references
         self._thinking_widget: Optional[ThinkingBlockWidget] = None
         self._streaming_widget: Optional[StreamingMarkdownWidget] = None
-        self._tool_widgets: List[ToolUseWidget] = []
         self._content_container: Optional[VerticalGroup] = None
+        
         self.add_class("message-block")
-        self.add_class("assistant-message-block")
         if message:
-            self._load_initial_message(message)
+            role_config = ROLE_CONFIG.get(message.type, ROLE_CONFIG[MessageRole.ASSISTANT])
+            self.add_class(role_config["block_class"])
+            self._load_message(message)
+        else:
+            self.add_class("assistant-message-block")
 
-    def _load_initial_message(self, message: Message) -> None:
-        """Seed internal state before mount from a finalized assistant message."""
+    def _load_message(self, message: Message) -> None:
+        """Seed internal state from a message."""
         for block in message.content:
             if isinstance(block, ThinkingContent):
                 self._thinking_content = block.thinking
@@ -345,8 +324,77 @@ class AssistantMessageWidget(VerticalGroup):
                 if block.id:
                     self._tool_use_ids.add(block.id)
 
+    @property
+    def message(self) -> Optional[Message]:
+        """Backward compatibility property."""
+        return self._message
+
     def compose(self) -> ComposeResult:
-        # Content container - will hold thinking, text and tool widgets
+        if self._streaming:
+            yield from self._compose_streaming_message()
+        elif self._message:
+            yield from self._compose_static_message(self._message)
+        else:
+            yield from self._compose_streaming_message()
+
+    def _compose_static_message(self, message: Message) -> ComposeResult:
+        """Compose a static (non-streaming) message."""
+        role_config = ROLE_CONFIG.get(message.type, ROLE_CONFIG[MessageRole.ASSISTANT])
+        
+        # Role label
+        if message.type not in {MessageRole.USER, MessageRole.ASSISTANT}:
+            yield Label(role_config["label"], classes=f"message-role {role_config['role_class']}", markup=False)
+        
+        # File expansions for user messages
+        if message.type == MessageRole.USER and message.file_expansions:
+            for expansion in message.file_expansions:
+                log_widget = ToolResultLogWidget(classes="file-expansion-log")
+                yield log_widget
+                lines = self._format_file_expansion_lines(expansion)
+                for line in lines:
+                    log_widget.write_line(line)
+        
+        # Content blocks
+        for block in message.content:
+            if isinstance(block, ThinkingContent):
+                if block.thinking.strip():
+                    yield ThinkingBlockWidget(block.thinking)
+            elif isinstance(block, TextContent):
+                if block.text.strip():
+                    if message.type == MessageRole.ASSISTANT:
+                        self._streaming_widget = StreamingMarkdownWidget(block.text)
+                        yield self._streaming_widget
+                    else:
+                        display_text = (
+                            message.original_text
+                            if message.file_expansions
+                            else block.text
+                        )
+                        yield Static(
+                            sanitize_terminal_text(display_text),
+                            classes="message-content",
+                            markup=False,
+                        )
+            elif isinstance(block, ToolUseContent):
+                yield ToolUseWidget(
+                    tool_name=block.name,
+                    tool_input=block.input,
+                    tool_use_id=block.id,
+                )
+            elif isinstance(block, ToolResultContent):
+                content = block.content
+                if len(content) > TOOL_RESULT_TRUNCATE_LENGTH:
+                    content = content[:TOOL_RESULT_TRUNCATE_LENGTH] + f"\n... ({len(block.content) - TOOL_RESULT_TRUNCATE_LENGTH} more chars)"
+                summary, preview_lines = summarize_tool_result("Tool", {}, content, block.is_error)
+                yield Static(sanitize_terminal_text(summary), classes="tool-result", markup=False)
+                if preview_lines:
+                    log_widget = ToolResultLogWidget(classes="tool-result-log")
+                    yield log_widget
+                    for line in preview_lines:
+                        log_widget.write_line(line)
+
+    def _compose_streaming_message(self) -> ComposeResult:
+        """Compose a streaming message container."""
         with VerticalGroup(classes="message-content") as container:
             self._content_container = container
             if self._thinking_content:
@@ -361,11 +409,19 @@ class AssistantMessageWidget(VerticalGroup):
                     tool_input=tool_use.input,
                     tool_use_id=tool_use.id,
                 )
-                self._tool_widgets.append(tool_widget)
                 if tool_use.id:
                     self._tool_widgets_by_id[tool_use.id] = tool_widget
                 yield tool_widget
 
+    def _format_file_expansion_lines(self, expansion) -> List[str]:
+        """Format file expansion content as lines for Log widget."""
+        lines = expansion.content.splitlines()
+        formatted_lines = [f"@{expansion.display_path}:"]
+        for i, line in enumerate(lines, start=1):
+            formatted_lines.append(f"{i:6}\t{line}")
+        return formatted_lines
+
+    # Streaming API methods
     async def append_thinking(self, thinking: str) -> None:
         """Append streamed thinking content."""
         if not thinking:
@@ -379,7 +435,7 @@ class AssistantMessageWidget(VerticalGroup):
             self.refresh(layout=True)
 
     async def update_thinking(self, thinking: str) -> None:
-        """Update the streaming thinking content"""
+        """Update the streaming thinking content."""
         self._thinking_content = thinking
         if self._thinking_widget:
             await self._thinking_widget.update_thinking(thinking)
@@ -402,7 +458,7 @@ class AssistantMessageWidget(VerticalGroup):
             self.refresh(layout=True)
 
     async def update_text(self, text: str) -> None:
-        """Update the streaming text content"""
+        """Update the streaming text content."""
         self._text_content = text
         if self._streaming_widget:
             await self._streaming_widget.set_markdown_text(text)
@@ -426,7 +482,6 @@ class AssistantMessageWidget(VerticalGroup):
                 tool_input=tool_use.input,
                 tool_use_id=tool_use.id,
             )
-            self._tool_widgets.append(tool_widget)
             if tool_use.id:
                 self._tool_widgets_by_id[tool_use.id] = tool_widget
             await self._content_container.mount(tool_widget)
@@ -438,138 +493,25 @@ class AssistantMessageWidget(VerticalGroup):
         """Apply fuller tool metadata to an existing streamed tool block."""
         if not tool_use.id:
             return
-        for existing_tool_use in self._tool_uses:
-            if existing_tool_use.id == tool_use.id:
-                existing_tool_use.name = tool_use.name
-                existing_tool_use.input = tool_use.input
+        for existing in self._tool_uses:
+            if existing.id == tool_use.id:
+                existing.name = tool_use.name
+                existing.input = tool_use.input
                 break
-        tool_widget = self._tool_widgets_by_id.get(tool_use.id)
-        if tool_widget:
-            tool_widget.update_tool_input(tool_use.name, tool_use.input)
+        widget = self._tool_widgets_by_id.get(tool_use.id)
+        if widget:
+            widget.update_tool_input(tool_use.name, tool_use.input)
 
     def get_tool_widgets(self) -> dict[str, ToolUseWidget]:
         """Expose rendered tool widgets by tool-use id."""
         return dict(self._tool_widgets_by_id)
 
     async def finish_streaming(self) -> None:
-        """Flush and stop any active markdown streams for this assistant message."""
+        """Flush and stop any active markdown streams."""
         if self._thinking_widget:
             await self._thinking_widget.finish_streaming()
         if self._streaming_widget:
             await self._streaming_widget.finish_streaming()
-
-
-class MessageWidget(VerticalGroup):
-    """Widget for displaying a single message"""
-
-    def __init__(self, message: Message, **kwargs):
-        super().__init__(**kwargs)
-        self.message = message
-        self._streaming_widget: Optional[StreamingMarkdownWidget] = None
-        self.add_class("message-block")
-        self.add_class(self._get_role_block_class())
-
-    def compose(self) -> ComposeResult:
-        # Role label with styling
-        role_label, role_class = self._get_role_label()
-        if self.message.type not in {MessageRole.USER, MessageRole.ASSISTANT}:
-            yield Label(role_label, classes=f"message-role {role_class}", markup=False)
-            
-        if self.message.type == MessageRole.USER and self.message.file_expansions:
-            logger.debug(f"Rendering: {len(self.message.file_expansions)} file expansions found for message")
-            for expansion in self.message.file_expansions:
-                # Use Log widget for file expansion content
-                log_widget = ToolResultLogWidget(classes="file-expansion-log")
-                yield log_widget
-                # Write content after mount
-                lines = self._format_file_expansion_lines(expansion)
-                for line in lines:
-                    log_widget.write_line(line)
-
-        # Content
-        for block in self.message.content:
-            if isinstance(block, ThinkingContent):
-                if block.thinking.strip():
-                    yield ThinkingBlockWidget(block.thinking)
-            elif isinstance(block, TextContent):
-                if block.text.strip():
-                    # Use StreamingMarkdownWidget for assistant messages to allow updates
-                    if self.message.type == MessageRole.ASSISTANT:
-                        self._streaming_widget = StreamingMarkdownWidget(block.text)
-                        yield self._streaming_widget
-                    else:
-                        # For user messages with file expansions, show only the original text
-                        # (file expansions are already shown separately above)
-                        display_text = (
-                            self.message.original_text
-                            if self.message.file_expansions
-                            else block.text
-                        )
-                        yield Static(
-                            sanitize_terminal_text(display_text),
-                            classes="message-content",
-                            markup=False,
-                        )
-            elif isinstance(block, ToolUseContent):
-                yield ToolUseWidget(
-                    tool_name=block.name,
-                    tool_input=block.input,
-                    tool_use_id=block.id,
-                )
-            elif isinstance(block, ToolResultContent):
-                # Truncate long results
-                content = block.content
-                if len(content) > 500:
-                    content = (
-                        content[:500] + f"\n... ({len(block.content) - 500} more chars)"
-                    )
-                summary, preview_lines = summarize_tool_result(
-                    "Tool",
-                    {},
-                    content,
-                    block.is_error,
-                )
-                yield Static(
-                    sanitize_terminal_text(summary),
-                    classes="tool-result",
-                    markup=False,
-                )
-                # Use Log widget for tool result output
-                if preview_lines:
-                    log_widget = ToolResultLogWidget(classes="tool-result-log")
-                    yield log_widget
-                    # Write lines after mount
-                    for line in preview_lines:
-                        log_widget.write_line(line)
-
-    def _format_file_expansion_lines(self, expansion) -> List[str]:
-        """Format file expansion content as lines for Log widget."""
-        lines = expansion.content.splitlines()
-        
-        # Format with line numbers like Read tool (no truncation - Log widget handles scrolling)
-        formatted_lines = [f"@{expansion.display_path}:"]
-        for i, line in enumerate(lines, start=1):
-            formatted_lines.append(f"{i:6}\t{line}")
-        
-        return formatted_lines
-
-    def _get_role_label(self) -> tuple[str, str]:
-        role_map = {
-            MessageRole.USER: ("You", "role-user"),
-            MessageRole.ASSISTANT: ("Claude", "role-assistant"),
-            MessageRole.SYSTEM: ("System", "role-system"),
-            MessageRole.TOOL: ("Tool", "role-tool"),
-        }
-        return role_map.get(self.message.type, ("Unknown", "role-unknown"))
-
-    def _get_role_block_class(self) -> str:
-        role_map = {
-            MessageRole.USER: "user-message-block",
-            MessageRole.ASSISTANT: "assistant-message-block",
-            MessageRole.SYSTEM: "system-message-block",
-            MessageRole.TOOL: "tool-result-block",
-        }
-        return role_map.get(self.message.type, "assistant-message-block")
 
 
 class MessageList(VerticalGroup):
@@ -577,9 +519,7 @@ class MessageList(VerticalGroup):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._message_widgets: List[
-            Container
-        ] = []  # Can be MessageWidget or AssistantMessageWidget
+        self._message_widgets: List[Container] = []
         self._auto_follow_output = True
         self._suppress_scroll_tracking = False
 
@@ -645,13 +585,13 @@ class MessageList(VerticalGroup):
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)
 
-    async def create_assistant_widget(
+    async def create_streaming_widget(
         self,
         message: Optional[Message] = None,
         auto_follow: bool = True,
-    ) -> AssistantMessageWidget:
-        """Create a new assistant message widget for streaming"""
-        widget = AssistantMessageWidget(message=message)
+    ) -> MessageWidget:
+        """Create a new streaming message widget for assistant responses"""
+        widget = MessageWidget(message=message, streaming=True)
         await self.mount(widget)
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)
@@ -661,4 +601,4 @@ class MessageList(VerticalGroup):
         """Clear all messages"""
         for widget in self._message_widgets:
             widget.remove()
-        self._message_widgets = []
+        self._message_widgets.clear()

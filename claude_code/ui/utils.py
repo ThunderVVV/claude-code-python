@@ -7,6 +7,12 @@ import os
 import re
 from typing import Iterable, List, Tuple
 
+# Configuration constants
+TOOL_RESULT_TRUNCATE_LENGTH = 500
+PREVIEW_LINE_MAX_WIDTH = 88
+COMMAND_PREVIEW_MAX_WIDTH = 64
+DETAIL_LINE_MAX_WIDTH = 104
+
 
 ANSI_ESCAPE_RE = re.compile(
     r"\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~]|[@-Z\\-_])"
@@ -22,7 +28,7 @@ def sanitize_terminal_text(text: str) -> str:
     return normalized
 
 
-def truncate_preview_line(text: str, max_width: int = 88) -> str:
+def truncate_preview_line(text: str, max_width: int = PREVIEW_LINE_MAX_WIDTH) -> str:
     """Trim a single preview line to a stable width."""
     expanded = sanitize_terminal_text(text).expandtabs(2)
     if len(expanded) <= max_width:
@@ -144,7 +150,7 @@ def _summarize_tool_error(tool_name: str, tool_input: dict) -> str:
     if tool_name == "Bash":
         command = sanitize_terminal_text(str(tool_input.get("command", ""))).strip()
         if command:
-            return f"Failed to run {truncate_preview_line(command, 64)}"
+            return f"Failed to run {truncate_preview_line(command, COMMAND_PREVIEW_MAX_WIDTH)}"
         return "Failed to run command"
 
     if tool_name == "Read":
@@ -224,7 +230,7 @@ def summarize_tool_result(
     if tool_name == "Bash":
         command = tool_input.get("command", "")
         if command:
-            summary = f"Ran: {truncate_preview_line(command, 64)}"
+            summary = f"Ran: {truncate_preview_line(command, COMMAND_PREVIEW_MAX_WIDTH)}"
         else:
             summary = "Command completed"
         output_lines = _truncate_result_lines(trimmed_lines)
@@ -243,13 +249,13 @@ def summarize_tool_result(
 def summarize_tool_use(tool_name: str, tool_input: dict) -> str:
     """Build a compact one-line summary for a tool invocation."""
     if "command" in tool_input:
-        return f"{tool_name}: {truncate_preview_line(str(tool_input['command']), 64)}"
+        return f"{tool_name}: {truncate_preview_line(str(tool_input['command']), COMMAND_PREVIEW_MAX_WIDTH)}"
     if "file_path" in tool_input:
         file_path = str(tool_input["file_path"])
         file_name = os.path.basename(file_path) or file_path
-        return f"{tool_name}: {truncate_preview_line(file_name, 64)}"
+        return f"{tool_name}: {truncate_preview_line(file_name, COMMAND_PREVIEW_MAX_WIDTH)}"
     if "pattern" in tool_input:
-        return f"{tool_name}: {truncate_preview_line(str(tool_input['pattern']), 64)}"
+        return f"{tool_name}: {truncate_preview_line(str(tool_input['pattern']), COMMAND_PREVIEW_MAX_WIDTH)}"
     if tool_input:
         keys = list(tool_input.keys())
         preview = ", ".join(keys[:3])
@@ -276,10 +282,10 @@ def format_tool_input_details(
             raw_value = str(value)
 
         value_lines = sanitize_terminal_text(raw_value).splitlines() or [""]
-        detail_lines.append(f"{key}: {truncate_preview_line(value_lines[0], 104)}")
+        detail_lines.append(f"{key}: {truncate_preview_line(value_lines[0], DETAIL_LINE_MAX_WIDTH)}")
 
         for line in value_lines[1:4]:
-            detail_lines.append(f"  {truncate_preview_line(line, 102)}")
+            detail_lines.append(f"  {truncate_preview_line(line, DETAIL_LINE_MAX_WIDTH - 2)}")
 
         if len(value_lines) > 4:
             detail_lines.append("  ...")

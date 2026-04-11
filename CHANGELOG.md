@@ -6,7 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Changed - 2026-04-11
+### Changed - 2025-04-12
+
+#### Message Widgets Refactoring - Remove Over-engineering and Redundancy
+- Merged `ThinkingWidget` into `ThinkingBlockWidget` - eliminated unnecessary class layer
+- Merged `AssistantMessageWidget` into `MessageWidget` with `streaming=True` parameter
+- Simplified `ToolUseWidget` state management:
+  - Reduced from 7 state variables to 4
+  - Consolidated `_result_summary`, `_result_output_lines`, `_result_is_error` into single `_result` tuple
+  - Removed `_pending_result_render` flag and its complex logic
+- Extracted configuration constants to `utils.py`:
+  - `TOOL_RESULT_TRUNCATE_LENGTH = 500`
+  - `PREVIEW_LINE_MAX_WIDTH = 88`
+  - `COMMAND_PREVIEW_MAX_WIDTH = 64`
+  - `DETAIL_LINE_MAX_WIDTH = 104`
+- Added `ROLE_CONFIG` dictionary as single source of truth for role mappings
+- Renamed `MessageList.create_assistant_widget()` to `create_streaming_widget()`
+- Removed `_tool_widgets` list from `MessageWidget` (was unused, only `_tool_widgets_by_id` needed)
+- Code reduction: 664 lines → 604 lines (~9% reduction)
+
+### Changed - 2025-04-11
 
 #### Session Storage Optimization
 - Removed redundant `message` field from persisted messages (can be reconstructed from `content`)

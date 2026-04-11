@@ -278,7 +278,6 @@ Header {
 
 MessageList,
 MessageWidget,
-AssistantMessageWidget,
 ToolUseWidget {
     width: 100%;
     height: auto;

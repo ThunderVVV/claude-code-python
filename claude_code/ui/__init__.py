@@ -6,7 +6,6 @@ from claude_code.ui.widgets import Clawd, WelcomeWidget
 from claude_code.ui.streaming_markdown import StreamingMarkdownWidget
 from claude_code.ui.message_widgets import (
     ToolUseWidget,
-    AssistantMessageWidget,
     MessageWidget,
     MessageList,
 )
@@ -25,7 +24,6 @@ __all__ = [
     "WelcomeWidget",
     "StreamingMarkdownWidget",
     "ToolUseWidget",
-    "AssistantMessageWidget",
     "MessageWidget",
     "MessageList",
     "sanitize_terminal_text",

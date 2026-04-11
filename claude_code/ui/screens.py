@@ -42,7 +42,7 @@ from claude_code.core.messages import (
 from claude_code.ui.widgets import WelcomeWidget, InputTextArea
 from claude_code.ui.message_widgets import (
     MessageList,
-    AssistantMessageWidget,
+    MessageWidget,
     ToolUseWidget,
 )
 from claude_code.ui.session_resume_modal import SessionResumeModal
@@ -77,7 +77,7 @@ class REPLScreen(Screen):
 
         self._latest_usage: Optional[Usage] = None
         self._is_processing = False
-        self._current_assistant_widget: Optional[AssistantMessageWidget] = None
+        self._current_assistant_widget: Optional[MessageWidget] = None
         self._show_welcome = True
         self._tool_widget_context: dict[str, ToolUseWidget] = {}
         self._query_worker: Optional[Worker] = None
@@ -432,9 +432,9 @@ class REPLScreen(Screen):
         self,
         message_list: MessageList,
         auto_follow: bool = True,
-    ) -> AssistantMessageWidget:
+    ) -> MessageWidget:
         if not self._current_assistant_widget:
-            self._current_assistant_widget = await message_list.create_assistant_widget(
+            self._current_assistant_widget = await message_list.create_streaming_widget(
                 auto_follow=auto_follow
             )
         return self._current_assistant_widget
@@ -523,14 +523,14 @@ class REPLScreen(Screen):
         messages: list[Message],
     ) -> None:
         """Render a list of messages."""
-        assistant_widget: Optional[AssistantMessageWidget] = None
+        assistant_widget: Optional[MessageWidget] = None
         tool_widget_context: dict[str, ToolUseWidget] = {}
 
         for message in messages:
             auto_follow = message_list.should_auto_follow_output()
 
             if message.type == MessageRole.ASSISTANT:
-                assistant_widget = await message_list.create_assistant_widget(
+                assistant_widget = await message_list.create_streaming_widget(
                     message=message, auto_follow=auto_follow
                 )
                 tool_widget_context = assistant_widget.get_tool_widgets()
