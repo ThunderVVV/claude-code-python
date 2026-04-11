@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 import sys
 from typing import Optional
@@ -21,6 +20,7 @@ from claude_code.tools import (
     GrepTool,
 )
 from claude_code.tools.bash_tool import BashTool
+from claude_code.utils.logging_config import setup_server_logging
 
 
 def create_tool_registry() -> ToolRegistry:
@@ -81,10 +81,7 @@ def main(
     debug: bool,
 ) -> None:
     """Start the Claude Code gRPC server"""
-    if debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    setup_server_logging(debug=debug)
 
     if env_file:
         load_dotenv(env_file)

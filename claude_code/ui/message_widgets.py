@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 from markdown_it import MarkdownIt
 from textual.await_complete import AwaitComplete
@@ -11,6 +12,8 @@ from textual.containers import Container, VerticalGroup, ScrollableContainer
 from textual.highlight import highlight as highlight_code
 from textual.widgets import _markdown as textual_markdown
 from textual.widgets import Collapsible, Label, Markdown, Static
+
+logger = logging.getLogger(__name__)
 
 from claude_code.core.messages import (
     Message,
@@ -28,6 +31,7 @@ from claude_code.ui.utils import (
     format_tool_input_details,
     truncate_preview_line,
 )
+from claude_code.utils.logging_config import log_exception
 
 
 def _create_markdown_parser() -> MarkdownIt:
@@ -77,8 +81,8 @@ class TranscriptMarkdownWidget(Markdown):
         def cleanup_callback(_future) -> None:
             try:
                 self.call_after_refresh(self._clear_tooltips)
-            except Exception:
-                pass
+            except Exception as e:
+                log_exception(logger, "Failed to clear tooltips", e)
 
         future.add_done_callback(cleanup_callback)
 
@@ -264,6 +268,7 @@ class ToolUseWidget(VerticalGroup):
         self._result_is_error = False
         self._details_collapsible: Optional[Collapsible] = None
         self._details_container: Optional[VerticalGroup] = None
+        self._pending_result_render: bool = False
         self.add_class("tool-use-block")
 
     def compose(self) -> ComposeResult:
@@ -291,8 +296,11 @@ class ToolUseWidget(VerticalGroup):
         if self._details_collapsible:
             self._details_collapsible.title = self._collapsible_title()
             self._maybe_auto_expand()
-        if self._details_container and self._details_container.is_mounted:
-            self._render_detail_widgets()
+        if self._details_container:
+            if self._details_container.is_mounted:
+                self._render_detail_widgets()
+            else:
+                self._pending_result_render = True
 
     def update_tool_input(self, tool_name: str, tool_input: dict) -> None:
         """Refresh the tool summary/details when fuller input arrives later."""
@@ -310,7 +318,9 @@ class ToolUseWidget(VerticalGroup):
             self._details_collapsible.title = self._collapsible_title()
             self._maybe_auto_expand()
         if self._details_container and self._details_container.is_mounted:
-            self._render_detail_widgets()
+            if self._pending_result_render or self._result_summary is not None:
+                self._render_detail_widgets()
+                self._pending_result_render = False
 
     def _collapsible_title(self) -> Content:
         """Return the current single-line title for the tool call."""
@@ -483,13 +493,7 @@ class AssistantMessageWidget(VerticalGroup):
             await self._thinking_widget.append_thinking(thinking)
         elif self._content_container:
             self._thinking_widget = ThinkingBlockWidget(self._thinking_content)
-            before_widget = self._streaming_widget
-            if not before_widget and self._tool_widgets:
-                before_widget = self._tool_widgets[0]
-            await self._content_container.mount(
-                self._thinking_widget,
-                before=before_widget,
-            )
+            await self._content_container.mount(self._thinking_widget)
             self.refresh(layout=True)
 
     async def update_thinking(self, thinking: str) -> None:
@@ -500,13 +504,7 @@ class AssistantMessageWidget(VerticalGroup):
             self.refresh(layout=True)
         elif thinking and self._content_container:
             self._thinking_widget = ThinkingBlockWidget(thinking)
-            before_widget = self._streaming_widget
-            if not before_widget and self._tool_widgets:
-                before_widget = self._tool_widgets[0]
-            await self._content_container.mount(
-                self._thinking_widget,
-                before=before_widget,
-            )
+            await self._content_container.mount(self._thinking_widget)
             self.refresh(layout=True)
 
     async def append_text(self, text: str) -> None:
@@ -518,11 +516,7 @@ class AssistantMessageWidget(VerticalGroup):
             await self._streaming_widget.append_text(text)
         elif self._content_container:
             self._streaming_widget = StreamingTextWidget(self._text_content)
-            before_widget = self._tool_widgets[0] if self._tool_widgets else None
-            await self._content_container.mount(
-                self._streaming_widget,
-                before=before_widget,
-            )
+            await self._content_container.mount(self._streaming_widget)
             self.refresh(layout=True)
 
     async def update_text(self, text: str) -> None:
@@ -533,11 +527,7 @@ class AssistantMessageWidget(VerticalGroup):
             self.refresh(layout=True)
         elif text and self._content_container:
             self._streaming_widget = StreamingTextWidget(text)
-            before_widget = self._tool_widgets[0] if self._tool_widgets else None
-            await self._content_container.mount(
-                self._streaming_widget,
-                before=before_widget,
-            )
+            await self._content_container.mount(self._streaming_widget)
             self.refresh(layout=True)
 
     async def add_tool_use(self, tool_use: ToolUseContent) -> Optional[ToolUseWidget]:
@@ -592,17 +582,6 @@ class AssistantMessageWidget(VerticalGroup):
         """Expose rendered tool widgets by tool-use id."""
         return dict(self._tool_widgets_by_id)
 
-    async def sync_from_message(self, message: Message) -> None:
-        """Ensure widget state matches the finalized assistant message."""
-        for block in message.content:
-            if isinstance(block, ThinkingContent):
-                await self.update_thinking(block.thinking)
-            elif isinstance(block, TextContent):
-                await self.update_text(block.text)
-            elif isinstance(block, ToolUseContent):
-                await self.add_tool_use(block)
-        await self.finish_streaming()
-
     async def finish_streaming(self) -> None:
         """Flush and stop any active markdown streams for this assistant message."""
         if self._thinking_widget:
@@ -638,6 +617,7 @@ class MessageWidget(VerticalGroup):
             yield Label(role_label, classes=f"message-role {role_class}", markup=False)
 
         # For user messages, show file expansions first (abbreviated)
+        logger.debug(f"{len(self.message.file_expansions)} file expansions found for message")
         if self.message.type == MessageRole.USER and self.message.file_expansions:
             for expansion in self.message.file_expansions:
                 yield Static(
@@ -760,8 +740,8 @@ class MessageList(VerticalGroup):
         try:
             content_area = self.screen.query_one("#content-area", ScrollableContainer)
             self.watch(content_area, "scroll_y", self._on_content_scroll, init=False)
-        except Exception:
-            pass
+        except Exception as e:
+            log_exception(logger, "Failed to setup scroll tracking", e)
 
     def _on_content_scroll(self, _scroll_y: float) -> None:
         """Disable auto-follow when the user scrolls away from the bottom."""
@@ -772,7 +752,8 @@ class MessageList(VerticalGroup):
             self._auto_follow_output = content_area.scroll_y >= max(
                 content_area.max_scroll_y - 1, 0
             )
-        except Exception:
+        except Exception as e:
+            log_exception(logger, "Failed to check scroll position", e)
             self._auto_follow_output = True
 
     def _scroll_to_latest(self) -> None:
@@ -787,8 +768,8 @@ class MessageList(VerticalGroup):
                 x_axis=False,
             )
             self.set_timer(0.001, self._finish_programmatic_scroll)
-        except Exception:
-            # Layout may not be ready on the first streamed chunk.
+        except Exception as e:
+            log_exception(logger, "Failed to scroll to latest", e)
             self._suppress_scroll_tracking = False
 
     def _finish_programmatic_scroll(self) -> None:

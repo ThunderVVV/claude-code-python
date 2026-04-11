@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-11
+
+#### Architecture Refactor: Pure gRPC Frontend/Backend Separation
+- Removed standalone mode; project now uses pure gRPC frontend/backend architecture
+- Client (`cc-py`) is now a pure gRPC client that auto-detects and starts server
+- Server (`cc-server`) runs independently, managing all session state and tool execution
+- Updated README.md to remove standalone mode docs, simplified running instructions
+
+#### Client Simplification
+- Removed `--grpc` flag (now the default and only mode)
+- Removed `--api-url`, `--api-key`, `--model` and other local-mode parameters
+- Client auto-detects server availability and starts it if not running
+- Simplified command: `cc-py --host localhost --port 50051`
+
+#### State Management Refactor
+- Removed `EngineStateSnapshot` class and related snapshot/rollback mechanism
+- Removed `ToolContext.register_undo_operation` and file rollback logic
+- Server now handles all session state persistence uniformly
+- Interrupt operations sent to server via gRPC
+
+#### Removed Redundant Code
+- Deleted `claude_code/client/grpc_engine.py` (no longer needed)
+- Removed `RequestStartEvent` (simplified event flow)
+- Removed `FrontendSnapshot` class and frontend state capture logic
+- Removed `sync_from_message()` method
+
+#### Added Utility Module
+- Added `claude_code/utils/logging_config.py` for unified logging configuration
+- Provides `setup_server_logging()`, `setup_client_logging()` and `log_exception()` functions
+
+#### Proto Updates
+- Removed `python_package` option (using dynamic imports)
+- Added `Message.usage` field for token statistics transmission
+- `proto/__init__.py` now uses dynamic path import
+
+#### UI Refactor
+- `ClaudeCodeApp` now receives `ClaudeCodeClient` instead of `QueryEngine`
+- `REPLScreen` completely refactored as stateless frontend, all state managed via gRPC
+- `SessionResumeModal` now uses `ClaudeCodeClient` to fetch session list
+- Simplified interrupt handling: sends interrupt signal to server instead of local rollback
+
+#### QueryEngine Improvements
+- Added `create_from_session_id()` class method to create engine from session ID
+- Added `_persist_session()` method to persist on session end
+- Added `session_store` parameter for server-side persistence
+
 ### Changed - 2025-04-12
 
 #### Code Cleanup

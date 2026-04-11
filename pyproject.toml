@@ -1,7 +1,7 @@
 [project]
 name = "claude-code-python"
 version = "0.2.0"
-description = "Python port of Claude Code - AI programming assistant with gRPC support"
+description = "Python port of Claude Code - AI programming assistant with gRPC frontend/backend separation"
 requires-python = ">=3.12"
 authors = [
     { name = "Claude Code Python Port" }

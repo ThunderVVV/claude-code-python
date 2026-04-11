@@ -1,4 +1,4 @@
-"""gRPC client for Claude Code Python"""
+"""gRPC client for Claude Code Python - stateless frontend client"""
 
 from __future__ import annotations
 
@@ -26,9 +26,10 @@ from claude_code.core.messages import (
     ToolResultEvent,
     MessageCompleteEvent,
     TurnCompleteEvent,
-    RequestStartEvent,
     ErrorEvent,
 )
+from claude_code.core.session_store import SessionSummary
+from claude_code.utils.logging_config import log_exception
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def proto_to_message(pb) -> Message:
         if block:
             content_blocks.append(block)
 
-    return Message(
+    msg = Message(
         type=proto_to_message_role(pb.role),
         content=content_blocks,
         uuid=pb.uuid,
@@ -84,7 +85,16 @@ def proto_to_message(pb) -> Message:
         if pb.timestamp
         else datetime.now(),
         original_text=pb.original_text,
+        message={},
     )
+
+    if pb.HasField("usage"):
+        msg.message["usage"] = {
+            "input_tokens": pb.usage.input_tokens,
+            "output_tokens": pb.usage.output_tokens,
+        }
+
+    return msg
 
 
 def proto_to_query_event(pb_event) -> QueryEvent:
@@ -123,8 +133,6 @@ def proto_to_query_event(pb_event) -> QueryEvent:
             has_more_turns=pb_event.turn_complete_event.has_more_turns,
             stop_reason=pb_event.turn_complete_event.stop_reason or None,
         )
-    elif which == "request_start_event":
-        return RequestStartEvent()
     elif which == "error_event":
         return ErrorEvent(
             error=pb_event.error_event.error,
@@ -135,6 +143,8 @@ def proto_to_query_event(pb_event) -> QueryEvent:
 
 
 class SessionInfo:
+    """Session information returned from server."""
+
     def __init__(
         self,
         session_id: str,
@@ -152,29 +162,16 @@ class SessionInfo:
         self.title = title
 
 
-class SessionSummary:
-    def __init__(
-        self,
-        session_id: str,
-        title: str = "",
-        updated_at: int = 0,
-        working_directory: str = "",
-        message_count: int = 0,
-    ):
-        self.session_id = session_id
-        self.title = title
-        self.updated_at = updated_at
-        self.working_directory = working_directory
-        self.message_count = message_count
-
-
 class ClaudeCodeClient:
+    """Stateless gRPC client for Claude Code TUI."""
+
     def __init__(self, host: str = "localhost", port: int = 50051):
         self._host = host
         self._port = port
         self._channel: Optional[aio.Channel] = None
         self._chat_stub = None
         self._session_stub = None
+        self._is_connected = False
 
     async def connect(self) -> None:
         from claude_code.proto import claude_code_pb2_grpc
@@ -182,6 +179,7 @@ class ClaudeCodeClient:
         self._channel = aio.insecure_channel(f"{self._host}:{self._port}")
         self._chat_stub = claude_code_pb2_grpc.ChatServiceStub(self._channel)
         self._session_stub = claude_code_pb2_grpc.SessionServiceStub(self._channel)
+        self._is_connected = True
 
     async def close(self) -> None:
         if self._channel:
@@ -189,6 +187,7 @@ class ClaudeCodeClient:
             self._channel = None
             self._chat_stub = None
             self._session_stub = None
+            self._is_connected = False
 
     async def __aenter__(self) -> "ClaudeCodeClient":
         await self.connect()
@@ -197,17 +196,22 @@ class ClaudeCodeClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
 
+    @property
+    def is_connected(self) -> bool:
+        return self._is_connected
+
     async def stream_chat(
         self,
         user_text: str,
-        session_id: Optional[str] = None,
+        session_id: str,
         working_directory: str = "",
     ) -> AsyncGenerator[QueryEvent, None]:
+        """Send a message and receive event stream from server."""
         from claude_code.proto import claude_code_pb2
 
         async def request_generator():
             request = claude_code_pb2.StreamChatRequest()
-            request.chat_request.session_id = session_id or ""
+            request.chat_request.session_id = session_id
             request.chat_request.user_text = user_text
             request.chat_request.working_directory = working_directory
             yield request
@@ -217,10 +221,22 @@ class ClaudeCodeClient:
                 event = proto_to_query_event(response.event)
                 yield event
         except grpc.RpcError as e:
-            logger.error(f"gRPC error: {e}")
+            log_exception(logger, "gRPC error in stream_chat", e)
             yield ErrorEvent(error=str(e), is_fatal=True)
 
+    async def interrupt(self, session_id: str, reason: str = "user_interrupt") -> bool:
+        """Send interrupt signal to server."""
+        from claude_code.proto import claude_code_pb2
+
+        request = claude_code_pb2.InterruptRequest(
+            session_id=session_id,
+            reason=reason,
+        )
+        response = await self._chat_stub.Interrupt(request)
+        return response.success
+
     async def get_state(self, session_id: str) -> dict:
+        """Get current session state from server."""
         from claude_code.proto import claude_code_pb2
 
         request = claude_code_pb2.GetStateRequest(session_id=session_id)
@@ -236,17 +252,8 @@ class ClaudeCodeClient:
             ),
         }
 
-    async def interrupt(self, session_id: str, reason: str = "user_interrupt") -> bool:
-        from claude_code.proto import claude_code_pb2
-
-        request = claude_code_pb2.InterruptRequest(
-            session_id=session_id,
-            reason=reason,
-        )
-        response = await self._chat_stub.Interrupt(request)
-        return response.success
-
     async def create_session(self, working_directory: str = "") -> str:
+        """Create a new session on server."""
         from claude_code.proto import claude_code_pb2
 
         request = claude_code_pb2.CreateSessionRequest(
@@ -256,6 +263,7 @@ class ClaudeCodeClient:
         return response.session_id
 
     async def get_session(self, session_id: str) -> Optional[SessionInfo]:
+        """Get session info from server."""
         from claude_code.proto import claude_code_pb2
 
         request = claude_code_pb2.GetSessionRequest(session_id=session_id)
@@ -279,23 +287,34 @@ class ClaudeCodeClient:
         )
 
     async def list_sessions(self) -> List[SessionSummary]:
+        """List all sessions from server."""
+        from datetime import datetime, timezone
         from claude_code.proto import claude_code_pb2
 
         request = claude_code_pb2.ListSessionsRequest()
         response = await self._session_stub.ListSessions(request)
 
-        return [
-            SessionSummary(
-                session_id=s.session_id,
-                title=s.title,
-                updated_at=s.updated_at,
-                working_directory=s.working_directory,
-                message_count=s.message_count,
+        summaries = []
+        for s in response.sessions:
+            if s.updated_at:
+                dt = datetime.fromtimestamp(s.updated_at, tz=timezone.utc)
+                updated_at_str = dt.isoformat()
+            else:
+                updated_at_str = ""
+            summaries.append(
+                SessionSummary(
+                    session_id=s.session_id,
+                    title=s.title,
+                    created_at=updated_at_str,
+                    updated_at=updated_at_str,
+                    working_directory=s.working_directory,
+                    message_count=s.message_count,
+                )
             )
-            for s in response.sessions
-        ]
+        return summaries
 
     async def delete_session(self, session_id: str) -> bool:
+        """Delete a session from server."""
         from claude_code.proto import claude_code_pb2
 
         request = claude_code_pb2.DeleteSessionRequest(session_id=session_id)
@@ -303,6 +322,7 @@ class ClaudeCodeClient:
         return response.success
 
     async def clear_session(self, session_id: str) -> bool:
+        """Clear a session on server (reset but keep session_id)."""
         from claude_code.proto import claude_code_pb2
 
         request = claude_code_pb2.ClearSessionRequest(session_id=session_id)

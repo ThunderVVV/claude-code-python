@@ -166,7 +166,6 @@ Usage:
             else:
                 new_content = content.replace(actual_old_string, actual_new_string, 1)
 
-            context.capture_file_rollback(full_path)
             context.raise_if_cancelled()
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(new_content)

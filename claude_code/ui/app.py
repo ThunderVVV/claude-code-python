@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Optional
+
 from textual.app import App
 from textual.binding import Binding
 from textual.widget import Widget
+from textual.widgets import Label
 
-from claude_code.core.query_engine import QueryEngine
-from claude_code.core.session_store import PersistedSession, SessionStore
 from claude_code.ui.styles import TUI_CSS
 from claude_code.ui.screens import REPLScreen
 
+if TYPE_CHECKING:
+    from claude_code.client.grpc_client import ClaudeCodeClient, SessionInfo
+
 
 class ClaudeCodeApp(App):
-    """Main Claude Code application - aligned with TypeScript App.tsx"""
-
     CSS = TUI_CSS
     DEFAULT_THEME = "tokyo-night"
     ALLOW_SELECT = True
@@ -32,48 +34,37 @@ class ClaudeCodeApp(App):
 
     def __init__(
         self,
-        query_engine: QueryEngine,
-        model_name: str = "claude-sonnet-4-6",
-        context_window_tokens: int | None = None,
-        save_history: bool = True,
-        session_store: SessionStore | None = None,
-        initial_session: PersistedSession | None = None,
-        **kwargs
+        client: "ClaudeCodeClient",
+        working_directory: str = "",
+        **kwargs: Any,
     ):
         super().__init__(**kwargs)
         self.theme = self.DEFAULT_THEME
-        self.query_engine = query_engine
-        self.model_name = model_name
-        self.context_window_tokens = context_window_tokens
-        self.save_history = save_history
-        self.session_store = session_store
-        self.initial_session = initial_session
+        self.client = client
+        self.working_directory = working_directory
 
     async def on_mount(self) -> None:
-        """Initialize and push the REPL screen on mount"""
-        # Initialize the query engine (creates HTTP client)
-        await self.query_engine.initialize()
+        await self.client.connect()
+        session_info, session_id = await self._init_session()
         await self.push_screen(
             REPLScreen(
-                self.query_engine,
-                self.model_name,
-                context_window_tokens=self.context_window_tokens,
-                save_history=self.save_history,
-                session_store=self.session_store,
-                initial_session=self.initial_session,
+                client=self.client,
+                session_id=session_id,
+                initial_session=session_info,
+                working_directory=self.working_directory,
             )
         )
 
+    async def _init_session(self):
+        new_session_id = await self.client.create_session(self.working_directory)
+        return None, new_session_id
+
     async def on_unmount(self) -> None:
-        """Clean up resources on exit"""
-        await self.query_engine.close()
+        """Clean up resources on exit."""
+        await self.client.close()
 
     def action_copy_selection(self) -> None:
-        """Copy the active Textual selection to the clipboard.
-
-        This keeps clipboard behavior inside the TUI so copy doesn't fall back
-        to terminal-specific selection handling.
-        """
+        """Copy the active Textual selection to the clipboard."""
         selection = self._get_selected_text()
         if not selection:
             return

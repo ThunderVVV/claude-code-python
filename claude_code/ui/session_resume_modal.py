@@ -1,7 +1,7 @@
 """Session resume modal - allows selecting and switching between sessions."""
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from textual import on
 from textual.app import ComposeResult
@@ -9,7 +9,10 @@ from textual.containers import Center, HorizontalGroup, VerticalGroup
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Markdown
 
-from claude_code.core.session_store import SessionSummary, SessionStore
+from claude_code.core.session_store import SessionSummary
+
+if TYPE_CHECKING:
+    from claude_code.client.grpc_client import ClaudeCodeClient
 
 HELP = """\
 # Session Resume
@@ -66,13 +69,13 @@ class SessionResumeModal(ModalScreen[Optional[SessionSummary]]):
 
     def __init__(
         self,
-        session_store: SessionStore,
+        client: "ClaudeCodeClient",
         current_session_id: Optional[str] = None,
         id: Optional[str] = None,
         classes: Optional[str] = None,
     ) -> None:
         super().__init__(id=id, classes=classes)
-        self.session_store = session_store
+        self.client = client
         self.current_session_id = current_session_id
         self._sessions: list[SessionSummary] = []
 
@@ -148,10 +151,9 @@ class SessionResumeModal(ModalScreen[Optional[SessionSummary]]):
         table = self.query_one("#sessions", DataTable)
         table.add_columns("Updated", "Session", "Path")
 
-        self._sessions = self.session_store.list_sessions()
+        self._sessions = await self.client.list_sessions()
 
         for session in self._sessions:
-            # Highlight current session
             is_current = session.session_id == self.current_session_id
             session_display = f"{'→ ' if is_current else '  '}{session.title}"
 
@@ -187,9 +189,7 @@ class SessionResumeModal(ModalScreen[Optional[SessionSummary]]):
         self.query_one("#resume", Button).disabled = False
 
     @on(DataTable.RowSelected)
-    async def on_data_table_row_selected(
-        self, event: DataTable.RowSelected
-    ) -> None:
+    async def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.row_key is None or event.row_key.value is None:
             return
         await self.dismiss_with_session(event.row_key.value)

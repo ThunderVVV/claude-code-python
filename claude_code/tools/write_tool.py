@@ -78,7 +78,6 @@ Usage:
             if parent_dir and not os.path.exists(parent_dir):
                 os.makedirs(parent_dir, exist_ok=True)
 
-            context.capture_file_rollback(full_path)
             context.raise_if_cancelled()
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(content)

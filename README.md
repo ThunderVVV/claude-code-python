@@ -8,27 +8,11 @@
 1. 此项目仅用于个人探究 Claude Code 基本工具调用原理、系统提示词、工具提示词设计，仅用于个人学习，不保证更新和维护。
 2. 此项目的部分前端组件(例如代码diff view)参考了 [toad](https://github.com/batrachianai/toad)，也是一个Python AI TUI。
 
-`claude-code-python` 是利用 AI 对官方 TypeScript 版 Claude Code 的 Python 简化版重写，当前聚焦核心 agent 能力：TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
+`claude-code-python` 是根据 Claude Code 提示词构建的 Python AI 编程终端，当前聚焦核心 agent 能力：TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
 
 ## 架构说明
 
-本项目支持两种运行模式：
-
-### 1. 单体模式（默认）
-前后端集成在同一进程中，直接调用 OpenAI 兼容 API。
-
-```
-┌─────────────────────────────────────┐
-│           TUI (Textual)             │
-├─────────────────────────────────────┤
-│          QueryEngine                │
-├─────────────────────────────────────┤
-│        OpenAI Client                │
-└─────────────────────────────────────┘
-```
-
-### 2. 前后端分离模式（gRPC）
-后端作为独立服务运行，前端通过 gRPC 连接。
+本项目采用前后端分离架构，通过 gRPC 通信：
 
 ```
 ┌─────────────────────┐     gRPC      ┌─────────────────────┐
@@ -68,7 +52,7 @@
 - **OpenAI 兼容**：使用官方 OpenAI Python SDK，支持所有 OpenAI 兼容的 API
 - **工具集**：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
 - **系统提示词对齐**：与 TypeScript 版本保持一致的系统提示词和工具描述
-- **gRPC 前后端分离**：支持将后端部署为独立服务
+- **gRPC 前后端分离**：后端独立部署，前端通过 gRPC 连接
 
 ### TUI 特性
 - **推理/思考内容支持**：显示模型的推理过程
@@ -115,46 +99,35 @@ pip install -e .
 
 ### 生成 gRPC 代码
 
-如果使用前后端分离模式，需要生成 gRPC Python 代码：
-
 ```bash
 python scripts/generate_proto.py
 ```
 
 ## 配置
 
-推荐在仓库根目录创建 `.env`：
+### 服务端配置
+
+在服务端机器创建 `.env`：
 
 ```env
 CLAUDE_CODE_API_URL=https://api.openai.com/v1
 CLAUDE_CODE_API_KEY=your-api-key
 CLAUDE_CODE_MODEL=gpt-4.1
 CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
+```
 
-# gRPC 模式配置（可选）
+### 客户端配置
+
+客户端可通过环境变量或命令行参数连接服务端：
+
+```env
 CLAUDE_CODE_GRPC_HOST=localhost
 CLAUDE_CODE_GRPC_PORT=50051
 ```
 
 ## 运行
 
-### 单体模式（默认）
-
-启动 TUI：
-
-```bash
-claude-code-python
-```
-
-或使用简写：
-
-```bash
-cc-py
-```
-
-### 前后端分离模式
-
-**1. 启动 gRPC 服务端：**
+### 启动 gRPC 服务端
 
 ```bash
 cc-server --host 0.0.0.0 --port 50051
@@ -167,10 +140,10 @@ cc-server --host 0.0.0.0 --port 50051
 - `--host`: 绑定地址（默认 `[::]`）
 - `--port`: 端口（默认 50051）
 
-**2. 启动 TUI 客户端：**
+### 启动 TUI 客户端
 
 ```bash
-cc-py --grpc --grpc-host localhost --grpc-port 50051
+cc-py --host localhost --port 50051
 ```
 
 或通过环境变量：
@@ -178,10 +151,10 @@ cc-py --grpc --grpc-host localhost --grpc-port 50051
 ```bash
 export CLAUDE_CODE_GRPC_HOST=localhost
 export CLAUDE_CODE_GRPC_PORT=50051
-cc-py --grpc
+cc-py
 ```
 
-**3. 使用命令行客户端：**
+### 使用命令行客户端
 
 ```bash
 # 发送消息
@@ -239,18 +212,18 @@ service SessionService {
 启动时选择已有 session：
 
 ```bash
-claude-code-python --sessions
+cc-py --sessions
 ```
 
 恢复指定 session：
 
 ```bash
-claude-code-python --resume <session_id>
+cc-py --resume <session_id>
 ```
 
 Session 说明：
 
-- `claude-code-python`（或 `cc-py`）默认新开一个 session。
+- `cc-py` 默认新开一个 session。
 - session 标题默认取首条用户消息的第一句。
 
 ## 调试
@@ -258,7 +231,7 @@ Session 说明：
 开启调试日志：
 
 ```bash
-claude-code-python --debug
+cc-py --debug
 ```
 
 如果同时指定了 `--log-file`，调试日志会写到指定路径；否则会自动写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`。

@@ -112,11 +112,18 @@ class Message:
     is_visible_in_transcript_only: bool = False
     message: Optional[Dict[str, Any]] = None
     # File expansion info for user messages
-    file_expansions: List[Any] = field(default_factory=list)  # List of FileExpansion objects
+    file_expansions: List[Any] = field(
+        default_factory=list
+    )  # List of FileExpansion objects
     original_text: str = ""  # Original user text before expansion (for display)
 
     @classmethod
-    def user_message(cls, text: str, file_expansions: Optional[List[Any]] = None, original_text: str = "") -> "Message":
+    def user_message(
+        cls,
+        text: str,
+        file_expansions: Optional[List[Any]] = None,
+        original_text: str = "",
+    ) -> "Message":
         """Create a user message"""
         return cls(
             type=MessageRole.USER,
@@ -353,13 +360,6 @@ class TurnCompleteEvent(QueryEvent):
     turn: int = 0
     has_more_turns: bool = False
     stop_reason: Optional[str] = None
-
-
-@dataclass
-class RequestStartEvent(QueryEvent):
-    """Event when API request starts"""
-
-    type: str = field(default="request_start", init=False)
 
 
 @dataclass

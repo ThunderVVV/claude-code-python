@@ -29,7 +29,6 @@ from claude_code.core.messages import (
     ToolResultEvent,
     MessageCompleteEvent,
     TurnCompleteEvent,
-    RequestStartEvent,
     ErrorEvent,
     generate_uuid,
 )
@@ -43,6 +42,7 @@ from claude_code.services.openai_client import (
     APIError,
     APINetworkError,
 )
+from claude_code.utils.logging_config import log_exception
 
 
 @dataclass
@@ -67,17 +67,6 @@ class QueryResult:
     usage: Optional[Usage] = None
 
 
-@dataclass
-class EngineStateSnapshot:
-    """Snapshot of mutable query state used for turn rollback."""
-
-    message_count: int
-    tool_call_count: int
-    current_turn: int
-    total_usage: Usage
-    undo_operation_count: int = 0
-
-
 class QueryEngine:
     """
     Core query engine that handles the conversation loop.
@@ -86,6 +75,11 @@ class QueryEngine:
     One QueryEngine per conversation. Each submit_message() call starts a new
     turn within the same conversation. State (messages, usage, etc.) persists
     across turns.
+
+    State management:
+    - Captures snapshot before processing user request
+    - Rolls back to snapshot on interrupt
+    - Persists to disk when stop_reason is 'stop'
     """
 
     def __init__(
@@ -97,6 +91,9 @@ class QueryEngine:
         initial_messages: Optional[List[Message]] = None,
         initial_current_turn: int = 0,
         initial_usage: Optional[Usage] = None,
+        session_store: Optional[Any] = None,
+        session_title: Optional[str] = None,
+        session_created_at: Optional[str] = None,
     ):
         self.client_config = client_config
         self.tool_registry = tool_registry
@@ -118,10 +115,54 @@ class QueryEngine:
         self._active_task: Optional[asyncio.Task[Any]] = None
         self._cancelled_tasks: set[asyncio.Task[Any]] = set()
         self._cancel_event = asyncio.Event()
-        self._undo_operations: List[Callable[[], None]] = []
 
         # Working directory
         self._cwd = self.config.working_directory or os.getcwd()
+
+        # Session store for persistence
+        self._session_store = session_store
+
+        # Session metadata
+        self._session_title = session_title
+        self._session_created_at = session_created_at
+
+    @classmethod
+    async def create_from_session_id(
+        cls,
+        session_id: Optional[str],
+        client_config: OpenAIClientConfig,
+        tool_registry: ToolRegistry,
+        session_store: Any,
+        working_directory: str = "",
+    ) -> "QueryEngine":
+        """Create a QueryEngine from a session ID, loading persisted state if exists."""
+        from claude_code.core.session_store import PersistedSession
+
+        persisted: Optional[PersistedSession] = None
+        if session_id:
+            persisted = session_store.load_session(session_id)
+
+        config = QueryConfig(
+            stream=True,
+            working_directory=working_directory
+            or (persisted.working_directory if persisted else ""),
+        )
+
+        engine = cls(
+            client_config,
+            tool_registry,
+            config,
+            session_id=(persisted.session_id if persisted else session_id),
+            initial_messages=list(persisted.messages) if persisted else None,
+            initial_current_turn=persisted.current_turn if persisted else 0,
+            initial_usage=persisted.total_usage if persisted else None,
+            session_store=session_store,
+            session_title=persisted.title if persisted else None,
+            session_created_at=persisted.created_at if persisted else None,
+        )
+
+        await engine.initialize()
+        return engine
 
     async def initialize(self) -> None:
         """Initialize the engine (create HTTP client)"""
@@ -165,12 +206,7 @@ class QueryEngine:
             project_root=self._cwd,
             session_id=self._session_id,
             cancel_event=self._cancel_event,
-            register_undo_operation=self._register_undo_operation,
         )
-
-    def _register_undo_operation(self, undo_operation: Callable[[], None]) -> None:
-        """Track a side-effect undo function for the current conversation state."""
-        self._undo_operations.append(undo_operation)
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt"""
@@ -197,53 +233,10 @@ class QueryEngine:
         as if the user had started a new TUI session.
         """
         self.state.clear()
-        self._undo_operations = []
         self.clear_interrupt()
         # Reset to a new session ID
         self._session_id = generate_uuid()
         self.state.session_id = self._session_id
-
-    def create_state_snapshot(self) -> EngineStateSnapshot:
-        """Capture mutable state so the current turn can be rolled back."""
-        usage = self.state.total_usage
-        return EngineStateSnapshot(
-            message_count=len(self.state.messages),
-            tool_call_count=len(self.state.tool_calls),
-            current_turn=self.state.current_turn,
-            total_usage=Usage(
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-            ),
-            undo_operation_count=len(self._undo_operations),
-        )
-
-    def rollback_to_snapshot(
-        self,
-        snapshot: EngineStateSnapshot,
-        message_count: Optional[int] = None,
-    ) -> None:
-        """Restore state captured before an interrupted turn."""
-        retained_messages = snapshot.message_count
-        if message_count is not None:
-            retained_messages = max(snapshot.message_count, message_count)
-
-        while len(self._undo_operations) > snapshot.undo_operation_count:
-            undo_operation = self._undo_operations.pop()
-            try:
-                undo_operation()
-            except Exception as exc:
-                logger.warning("Failed to roll back tool side effect: %s", exc)
-
-        self.state.messages = self.state.messages[:retained_messages]
-        self.state.tool_calls = self.state.tool_calls[: snapshot.tool_call_count]
-        self.state.current_turn = snapshot.current_turn
-        self.state.total_usage = Usage(
-            input_tokens=snapshot.total_usage.input_tokens,
-            output_tokens=snapshot.total_usage.output_tokens,
-        )
-        self.state.is_streaming = False
-        self.state.current_streaming_text = ""
-        self.clear_interrupt()
 
     def interrupt(self, reason: str = "interrupt") -> None:
         """Interrupt the in-flight query, matching the TypeScript QueryEngine API."""
@@ -262,6 +255,36 @@ class QueryEngine:
     def get_interrupt_reason(self) -> Optional[str]:
         """Return the current interrupt reason, if any."""
         return self._interrupt_reason
+
+    def _persist_session(self) -> None:
+        """Persist session to disk."""
+        if self._session_store is None:
+            return
+
+        try:
+            from claude_code.core.session_store import derive_session_title
+
+            self._session_title = self._session_title or derive_session_title(
+                self.state.messages, self._session_id
+            )
+
+            session = self._session_store.save_snapshot(
+                session_id=self._session_id,
+                messages=list(self.state.messages),
+                working_directory=self._cwd,
+                current_turn=self.state.current_turn,
+                title=self._session_title,
+                created_at=self._session_created_at,
+                model_name=self.client_config.model_name,
+                total_usage=self.state.total_usage,
+            )
+            self._session_title = session.title
+            self._session_created_at = session.created_at
+            logger.debug(
+                f"Persisted session {self._session_id}: {len(self.state.messages)} messages"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to persist session: {e}")
 
     def _raise_if_interrupted(self) -> None:
         """Abort the current query loop when an interrupt has been requested."""
@@ -313,9 +336,13 @@ class QueryEngine:
                 yield event
         except asyncio.CancelledError:
             current_task = asyncio.current_task()
-            if current_task in self._cancelled_tasks or self._interrupt_reason is not None:
+            if (
+                current_task in self._cancelled_tasks
+                or self._interrupt_reason is not None
+            ):
                 if current_task in self._cancelled_tasks:
                     self._cancelled_tasks.discard(current_task)
+                self._persist_session()
                 return
             raise
         finally:
@@ -354,10 +381,7 @@ class QueryEngine:
 
             try:
                 self._raise_if_interrupted()
-                # Yield request start event
-                yield RequestStartEvent()
 
-                # Call the API
                 async for chunk in self._client.chat_completion(
                     self.state.messages,
                     self.tool_registry,
@@ -481,6 +505,9 @@ class QueryEngine:
                 # Check if we have tool calls to execute
                 if not tool_use_blocks:
                     # No tool calls - we're done
+                    # Persist session when stop_reason is 'stop'
+                    if stop_reason == "stop":
+                        self._persist_session()
                     yield TurnCompleteEvent(
                         turn=self.state.current_turn + 1,
                         has_more_turns=False,
@@ -489,8 +516,10 @@ class QueryEngine:
                     return
 
                 # Execute tool calls
-                logger.debug(f"Executing {len(tool_use_blocks)} tool calls"
-                             f"{[tool_use.name for tool_use in tool_use_blocks]}")
+                logger.debug(
+                    f"Executing {len(tool_use_blocks)} tool calls"
+                    f"{[tool_use.name for tool_use in tool_use_blocks]}"
+                )
                 tool_results: List[tuple] = []
 
                 for tool_use in tool_use_blocks:
@@ -498,13 +527,12 @@ class QueryEngine:
                     if not tool_use.id or not tool_use.name:
                         continue
 
-                    # Emit tool use event
-                    if tool_use.id not in previewed_tool_use_ids:
-                        yield ToolUseEvent(
-                            tool_use_id=tool_use.id,
-                            tool_name=tool_use.name,
-                            input=tool_use.input,
-                        )
+                    # Emit tool use event (always send to update potentially incomplete preview)
+                    yield ToolUseEvent(
+                        tool_use_id=tool_use.id,
+                        tool_name=tool_use.name,
+                        input=tool_use.input,
+                    )
 
                     # Find and execute the tool
                     tool = self.tool_registry.get(tool_use.name)
@@ -554,6 +582,10 @@ class QueryEngine:
                 # Check if we should continue
                 has_more = self.state.current_turn < self.config.max_turns
 
+                # Persist session when stop_reason is 'stop'
+                if stop_reason == "stop":
+                    self._persist_session()
+
                 yield TurnCompleteEvent(
                     turn=self.state.current_turn,
                     has_more_turns=has_more,
@@ -565,19 +597,20 @@ class QueryEngine:
                     return
 
             except asyncio.CancelledError:
-                current_task = asyncio.current_task()
-                if current_task in self._cancelled_tasks or self._interrupt_reason is not None:
-                    return
+                # raise to outer handler
                 raise
             except APINetworkError as e:
+                log_exception(logger, "Network error in query loop", e)
                 error_msg = f"Network error: {str(e)}"
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return
             except APIError as e:
+                log_exception(logger, "API error in query loop", e)
                 error_msg = f"API error: {str(e)}"
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return
             except Exception as e:
+                log_exception(logger, "Unexpected error in query loop", e)
                 error_msg = f"Query failed: {str(e)}"
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return

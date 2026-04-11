@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package claude_code;
 
-option python_package = "claude_code.proto";
-
 // ============ Common Types ============
 
 message Usage {
@@ -55,6 +53,7 @@ message Message {
     string uuid = 3;
     int64 timestamp = 4;
     string original_text = 5;
+    Usage usage = 6;
 }
 
 message FileExpansion {
@@ -94,8 +93,6 @@ message TurnCompleteEvent {
     string stop_reason = 3;
 }
 
-message RequestStartEvent {}
-
 message ErrorEvent {
     string error = 1;
     bool is_fatal = 2;
@@ -109,8 +106,7 @@ message QueryEvent {
         ToolResultEvent tool_result_event = 4;
         MessageCompleteEvent message_complete_event = 5;
         TurnCompleteEvent turn_complete_event = 6;
-        RequestStartEvent request_start_event = 7;
-        ErrorEvent error_event = 8;
+        ErrorEvent error_event = 7;
     }
 }
 

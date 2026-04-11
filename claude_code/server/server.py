@@ -25,13 +25,13 @@ from claude_code.core.messages import (
     ToolResultEvent as CoreToolResultEvent,
     MessageCompleteEvent as CoreMessageCompleteEvent,
     TurnCompleteEvent as CoreTurnCompleteEvent,
-    RequestStartEvent as CoreRequestStartEvent,
     ErrorEvent as CoreErrorEvent,
 )
-from claude_code.core.query_engine import QueryEngine, QueryConfig
+from claude_code.core.query_engine import QueryEngine
 from claude_code.core.tools import ToolRegistry
 from claude_code.core.session_store import SessionStore, PersistedSession
 from claude_code.services.openai_client import OpenAIClientConfig
+from claude_code.utils.logging_config import log_exception
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,11 @@ def message_to_proto(msg: Message) -> "claude_code_pb2.Message":
     for block in msg.content:
         pb.content.append(content_block_to_proto(block))
 
+    usage = msg.get_usage()
+    if usage:
+        pb.usage.input_tokens = usage.input_tokens
+        pb.usage.output_tokens = usage.output_tokens
+
     return pb
 
 
@@ -171,8 +176,6 @@ def query_event_to_proto(event: QueryEvent) -> "claude_code_pb2.QueryEvent":
         pb.turn_complete_event.turn = event.turn
         pb.turn_complete_event.has_more_turns = event.has_more_turns
         pb.turn_complete_event.stop_reason = event.stop_reason or ""
-    elif isinstance(event, CoreRequestStartEvent):
-        pass
     elif isinstance(event, CoreErrorEvent):
         pb.error_event.error = event.error
         pb.error_event.is_fatal = event.is_fatal
@@ -210,32 +213,13 @@ class SessionManager:
         tool_registry: ToolRegistry,
         working_directory: str,
     ) -> QueryEngine:
-        initial_session = None
-        if session_id:
-            initial_session = self._session_store.load_session(session_id)
-
-        config = QueryConfig(
-            stream=True,
-            working_directory=working_directory
-            or (initial_session.working_directory if initial_session else ""),
+        return await QueryEngine.create_from_session_id(
+            session_id=session_id,
+            client_config=client_config,
+            tool_registry=tool_registry,
+            session_store=self._session_store,
+            working_directory=working_directory,
         )
-
-        engine = QueryEngine(
-            client_config,
-            tool_registry,
-            config,
-            session_id=(initial_session.session_id if initial_session else session_id),
-            initial_messages=(
-                list(initial_session.messages) if initial_session else None
-            ),
-            initial_current_turn=(
-                initial_session.current_turn if initial_session else 0
-            ),
-            initial_usage=(initial_session.total_usage if initial_session else None),
-        )
-
-        await engine.initialize()
-        return engine
 
     def get_engine(self, session_id: str) -> Optional[QueryEngine]:
         return self._engines.get(session_id)
@@ -302,7 +286,7 @@ class ChatServiceServicer:
         except asyncio.CancelledError:
             logger.info("Stream chat cancelled")
         except Exception as e:
-            logger.error(f"Stream chat error: {e}")
+            log_exception(logger, "Stream chat error", e)
             error_event = CoreErrorEvent(error=str(e), is_fatal=True)
             pb_event = query_event_to_proto(error_event)
             yield claude_code_pb2.ChatResponse(event=pb_event)
@@ -391,6 +375,7 @@ class SessionServiceServicer:
         request: "claude_code_pb2.ListSessionsRequest",
         context: grpc.aio.ServicerContext,
     ) -> "claude_code_pb2.ListSessionsResponse":
+        from datetime import datetime
         from claude_code.proto import claude_code_pb2
 
         response = claude_code_pb2.ListSessionsResponse()
@@ -399,11 +384,11 @@ class SessionServiceServicer:
             pb_summary = claude_code_pb2.SessionSummary()
             pb_summary.session_id = summary.session_id
             pb_summary.title = summary.title or ""
-            pb_summary.updated_at = (
-                int(summary.updated_at_timestamp)
-                if hasattr(summary, "updated_at_timestamp")
-                else 0
-            )
+            try:
+                dt = datetime.fromisoformat(summary.updated_at)
+                pb_summary.updated_at = int(dt.timestamp())
+            except Exception:
+                pb_summary.updated_at = 0
             pb_summary.working_directory = summary.working_directory or ""
             pb_summary.message_count = summary.message_count
             response.sessions.append(pb_summary)

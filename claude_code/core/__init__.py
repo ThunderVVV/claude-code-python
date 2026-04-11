@@ -1,4 +1,3 @@
-
 """Core module - exports all core types and classes"""
 
 from claude_code.core.messages import (
@@ -18,7 +17,6 @@ from claude_code.core.messages import (
     ToolResultEvent,
     MessageCompleteEvent,
     TurnCompleteEvent,
-    RequestStartEvent,
     ErrorEvent,
 )
 from claude_code.core.query_engine import (
@@ -54,7 +52,6 @@ __all__ = [
     "ToolResultEvent",
     "MessageCompleteEvent",
     "TurnCompleteEvent",
-    "RequestStartEvent",
     "ErrorEvent",
     # Query Engine
     "QueryEngine",

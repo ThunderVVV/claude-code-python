@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 import sys
 from typing import Optional
@@ -12,6 +11,7 @@ import click
 from dotenv import load_dotenv
 
 from claude_code.client.grpc_client import ClaudeCodeClient
+from claude_code.utils.logging_config import setup_client_logging
 
 
 @click.group()
@@ -19,10 +19,7 @@ from claude_code.client.grpc_client import ClaudeCodeClient
 @click.pass_context
 def main(ctx: click.Context, debug: bool) -> None:
     """Claude Code gRPC client CLI"""
-    if debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.WARNING)
+    setup_client_logging(debug=debug)
 
     load_dotenv()
     ctx.ensure_object(dict)
