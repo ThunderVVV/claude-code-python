@@ -10,20 +10,6 @@
 
 `claude-code-python` 是根据 Claude Code 提示词构建的 Python AI 编程终端，当前聚焦核心 agent 能力：TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
 
-## 架构说明
-
-本项目采用前后端分离架构，通过 gRPC 通信：
-
-```
-┌─────────────────────┐     gRPC      ┌─────────────────────┐
-│   TUI Client        │◄──────────────►│   gRPC Server       │
-│   (Textual)         │               │                     │
-├─────────────────────┤               ├─────────────────────┤
-│ GrpcQueryEngine     │               │ QueryEngine         │
-├─────────────────────┤               ├─────────────────────┤
-│ ClaudeCodeClient    │               │ OpenAI Client       │
-└─────────────────────┘               └─────────────────────┘
-```
 
 <table>
   <tr>
@@ -97,17 +83,9 @@ cd claude-code-python
 pip install -e .
 ```
 
-### 生成 gRPC 代码
-
-```bash
-python scripts/generate_proto.py
-```
-
 ## 配置
 
-### 服务端配置
-
-在服务端机器创建 `.env`：
+创建 `.env`：
 
 ```env
 CLAUDE_CODE_API_URL=https://api.openai.com/v1
@@ -116,115 +94,13 @@ CLAUDE_CODE_MODEL=gpt-4.1
 CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
 ```
 
-### 客户端配置
-
-客户端可通过环境变量或命令行参数连接服务端：
-
-```env
-CLAUDE_CODE_GRPC_HOST=localhost
-CLAUDE_CODE_GRPC_PORT=50051
-```
-
 ## 运行
-
-### 启动 gRPC 服务端
-
-```bash
-cc-server --host 0.0.0.0 --port 50051
-```
-
-服务端选项：
-- `--api-url`: OpenAI 兼容 API URL
-- `--api-key`: API 密钥
-- `--model`: 模型名称
-- `--host`: 绑定地址（默认 `[::]`）
-- `--port`: 端口（默认 50051）
 
 ### 启动 TUI 客户端
 
 ```bash
-cc-py --host localhost --port 50051
-```
-
-或通过环境变量：
-
-```bash
-export CLAUDE_CODE_GRPC_HOST=localhost
-export CLAUDE_CODE_GRPC_PORT=50051
 cc-py
 ```
-
-### 使用命令行客户端
-
-```bash
-# 发送消息
-cc-client chat "你的问题"
-
-# 列出会话
-cc-client list-sessions
-
-# 创建新会话
-cc-client create-session
-
-# 删除会话
-cc-client delete-session <session_id>
-```
-
-## gRPC API
-
-### 服务定义
-
-#### ChatService
-
-```protobuf
-service ChatService {
-    rpc StreamChat(stream StreamChatRequest) returns (stream ChatResponse);
-    rpc GetState(GetStateRequest) returns (GetStateResponse);
-    rpc Interrupt(InterruptRequest) returns (InterruptResponse);
-}
-```
-
-#### SessionService
-
-```protobuf
-service SessionService {
-    rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
-    rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
-    rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
-    rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
-    rpc ClearSession(ClearSessionRequest) returns (ClearSessionResponse);
-}
-```
-
-### 事件流
-
-`StreamChat` 返回的事件类型：
-- `TextEvent`: 文本内容
-- `ThinkingEvent`: 思考/推理内容
-- `ToolUseEvent`: 工具调用
-- `ToolResultEvent`: 工具结果
-- `MessageCompleteEvent`: 消息完成
-- `TurnCompleteEvent`: 回合完成
-- `ErrorEvent`: 错误
-
-## sessions系统
-
-启动时选择已有 session：
-
-```bash
-cc-py --sessions
-```
-
-恢复指定 session：
-
-```bash
-cc-py --resume <session_id>
-```
-
-Session 说明：
-
-- `cc-py` 默认新开一个 session。
-- session 标题默认取首条用户消息的第一句。
 
 ## 调试
 
@@ -234,7 +110,7 @@ Session 说明：
 cc-py --debug
 ```
 
-如果同时指定了 `--log-file`，调试日志会写到指定路径；否则会自动写到当前目录下的 `.logs/claude-code-debug-<timestamp>.log`。
+自动写到当前目录下的 `.logs`。
 
 
 ## 可选 Skills
@@ -258,6 +134,35 @@ cc-py --debug
 > 注：skills 需要自行获取或编写，本项目不包含这些文件。
 
 > 注意:本项目不支持skills系统，web功能通过解析固定路径 tavily-search 和 tavily-extract skills的SKILLS.md文件，附加到输入消息中实现）
+
+## 架构说明
+
+本项目采用前后端分离架构，通过 gRPC 通信：
+
+```
+┌──────────────────────────────────┐              ┌──────────────────────────────────────────────┐
+│           Frontend               │              │                  Backend                     │
+├──────────────────────────────────┤              ├──────────────────────────────────────────────┤
+│                                  │              │                                              │
+│  ┌────────────────────────────┐  │              │  ┌────────────────────────────────────────┐  │
+│  │       REPLScreen           │  │              │  │           ChatServiceServicer          │  │
+│  │       (Textual TUI)        │  │              │  │         SessionServiceServicer         │  │
+│  └─────────────┬──────────────┘  │              │  │             (gRPC Server)              │  │
+│                │                 │              │  └───────────────────┬────────────────────┘  │
+│                ▼                 │              │                      │                       │
+│  ┌────────────────────────────┐  │    gRPC      │                      ▼                       │
+│  │    ClaudeCodeClient        │──┼─────────────►│  ┌────────────────────────────────────────┐  │
+│  │      (gRPC Client)         │◄─┼──────────────┤  │             QueryEngine                │  │
+│  └────────────────────────────┘  │              │  └───────────────────┬────────────────────┘  │
+│                                  │              │                      │                       │
+│                                  │              │                      │ OpenAI-compatible     │
+│                                  │              │                      ▼                       │
+│                                  │              │  ┌────────────────────────────────────────┐  │
+│                                  │              │  │             OpenAIClient               │  │
+│                                  │              │  └────────────────────────────────────────┘  │
+│                                  │              │                                              │
+└──────────────────────────────────┘              └──────────────────────────────────────────────┘
+```
 
 ## 许可证
 
