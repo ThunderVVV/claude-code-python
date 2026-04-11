@@ -82,6 +82,8 @@ def main(
 ) -> None:
     """Start the Claude Code gRPC server"""
     setup_server_logging(debug=debug)
+    if debug:
+        click.echo(click.style("Debug logging enabled", fg="yellow"))
 
     if env_file:
         load_dotenv(env_file)

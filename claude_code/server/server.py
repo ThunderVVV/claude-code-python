@@ -31,9 +31,31 @@ from claude_code.core.query_engine import QueryEngine
 from claude_code.core.tools import ToolRegistry
 from claude_code.core.session_store import SessionStore, PersistedSession
 from claude_code.services.openai_client import OpenAIClientConfig
-from claude_code.utils.logging_config import log_exception
+from claude_code.utils.logging_config import log_full_exception
 
 logger = logging.getLogger(__name__)
+
+
+def check_port_available(host: str, port: int) -> None:
+    """Check if a port is available (not already bound by another server).
+
+    Raises RuntimeError if the port is already in use.
+    """
+    import socket
+
+    check_host = "localhost" if host == "[::]" else host
+    try:
+        test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        test_sock.settimeout(0.1)
+        result = test_sock.connect_ex((check_host, port))
+        test_sock.close()
+        if result == 0:
+            logger.error(f"Port {port} is already in use by another server.")
+            raise RuntimeError(
+                f"Port {port} is already in use. Please stop the existing server first (pkill -f cc-server)."
+            )
+    except socket.error:
+        pass
 
 
 def message_role_to_proto(role: MessageRole) -> int:
@@ -230,9 +252,6 @@ class SessionManager:
     def get_session(self, session_id: str) -> Optional[PersistedSession]:
         return self._session_store.load_session(session_id)
 
-    def delete_session(self, session_id: str) -> bool:
-        return self._session_store.delete_session(session_id)
-
 
 class ChatServiceServicer:
     def __init__(
@@ -247,68 +266,35 @@ class ChatServiceServicer:
 
     async def StreamChat(
         self,
-        request_iterator: AsyncGenerator["claude_code_pb2.StreamChatRequest", None],
+        request: "claude_code_pb2.ChatRequest",
         context: grpc.aio.ServicerContext,
     ) -> AsyncGenerator["claude_code_pb2.ChatResponse", None]:
         from claude_code.proto import claude_code_pb2
 
-        engine: Optional[QueryEngine] = None
-        chat_request: Optional[claude_code_pb2.ChatRequest] = None
-
-        async for request in request_iterator:
-            which = request.WhichOneof("request")
-
-            if which == "interrupt_signal":
-                if engine:
-                    engine.interrupt(request.interrupt_signal or "user_interrupt")
-                continue
-
-            if which == "chat_request":
-                chat_request = request.chat_request
-                break
-
-        if not chat_request:
-            return
+        user_text_str= request.user_text[:100] + "..." if len(request.user_text) > 100 else request.user_text
+        logger.info(f"Request received - session_id={request.session_id}, user_text={user_text_str}")
 
         try:
             engine = await self._session_manager.get_or_create_engine(
-                chat_request.session_id or None,
+                request.session_id or None,
                 self._client_config,
                 self._tool_registry,
-                chat_request.working_directory,
+                request.working_directory,
             )
 
-            async for event in engine.submit_message(chat_request.user_text):
+            async for event in engine.submit_message(request.user_text):
                 pb_event = query_event_to_proto(event)
                 response = claude_code_pb2.ChatResponse(event=pb_event)
                 yield response
 
+            logger.info(f"Streaming completed - session_id={request.session_id}")
         except asyncio.CancelledError:
-            logger.info("Stream chat cancelled")
+            logger.info(f"Stream chat cancelled - session_id={request.session_id}")
         except Exception as e:
-            log_exception(logger, "Stream chat error", e)
+            log_full_exception(logger, "Stream chat error", e)
             error_event = CoreErrorEvent(error=str(e), is_fatal=True)
             pb_event = query_event_to_proto(error_event)
             yield claude_code_pb2.ChatResponse(event=pb_event)
-
-    async def GetState(
-        self,
-        request: "claude_code_pb2.GetStateRequest",
-        context: grpc.aio.ServicerContext,
-    ) -> "claude_code_pb2.GetStateResponse":
-        from claude_code.proto import claude_code_pb2
-
-        response = claude_code_pb2.GetStateResponse()
-
-        engine = self._session_manager.get_engine(request.session_id)
-        if engine:
-            response.message_count = len(engine.state.messages)
-            response.current_turn = engine.state.current_turn
-            response.is_streaming = engine.state.is_streaming
-            response.total_usage.input_tokens = engine.state.total_usage.input_tokens
-            response.total_usage.output_tokens = engine.state.total_usage.output_tokens
-
-        return response
 
     async def Interrupt(
         self,
@@ -316,6 +302,8 @@ class ChatServiceServicer:
         context: grpc.aio.ServicerContext,
     ) -> "claude_code_pb2.InterruptResponse":
         from claude_code.proto import claude_code_pb2
+
+        logger.info(f"Interrupt received - session_id={request.session_id}, reason={request.reason}")
 
         response = claude_code_pb2.InterruptResponse()
 
@@ -341,6 +329,7 @@ class SessionServiceServicer:
         from claude_code.proto import claude_code_pb2
         from claude_code.core.messages import generate_uuid
 
+        logger.info(f"CreateSession request")
         response = claude_code_pb2.CreateSessionResponse()
         response.session_id = generate_uuid()
         return response
@@ -351,6 +340,8 @@ class SessionServiceServicer:
         context: grpc.aio.ServicerContext,
     ) -> "claude_code_pb2.GetSessionResponse":
         from claude_code.proto import claude_code_pb2
+
+        logger.info(f"GetSession request - session_id={request.session_id}")
 
         response = claude_code_pb2.GetSessionResponse()
 
@@ -378,6 +369,8 @@ class SessionServiceServicer:
         from datetime import datetime
         from claude_code.proto import claude_code_pb2
 
+        logger.info(f"ListSessions request")
+
         response = claude_code_pb2.ListSessionsResponse()
 
         for summary in self._session_manager.list_sessions():
@@ -395,34 +388,6 @@ class SessionServiceServicer:
 
         return response
 
-    async def DeleteSession(
-        self,
-        request: "claude_code_pb2.DeleteSessionRequest",
-        context: grpc.aio.ServicerContext,
-    ) -> "claude_code_pb2.DeleteSessionResponse":
-        from claude_code.proto import claude_code_pb2
-
-        response = claude_code_pb2.DeleteSessionResponse()
-        response.success = self._session_manager.delete_session(request.session_id)
-        return response
-
-    async def ClearSession(
-        self,
-        request: "claude_code_pb2.ClearSessionRequest",
-        context: grpc.aio.ServicerContext,
-    ) -> "claude_code_pb2.ClearSessionResponse":
-        from claude_code.proto import claude_code_pb2
-
-        response = claude_code_pb2.ClearSessionResponse()
-        engine = self._session_manager.get_engine(request.session_id)
-        if engine:
-            engine.clear()
-            response.success = True
-        else:
-            response.success = False
-
-        return response
-
 
 async def serve(
     client_config: OpenAIClientConfig,
@@ -431,6 +396,8 @@ async def serve(
     port: int = 50051,
 ) -> None:
     from claude_code.proto import claude_code_pb2_grpc
+
+    check_port_available(host, port)
 
     session_manager = SessionManager()
 
