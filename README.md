@@ -6,9 +6,9 @@
 > WARNING: 本项目绝大部分为AI生成代码
 
 1. 此项目仅用于个人探究 Claude Code 基本工具调用原理、系统提示词、工具提示词设计，仅用于个人学习，不保证更新和维护。
-2. 此项目的部分前端组件(例如代码diff view)参考了 [toad](https://github.com/batrachianai/toad)，也是一个Python AI TUI。
+2. 此项目的部分前端组件(例如代码diff view)来源于 [toad](https://github.com/batrachianai/toad)，也是一个Python AI TUI。
 
-`claude-code-python` 是根据 Claude Code 提示词构建的 Python AI 编程终端，当前聚焦核心 agent 能力：TUI 对话循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
+`claude-code-python` 是根据 Claude Code 提示词构建的 Python AI 编程终端，当前聚焦核心 agent 能力：Agent核心循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
 
 
 <table>
@@ -38,7 +38,7 @@
 - **OpenAI 兼容**：使用官方 OpenAI Python SDK，支持所有 OpenAI 兼容的 API
 - **工具集**：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
 - **系统提示词对齐**：与 TypeScript 版本保持一致的系统提示词和工具描述
-- **gRPC 前后端分离**：后端独立部署，前端通过 gRPC 连接
+- **gRPC 前后端分离**：后端独立部署，前端通过 gRPC 连接，后端控制核心的Agent管理代码，与繁杂的前端设计解耦
 
 ### TUI 特性
 - **推理/思考内容支持**：显示模型的推理过程
