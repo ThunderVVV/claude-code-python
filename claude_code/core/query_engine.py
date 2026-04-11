@@ -6,22 +6,18 @@ import asyncio
 import json
 import logging
 import os
-import uuid
-from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator, Dict, List, Optional, Callable
+from dataclasses import dataclass
+from typing import Any, AsyncGenerator, List, Optional
 
 logger = logging.getLogger(__name__)
 
 from claude_code.core.messages import (
     ContentBlock,
     Message,
-    MessageRole,
     QueryState,
     QueryEvent,
     TextContent,
     ThinkingContent,
-    ToolResultContent,
-    ToolUseContent,
     Usage,
     TextEvent,
     ThinkingEvent,
@@ -33,16 +29,15 @@ from claude_code.core.messages import (
     generate_uuid,
 )
 from claude_code.core.tools import ToolContext, ToolRegistry
-from claude_code.core.prompts import create_default_system_prompt, build_context_message
+from claude_code.core.prompts import create_default_system_prompt
 from claude_code.core.file_expansion import expand_file_references
 from claude_code.services.openai_client import (
     OpenAIClient,
     OpenAIClientConfig,
     ToolCallDelta,
     APIError,
-    APINetworkError,
 )
-from claude_code.utils.logging_config import log_exception
+from claude_code.utils.logging_config import log_full_exception
 
 
 @dataclass
@@ -53,18 +48,6 @@ class QueryConfig:
     stream: bool = True
     system_prompt: str = ""
     working_directory: str = ""
-
-
-@dataclass
-class QueryResult:
-    """Result of a query execution"""
-
-    success: bool = True
-    text: str = ""
-    stop_reason: str = "end_turn"
-    num_turns: int = 0
-    error: Optional[str] = None
-    usage: Optional[Usage] = None
 
 
 class QueryEngine:
@@ -346,6 +329,10 @@ class QueryEngine:
                 self.clear_interrupt()
                 return
             raise
+        except Exception as e:
+            log_full_exception(logger, "Unexpected error in submit_message", e)
+            error_msg = f"Error processing message: {str(e)}"
+            yield ErrorEvent(error=error_msg, is_fatal=True)
         finally:
             current_task = asyncio.current_task()
             if current_task in self._cancelled_tasks:
@@ -430,6 +417,9 @@ class QueryEngine:
                                 if tool_use.id in previewed_tool_use_ids:
                                     continue
                                 previewed_tool_use_ids.add(tool_use.id)
+                                logger.debug(
+                                    f"Previewing tool use: tool_use.name={tool_use.name}, tool_use.id={tool_use.id}, tool_use.input: {tool_use.input}"
+                                )
                                 yield ToolUseEvent(
                                     tool_use_id=tool_use.id,
                                     tool_name=tool_use.name,
@@ -517,9 +507,13 @@ class QueryEngine:
                     return
 
                 # Execute tool calls
+                tool_calls_info = []
+                for tool_use in tool_use_blocks:
+                    input_str = str(tool_use.input)
+                    truncated = input_str[:50] + "..." if len(input_str) > 50 else input_str
+                    tool_calls_info.append(f"{tool_use.name}({truncated})")
                 logger.debug(
-                    f"Executing {len(tool_use_blocks)} tool calls"
-                    f"{[tool_use.name for tool_use in tool_use_blocks]}"
+                    f"Executing {len(tool_use_blocks)} tool calls: {tool_calls_info}"
                 )
                 tool_results: List[tuple] = []
 
@@ -600,106 +594,20 @@ class QueryEngine:
             except asyncio.CancelledError:
                 # raise to outer handler
                 raise
-            except APINetworkError as e:
-                log_exception(logger, "Network error in query loop", e)
-                error_msg = f"Network error: {str(e)}"
-                yield ErrorEvent(error=error_msg, is_fatal=True)
-                return
             except APIError as e:
-                log_exception(logger, "API error in query loop", e)
                 error_msg = f"API error: {str(e)}"
+                self._persist_session()
+                logger.info(f"saved session due to API error: {error_msg}")
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return
             except Exception as e:
-                log_exception(logger, "Unexpected error in query loop", e)
+                log_full_exception(logger, "Unexpected error in query loop", e)
                 error_msg = f"Query failed: {str(e)}"
+                self._persist_session()
+                logger.info(f"saved session due to Unexpected error: {error_msg}")
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return
 
             finally:
                 self.state.is_streaming = False
                 self.state.current_streaming_text = ""
-
-    async def run(
-        self,
-        user_text: str,
-        on_text: Optional[Callable[[str], None]] = None,
-        on_tool_start: Optional[Callable[[str, str, Dict], None]] = None,
-        on_tool_end: Optional[Callable[[str, str, bool], None]] = None,
-        on_message: Optional[Callable[[Message], None]] = None,
-        on_turn: Optional[Callable[[int, bool], None]] = None,
-    ) -> QueryResult:
-        """
-        Run a query with optional callbacks.
-
-        This is a convenience method that handles the event stream.
-        """
-        result = QueryResult()
-
-        try:
-            async for event in self.submit_message(user_text):
-                if isinstance(event, TextEvent):
-                    if on_text:
-                        on_text(event.text)
-
-                elif isinstance(event, ToolUseEvent):
-                    if on_tool_start:
-                        on_tool_start(event.tool_use_id, event.tool_name, event.input)
-
-                elif isinstance(event, ToolResultEvent):
-                    if on_tool_end:
-                        on_tool_end(event.tool_use_id, event.result, event.is_error)
-
-                elif isinstance(event, MessageCompleteEvent):
-                    if on_message and event.message:
-                        on_message(event.message)
-
-                elif isinstance(event, TurnCompleteEvent):
-                    result.num_turns = event.turn
-                    if on_turn:
-                        on_turn(event.turn, event.has_more_turns)
-                    if event.stop_reason:
-                        result.stop_reason = event.stop_reason
-
-                elif isinstance(event, ErrorEvent):
-                    result.success = False
-                    result.error = event.error
-
-        except Exception as e:
-            result.success = False
-            result.error = str(e)
-
-        # Get final text from last assistant message
-        for msg in reversed(self.state.messages):
-            if msg.type == MessageRole.ASSISTANT:
-                text = msg.get_text()
-                if text:
-                    result.text = text
-                    break
-
-        result.usage = self.state.total_usage
-
-        return result
-
-
-async def ask(
-    prompt: str,
-    client_config: OpenAIClientConfig,
-    tool_registry: ToolRegistry,
-    max_turns: int = 1000000,
-    working_directory: Optional[str] = None,
-    system_prompt: Optional[str] = None,
-) -> QueryResult:
-    """
-    Convenience function for one-shot queries.
-
-    Aligned with ask() in TypeScript QueryEngine.ts.
-    """
-    config = QueryConfig(
-        max_turns=max_turns,
-        system_prompt=system_prompt or "",
-        working_directory=working_directory or os.getcwd(),
-    )
-
-    async with QueryEngine(client_config, tool_registry, config) as engine:
-        return await engine.run(prompt)

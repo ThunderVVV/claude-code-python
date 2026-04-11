@@ -22,8 +22,6 @@ from claude_code.core.messages import (
 from claude_code.core.query_engine import (
     QueryEngine,
     QueryConfig,
-    QueryResult,
-    ask,
 )
 from claude_code.core.tools import (
     BaseTool,
@@ -56,8 +54,6 @@ __all__ = [
     # Query Engine
     "QueryEngine",
     "QueryConfig",
-    "QueryResult",
-    "ask",
     # Tools
     "BaseTool",
     "ToolContext",
