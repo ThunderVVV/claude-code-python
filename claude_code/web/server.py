@@ -64,6 +64,11 @@ class ChatRequest(BaseModel):
     working_directory: str = os.getcwd()
 
 
+class InterruptRequest(BaseModel):
+    session_id: str
+    reason: str = "user_interrupt"
+
+
 # Content block converters
 def content_block_to_dict(block) -> dict:
     from claude_code.core.messages import (
@@ -175,6 +180,17 @@ async def chat(request: ChatRequest):
             "Connection": "keep-alive",
         }
     )
+
+
+@app.post("/api/interrupt")
+async def interrupt(request: InterruptRequest):
+    """Send interrupt signal to the backend"""
+    try:
+        success = await _grpc_client.interrupt(request.session_id, request.reason)
+        return {"success": success}
+    except Exception as e:
+        logger.exception("Failed to send interrupt")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/sessions")
