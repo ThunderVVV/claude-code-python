@@ -1,4 +1,4 @@
-"""Web server CLI entry point"""
+"""Web server CLI entry point (FastAPI version)"""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 from typing import Optional
 
 import click
+import uvicorn
 
 from claude_code.utils.logging_config import setup_server_logging
 
@@ -50,7 +51,11 @@ def main(
     if debug:
         click.echo(click.style("Debug logging enabled", fg="yellow"))
 
-    from claude_code.web.server import run_web_server
+    from claude_code.web.server import create_app, set_grpc_config
+    from claude_code.client.grpc_client import ClaudeCodeClient
+
+    # Set gRPC config for lifespan
+    set_grpc_config(grpc_host, grpc_port)
 
     click.echo(
         click.style(
@@ -58,13 +63,17 @@ def main(
             fg="green",
         )
     )
-    asyncio.run(
-        run_web_server(
-            grpc_host=grpc_host,
-            grpc_port=grpc_port,
-            web_host=web_host,
-            web_port=web_port,
-        )
+    click.echo(f"🔌 Will connect to gRPC server at: {grpc_host}:{grpc_port}")
+
+    # Create app (connection happens in lifespan)
+    app = create_app()
+
+    # Run with uvicorn
+    uvicorn.run(
+        app,
+        host=web_host,
+        port=web_port,
+        log_level="debug" if debug else "info",
     )
 
 

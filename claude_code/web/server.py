@@ -1,25 +1,70 @@
+"""FastAPI-based web server with Vue 3 frontend"""
+
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, Dict, Optional
+from typing import Optional
 
-import aiohttp
-from aiohttp import web
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from claude_code.client.grpc_client import ClaudeCodeClient
-from claude_code.utils.logging_config import setup_server_logging
 
 logger = logging.getLogger(__name__)
 
-routes = web.RouteTableDef()
-
+# gRPC client
 _grpc_client: Optional[ClaudeCodeClient] = None
+_grpc_config = {"host": "localhost", "port": 50051}
 
 
+def set_grpc_config(host: str, port: int) -> None:
+    """Set gRPC configuration before app startup"""
+    global _grpc_config
+    _grpc_config["host"] = host
+    _grpc_config["port"] = port
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle - connect to gRPC on startup"""
+    global _grpc_client
+    try:
+        _grpc_client = ClaudeCodeClient(
+            host=_grpc_config["host"],
+            port=_grpc_config["port"]
+        )
+        await _grpc_client.connect()
+        logger.info(f"Connected to gRPC server at {_grpc_config['host']}:{_grpc_config['port']}")
+        print(f"🔌 Connected to gRPC server at {_grpc_config['host']}:{_grpc_config['port']}")
+        yield
+    except Exception as e:
+        logger.error(f"Failed to connect to gRPC server: {e}")
+        print(f"❌ Failed to connect to gRPC server at {_grpc_config['host']}:{_grpc_config['port']}")
+        print(f"   Error: {e}")
+        raise
+    finally:
+        if _grpc_client:
+            await _grpc_client.close()
+            logger.info("Disconnected from gRPC server")
+
+
+app = FastAPI(title="Claude Code Python Web", lifespan=lifespan)
+
+
+# Request models
+class ChatRequest(BaseModel):
+    session_id: Optional[str] = None
+    user_text: str
+    working_directory: str = os.getcwd()
+
+
+# Content block converters
 def content_block_to_dict(block) -> dict:
     from claude_code.core.messages import (
         TextContent,
@@ -91,66 +136,54 @@ def event_to_dict(event) -> dict:
     return {"type": "unknown"}
 
 
-@routes.get("/")
-async def index(request):
-    html_path = Path(__file__).parent / "index.html"
-    return web.FileResponse(html_path)
-
-
-@routes.get("/styles.css")
-async def styles(request):
-    css_path = Path(__file__).parent / "styles.css"
-    return web.FileResponse(css_path)
-
-
-@routes.get("/app.js")
-async def app_js(request):
-    js_path = Path(__file__).parent / "app.js"
-    return web.FileResponse(js_path)
-
-
-@routes.post("/api/chat")
-async def chat(request):
-    data = await request.json()
-    session_id = data.get("session_id")
-    user_text = data.get("user_text", "")
-    working_directory = data.get("working_directory", os.getcwd())
-
-    response = web.StreamResponse()
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
-
+async def event_stream(chat_request: ChatRequest):
+    """Generate SSE events from gRPC stream"""
+    session_id = chat_request.session_id
     try:
         if not session_id:
-            session_id = await _grpc_client.create_session(working_directory)
+            session_id = await _grpc_client.create_session(chat_request.working_directory)
 
-        await response.write(
-            f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n".encode()
-        )
+        yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
 
         async for event in _grpc_client.stream_chat(
-            user_text, session_id, working_directory
+            chat_request.user_text, session_id, chat_request.working_directory
         ):
             event_dict = event_to_dict(event)
-            await response.write(f"data: {json.dumps(event_dict)}\n\n".encode())
+            yield f"data: {json.dumps(event_dict)}\n\n"
 
     except Exception as e:
         logger.exception("Chat error")
         error_dict = {"type": "error", "error": str(e), "is_fatal": True}
-        await response.write(f"data: {json.dumps(error_dict)}\n\n".encode())
-
-    return response
+        yield f"data: {json.dumps(error_dict)}\n\n"
 
 
-@routes.get("/api/sessions")
-async def list_sessions(request):
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    """Serve Vue app"""
+    html_path = Path(__file__).parent / "static" / "index.html"
+    return HTMLResponse(content=html_path.read_text(), media_type="text/html")
+
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest):
+    """Stream chat response via SSE"""
+    return StreamingResponse(
+        event_stream(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@app.get("/api/sessions")
+async def list_sessions():
+    """List all sessions"""
     try:
         sessions = await _grpc_client.list_sessions()
-        sessions_list = []
-        for sess in sessions:
-            sessions_list.append(
+        return {
+            "sessions": [
                 {
                     "session_id": sess.session_id,
                     "title": sess.title,
@@ -158,32 +191,28 @@ async def list_sessions(request):
                     "working_directory": sess.working_directory,
                     "message_count": sess.message_count,
                 }
-            )
-        return web.json_response({"sessions": sessions_list})
+                for sess in sessions
+            ]
+        }
     except Exception as e:
         logger.exception("Failed to list sessions")
-        return web.json_response({"error": str(e)}, status=500)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@routes.get("/api/sessions/{session_id}")
-async def get_session(request):
-    session_id = request.match_info["session_id"]
+@app.get("/api/sessions/{session_id}")
+async def get_session(session_id: str):
+    """Get session details"""
     try:
         session_info = await _grpc_client.get_session(session_id)
         if not session_info:
-            return web.json_response({"error": "Session not found"}, status=404)
+            raise HTTPException(status_code=404, detail="Session not found")
 
         messages_list = []
         for msg in session_info.messages:
             msg_dict = {
                 "role": msg.type.value if hasattr(msg.type, "value") else str(msg.type),
-                "content_blocks": [],
+                "content_blocks": [content_block_to_dict(block) for block in msg.content],
             }
-
-            for block in msg.content:
-                block_dict = content_block_to_dict(block)
-                if block_dict:
-                    msg_dict["content_blocks"].append(block_dict)
 
             if msg.file_expansions:
                 msg_dict["file_expansions"] = [
@@ -200,27 +229,31 @@ async def get_session(request):
 
             messages_list.append(msg_dict)
 
-        return web.json_response(
-            {
-                "session_id": session_info.session_id,
-                "title": session_info.title,
-                "messages": messages_list,
-                "current_turn": session_info.current_turn,
-                "total_usage": {
-                    "input_tokens": session_info.total_usage.input_tokens,
-                    "output_tokens": session_info.total_usage.output_tokens,
-                },
-                "working_directory": session_info.working_directory,
-            }
-        )
+        return {
+            "session_id": session_info.session_id,
+            "title": session_info.title,
+            "messages": messages_list,
+            "current_turn": session_info.current_turn,
+            "total_usage": {
+                "input_tokens": session_info.total_usage.input_tokens,
+                "output_tokens": session_info.total_usage.output_tokens,
+            },
+            "working_directory": session_info.working_directory,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to get session")
-        return web.json_response({"error": str(e)}, status=500)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-def create_app():
-    app = web.Application()
-    app.add_routes(routes)
+def create_app() -> FastAPI:
+    """Create FastAPI app with static file mounting"""
+    # Mount static files
+    static_path = Path(__file__).parent / "static"
+    if static_path.exists():
+        app.mount("/static", StaticFiles(directory=static_path), name="static")
+    
     return app
 
 
@@ -230,25 +263,21 @@ async def run_web_server(
     web_host: str = "0.0.0.0",
     web_port: int = 8080,
 ):
+    """Run web server with gRPC connection (for programmatic use)"""
     global _grpc_client
     _grpc_client = ClaudeCodeClient(host=grpc_host, port=grpc_port)
 
     await _grpc_client.connect()
     logger.info(f"Connected to gRPC server at {grpc_host}:{grpc_port}")
 
-    app = create_app()
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, web_host, web_port)
-    await site.start()
+    app = create_app(_grpc_client)
+
+    import uvicorn
+    config = uvicorn.Config(app, host=web_host, port=web_port, log_level="info")
+    server = uvicorn.Server(config)
 
     logger.info(f"Web server started at http://{web_host}:{web_port}")
     print(f"🎨 Web interface available at: http://{web_host}:{web_port}")
     print(f"🔌 Connected to gRPC server at: {grpc_host}:{grpc_port}")
 
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except KeyboardInterrupt:
-        await _grpc_client.close()
-        await runner.cleanup()
+    await server.serve()

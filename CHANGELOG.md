@@ -8,9 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added - 2026-04-12
 
-#### Web UI v2 with Vue 3 (FastAPI-based)
-- Added new `web_v2` module with FastAPI backend and Vue 3 frontend
-- New CLI command: `cc-web-v2` to launch Vue 3-based web interface
+#### Web UI with Vue 3 (FastAPI-based)
+- Refactored `web` module with FastAPI backend and Vue 3 frontend
+- CLI command: `cc-web` to launch Vue 3-based web interface
 - Single-file Vue 3 frontend (`index.html`) with Tailwind CSS styling
 - Added dependencies: FastAPI, uvicorn, pydantic to `pyproject.toml`
 - Features:
@@ -26,10 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed - 2026-04-12
 
 #### Tool Use Duplicate Rendering in Web UI
-- Fixed duplicate tool blocks appearing in web_v2 frontend
+- Fixed duplicate tool blocks appearing in web frontend
 - Root cause: Backend sent `ToolUseEvent` twice (preview phase + before execution)
 - Fix: Check `previewed_tool_use_ids` before emitting duplicate event
-- Fixed `loadSession` in web_v2 to:
+- Fixed `loadSession` in web to:
   - Handle `tool` role messages correctly
   - Reset `sessionToolUses` between user messages
   - Track `lastAssistantMsg` for proper message association
