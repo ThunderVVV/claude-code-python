@@ -8,6 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2025-04-13
 
+#### Tool Result Display Refactor with Log Widget
+- Replaced manual text truncation with Textual's `Log` widget for tool results
+- Tool results (Read, Bash, Glob, Grep, etc.) now use `ToolResultLogWidget` instead of multiple `Static` widgets
+- File expansion display also uses `ToolResultLogWidget` for consistent behavior
+- Removed all horizontal and vertical truncation - Log widget handles scrolling natively
+- Log widget configuration:
+  - `height: auto` - automatically shrinks for small content
+  - `min-height: 1` - minimum 1 line
+  - `max-height: 10` - maximum 10 lines with scrolling
+  - `scrollbar-visibility: hidden` - cleaner UI while maintaining scroll functionality
+  - Syntax highlighting enabled
+  - Auto-scroll to bottom enabled
+- Benefits:
+  - Full content display without truncation
+  - Native horizontal and vertical scrolling
+  - Space-efficient for small outputs (auto-shrink)
+  - Clean UI without visible scrollbars
+  - Better readability with syntax highlighting
+
+### Changed - 2025-04-13
+
 #### Refactor Streaming Markdown Component
 - Renamed `TranscriptMarkdownWidget` to `StreamingMarkdownWidget` for clarity
 - Removed redundant `StreamingTextWidget` class (was just a thin wrapper)

@@ -32,14 +32,11 @@ def truncate_preview_line(text: str, max_width: int = 88) -> str:
 
 def _truncate_result_lines(
     lines: List[str],
-    max_lines: int,
+    max_lines: int = 6,
     max_width: int = 88,
 ) -> List[str]:
-    """Trim a result preview to a bounded number of lines."""
-    preview = [truncate_preview_line(line, max_width) for line in lines[:max_lines]]
-    if len(lines) > max_lines:
-        preview.append(f"... ({len(lines) - max_lines} more lines)")
-    return preview
+    """Format lines for display (no truncation - Log widget handles scrolling)."""
+    return [line for line in lines]
 
 
 def _normalize_summary_text(summary: str) -> str:
@@ -186,7 +183,7 @@ def summarize_tool_result(
 
     if is_error:
         summary = truncate_preview_line(_summarize_tool_error(tool_name, tool_input))
-        output_lines = _truncate_result_lines(trimmed_lines[:4] or ["Tool failed"], 4)
+        output_lines = _truncate_result_lines(trimmed_lines[:6] or ["Tool failed"])
         return _normalize_summary_text(summary), output_lines
 
     if tool_name == "Read":
@@ -201,17 +198,17 @@ def summarize_tool_result(
         else:
             summary = f"Read {file_name}"
         preview_source = [line for line in lines[3:] if line.strip()]
-        output_lines = _truncate_result_lines(preview_source or trimmed_lines[:1], 5)
+        output_lines = _truncate_result_lines(preview_source or trimmed_lines[:1])
         return _normalize_summary_text(summary), output_lines
 
     if tool_name == "Glob":
         summary = truncate_preview_line(_summarize_glob_result(tool_input, trimmed_lines))
-        output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1], 5)
+        output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1])
         return _normalize_summary_text(summary), output_lines
 
     if tool_name == "Grep":
         summary = truncate_preview_line(_summarize_grep_result(tool_input, trimmed_lines))
-        output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1], 5)
+        output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1])
         return _normalize_summary_text(summary), output_lines
 
     if tool_name in {"Write", "Edit"}:
@@ -221,7 +218,7 @@ def summarize_tool_result(
                 tool_input,
             )
         )
-        output_lines = _truncate_result_lines(trimmed_lines[:1], 1)
+        output_lines = _truncate_result_lines(trimmed_lines[:1])
         return _normalize_summary_text(summary), output_lines
 
     if tool_name == "Bash":
@@ -230,7 +227,7 @@ def summarize_tool_result(
             summary = f"Ran: {truncate_preview_line(command, 64)}"
         else:
             summary = "Command completed"
-        output_lines = _truncate_result_lines(trimmed_lines, 6)
+        output_lines = _truncate_result_lines(trimmed_lines)
         return _normalize_summary_text(summary), output_lines
 
     summary = truncate_preview_line(
@@ -239,7 +236,7 @@ def summarize_tool_result(
             tool_input,
         )
     )
-    output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1], 4)
+    output_lines = _truncate_result_lines(trimmed_lines[1:] or trimmed_lines[:1])
     return _normalize_summary_text(summary), output_lines
 
 

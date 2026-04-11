@@ -7,7 +7,7 @@ from typing import List, Optional
 from textual.app import ComposeResult
 from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
-from textual.widgets import Collapsible, Label, Static
+from textual.widgets import Collapsible, Label, Static, Log
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,30 @@ class ThinkingBlockWidget(VerticalGroup):
         """Flush and stop the markdown stream used by the thinking widget."""
         if self._thinking_widget:
             await self._thinking_widget.finish_streaming()
+
+
+class ToolResultLogWidget(Log):
+    """Widget for displaying tool results with auto-scroll and syntax highlighting."""
+
+    DEFAULT_CSS = """
+    ToolResultLogWidget {
+        height: auto;
+        min-height: 1;
+        max-height: 10;
+        scrollbar-visibility: hidden;
+        background: $surface;
+        padding: 1 1;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(
+            highlight=True,
+            max_lines=1000,
+            auto_scroll=True,
+            **kwargs,
+        )
+        self.add_class("tool-result-log")
 
 
 class ToolUseWidget(VerticalGroup):
@@ -203,8 +227,9 @@ class ToolUseWidget(VerticalGroup):
         elif self._result_summary is not None:
             yield Static("Output:", classes="tool-output-label", markup=False)
             if self._result_output_lines:
-                for line in self._result_output_lines:
-                    yield Static(line, classes="tool-result-preview", markup=False)
+                # Use Log widget for tool output with 6-line height limit
+                log_widget = ToolResultLogWidget(classes="tool-result-log")
+                yield log_widget
             else:
                 yield Static("(no output)", classes="tool-result-preview", markup=False)
 
@@ -274,6 +299,15 @@ class ToolUseWidget(VerticalGroup):
             child.remove()
         for widget in self._compose_detail_widgets():
             self._details_container.mount(widget)
+        
+        # Write output lines to the Log widget if present
+        if self._result_output_lines:
+            try:
+                log_widget = self._details_container.query_one(ToolResultLogWidget)
+                for line in self._result_output_lines:
+                    log_widget.write_line(line)
+            except Exception:
+                pass  # Log widget not found, skip
 
 
 class AssistantMessageWidget(VerticalGroup):
@@ -444,11 +478,13 @@ class MessageWidget(VerticalGroup):
         if self.message.type == MessageRole.USER and self.message.file_expansions:
             logger.debug(f"Rendering: {len(self.message.file_expansions)} file expansions found for message")
             for expansion in self.message.file_expansions:
-                yield Static(
-                    self._format_file_expansion(expansion),
-                    classes="file-expansion",
-                    markup=False,
-                )
+                # Use Log widget for file expansion content
+                log_widget = ToolResultLogWidget(classes="file-expansion-log")
+                yield log_widget
+                # Write content after mount
+                lines = self._format_file_expansion_lines(expansion)
+                for line in lines:
+                    log_widget.write_line(line)
 
         # Content
         for block in self.message.content:
@@ -498,31 +534,24 @@ class MessageWidget(VerticalGroup):
                     classes="tool-result",
                     markup=False,
                 )
-                for line in preview_lines:
-                    yield Static(
-                        line,
-                        classes="tool-result-preview",
-                        markup=False,
-                    )
+                # Use Log widget for tool result output
+                if preview_lines:
+                    log_widget = ToolResultLogWidget(classes="tool-result-log")
+                    yield log_widget
+                    # Write lines after mount
+                    for line in preview_lines:
+                        log_widget.write_line(line)
 
-    def _format_file_expansion(self, expansion) -> str:
-        """Format a file expansion for display with 5-line limit."""
+    def _format_file_expansion_lines(self, expansion) -> List[str]:
+        """Format file expansion content as lines for Log widget."""
         lines = expansion.content.splitlines()
-        total_lines = len(lines)
-        max_lines = 5
-
-        # Format with line numbers like Read tool
-        formatted_lines = []
-        for i, line in enumerate(lines[:max_lines], start=1):
-            formatted_lines.append(f"{i:6}\t{truncate_preview_line(line)}")
-
-        result = f"@{expansion.display_path}:"
-        result += "\n" + "\n".join(formatted_lines)
-
-        if total_lines > max_lines:
-            result += f"\n... ({total_lines - max_lines} more lines)"
-
-        return result
+        
+        # Format with line numbers like Read tool (no truncation - Log widget handles scrolling)
+        formatted_lines = [f"@{expansion.display_path}:"]
+        for i, line in enumerate(lines, start=1):
+            formatted_lines.append(f"{i:6}\t{line}")
+        
+        return formatted_lines
 
     def _get_role_label(self) -> tuple[str, str]:
         role_map = {
