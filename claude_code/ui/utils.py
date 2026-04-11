@@ -36,141 +36,6 @@ def truncate_preview_line(text: str, max_width: int = PREVIEW_LINE_MAX_WIDTH) ->
     return expanded[: max_width - 3] + "..."
 
 
-
-
-
-def _normalize_summary_text(summary: str) -> str:
-    """Keep summary titles compact by dropping trailing punctuation we don't render well."""
-    normalized = summary.rstrip()
-    if normalized.endswith(":"):
-        normalized = normalized[:-1].rstrip()
-    return normalized
-
-
-def _compact_file_path_in_summary(summary: str, tool_input: dict) -> str:
-    """Replace any full file path in a title summary with its basename."""
-    file_path = tool_input.get("file_path")
-    if not file_path:
-        return summary
-
-    sanitized_path = sanitize_terminal_text(str(file_path))
-    file_name = os.path.basename(sanitized_path) or sanitized_path
-    return summary.replace(sanitized_path, file_name)
-
-
-def _basename_from_tool_input(tool_input: dict, default: str = "file") -> str:
-    """Extract a basename from tool input when available."""
-    file_path = tool_input.get("file_path", "")
-    file_name = os.path.basename(str(file_path))
-    return file_name or default
-
-
-def _quote_search_pattern(pattern: object) -> str:
-    """Render a search pattern for compact UI summaries."""
-    sanitized = sanitize_terminal_text(str(pattern)).strip()
-    if not sanitized:
-        return ""
-    if "'" not in sanitized:
-        return f"'{sanitized}'"
-    return json.dumps(sanitized, ensure_ascii=True)
-
-
-def _prefix_tool_name(summary: str, tool_name: str) -> str:
-    """Prefix a summary with the tool name while keeping it readable."""
-    normalized = _normalize_summary_text(summary)
-    if not normalized:
-        return f"{tool_name} completed"
-    return f"{tool_name} {normalized[0].lower()}{normalized[1:]}"
-
-
-def _append_matching_pattern(summary: str, pattern: str) -> str:
-    """Append a matching-clause before pagination/limit suffixes when possible."""
-    if not pattern or "matching " in summary:
-        return summary
-
-    for marker in (" with pagination = ", " limit: ", " offset: "):
-        index = summary.find(marker)
-        if index != -1:
-            return f"{summary[:index]} matching {pattern}{summary[index:]}"
-
-    return f"{summary} matching {pattern}"
-
-
-def _summarize_glob_result(tool_input: dict, trimmed_lines: List[str]) -> str:
-    """Build a compact Glob-specific summary."""
-    pattern = _quote_search_pattern(tool_input.get("pattern", ""))
-    first_line = trimmed_lines[0] if trimmed_lines else ""
-
-    if first_line.startswith("No files found matching pattern:"):
-        return (
-            f"Glob found no files matching {pattern}"
-            if pattern
-            else "Glob found no matching files"
-        )
-
-    if first_line.startswith("Found "):
-        return _prefix_tool_name(first_line, "Glob")
-
-    if pattern:
-        return f"Glob results matching {pattern}"
-    return "Glob completed"
-
-
-def _summarize_grep_result(tool_input: dict, trimmed_lines: List[str]) -> str:
-    """Build a compact Grep-specific summary."""
-    pattern = _quote_search_pattern(tool_input.get("pattern", ""))
-    output_mode = str(tool_input.get("output_mode", "files_with_matches"))
-    first_line = trimmed_lines[0] if trimmed_lines else ""
-    last_line = trimmed_lines[-1] if trimmed_lines else ""
-
-    if first_line in {"No matches found", "No files found"}:
-        return (
-            f"Grep found no matches for {pattern}" if pattern else "Grep found no matches"
-        )
-
-    if output_mode == "count" and last_line.startswith("Found "):
-        return _append_matching_pattern(_prefix_tool_name(last_line, "Grep"), pattern)
-
-    if first_line.startswith("Found "):
-        return _append_matching_pattern(_prefix_tool_name(first_line, "Grep"), pattern)
-
-    if pattern:
-        return f"Grep matches for {pattern}"
-    return "Grep completed"
-
-
-def _summarize_tool_error(tool_name: str, tool_input: dict) -> str:
-    """Build an action-oriented summary for a failed tool result."""
-    if tool_name == "Bash":
-        command = sanitize_terminal_text(str(tool_input.get("command", ""))).strip()
-        if command:
-            return f"Failed to run {truncate_preview_line(command, COMMAND_PREVIEW_MAX_WIDTH)}"
-        return "Failed to run command"
-
-    if tool_name == "Read":
-        return f"Failed to read {_basename_from_tool_input(tool_input)}"
-
-    if tool_name == "Write":
-        return f"Failed to write {_basename_from_tool_input(tool_input)}"
-
-    if tool_name == "Edit":
-        return f"Failed to edit {_basename_from_tool_input(tool_input)}"
-
-    if tool_name == "Glob":
-        pattern = _quote_search_pattern(tool_input.get("pattern", ""))
-        if pattern:
-            return f"Failed to search for files matching {pattern}"
-        return "Failed to search for files"
-
-    if tool_name == "Grep":
-        pattern = _quote_search_pattern(tool_input.get("pattern", ""))
-        if pattern:
-            return f"Failed to search for {pattern}"
-        return "Failed to search"
-
-    return f"Failed to run {tool_name}"
-
-
 def summarize_tool_result(
     tool_name: str,
     tool_input: dict,
@@ -180,64 +45,102 @@ def summarize_tool_result(
     """Build a compact title summary plus bounded output lines for a tool result."""
     lines = sanitize_terminal_text(result).splitlines()
     trimmed_lines = [line for line in lines if line.strip()]
+    
+    def _norm(s: str) -> str:
+        normalized = s.rstrip()
+        return normalized[:-1].rstrip() if normalized.endswith(":") else normalized
+    
+    def _basename(default: str = "file") -> str:
+        fp = tool_input.get("file_path", "")
+        return os.path.basename(str(fp)) or default
+    
+    def _quote_pattern(pattern: object) -> str:
+        sanitized = sanitize_terminal_text(str(pattern)).strip()
+        if not sanitized:
+            return ""
+        return f"'{sanitized}'" if "'" not in sanitized else json.dumps(sanitized, ensure_ascii=True)
+    
+    def _compact_path(summary: str) -> str:
+        fp = tool_input.get("file_path")
+        if not fp:
+            return summary
+        spath = sanitize_terminal_text(str(fp))
+        return summary.replace(spath, os.path.basename(spath) or spath)
 
     if is_error:
-        summary = truncate_preview_line(_summarize_tool_error(tool_name, tool_input))
-        output_lines = trimmed_lines[:6] or ["Tool failed"]
-        return _normalize_summary_text(summary), output_lines
+        if tool_name == "Bash":
+            cmd = sanitize_terminal_text(str(tool_input.get("command", ""))).strip()
+            summary = f"Failed to run {truncate_preview_line(cmd, COMMAND_PREVIEW_MAX_WIDTH)}" if cmd else "Failed to run command"
+        elif tool_name in ("Read", "Write", "Edit"):
+            summary = f"Failed to {tool_name.lower()} {_basename()}"
+        elif tool_name in ("Glob", "Grep"):
+            pat = _quote_pattern(tool_input.get("pattern", ""))
+            what = "files matching" if tool_name == "Glob" else "for"
+            summary = f"Failed to search {what} {pat}" if pat else f"Failed to search"
+        else:
+            summary = f"Failed to run {tool_name}"
+        return _norm(truncate_preview_line(summary)), trimmed_lines[:6] or ["Tool failed"]
 
     if tool_name == "Read":
         match = re.search(r"Lines:\s*(\d+)-(\d+)\s+of\s+(\d+)", result)
-        file_name = _basename_from_tool_input(tool_input)
+        fn = _basename()
         if match:
-            start_line = int(match.group(1))
-            end_line = int(match.group(2))
-            total_lines = int(match.group(3))
-            count = end_line - start_line + 1
-            summary = f"Read {count} line{'s' if count != 1 else ''} from {file_name} ({start_line}-{end_line} of {total_lines})"
+            start, end, total = map(int, match.groups())
+            count = end - start + 1
+            summary = f"Read {count} line{'s' if count != 1 else ''} from {fn} ({start}-{end} of {total})"
         else:
-            summary = f"Read {file_name}"
-        preview_source = [line for line in lines[3:] if line.strip()]
-        output_lines = preview_source or trimmed_lines[:1]
-        return _normalize_summary_text(summary), output_lines
+            summary = f"Read {fn}"
+        preview = [line for line in lines[3:] if line.strip()]
+        return _norm(summary), preview or trimmed_lines[:1]
 
     if tool_name == "Glob":
-        summary = truncate_preview_line(_summarize_glob_result(tool_input, trimmed_lines))
-        output_lines = trimmed_lines[1:] or trimmed_lines[:1]
-        return _normalize_summary_text(summary), output_lines
+        pat = _quote_pattern(tool_input.get("pattern", ""))
+        first = trimmed_lines[0] if trimmed_lines else ""
+        if first.startswith("No files found matching pattern:"):
+            summary = f"Glob found no files matching {pat}" if pat else "Glob found no matching files"
+        elif first.startswith("Found "):
+            summary = f"Glob {first[0].lower()}{first[1:]}"
+        else:
+            summary = f"Glob results matching {pat}" if pat else "Glob completed"
+        return _norm(truncate_preview_line(summary)), trimmed_lines[1:] or trimmed_lines[:1]
 
     if tool_name == "Grep":
-        summary = truncate_preview_line(_summarize_grep_result(tool_input, trimmed_lines))
-        output_lines = trimmed_lines[1:] or trimmed_lines[:1]
-        return _normalize_summary_text(summary), output_lines
+        pat = _quote_pattern(tool_input.get("pattern", ""))
+        first = trimmed_lines[0] if trimmed_lines else ""
+        last = trimmed_lines[-1] if trimmed_lines else ""
+        if first in ("No matches found", "No files found"):
+            summary = f"Grep found no matches for {pat}" if pat else "Grep found no matches"
+        elif str(tool_input.get("output_mode")) == "count" and last.startswith("Found "):
+            summary = f"Grep {last[0].lower()}{last[1:]}"
+            if pat and "matching " not in summary:
+                for marker in (" with pagination = ", " limit: ", " offset: "):
+                    idx = summary.find(marker)
+                    if idx != -1:
+                        summary = f"{summary[:idx]} matching {pat}{summary[idx:]}"
+                        break
+                else:
+                    summary = f"{summary} matching {pat}"
+        elif first.startswith("Found "):
+            summary = f"Grep {first[0].lower()}{first[1:]}"
+            if pat and "matching " not in summary:
+                summary = f"{summary} matching {pat}"
+        else:
+            summary = f"Grep matches for {pat}" if pat else "Grep completed"
+        return _norm(truncate_preview_line(summary)), trimmed_lines[1:] or trimmed_lines[:1]
 
-    if tool_name in {"Write", "Edit"}:
-        summary = truncate_preview_line(
-            _compact_file_path_in_summary(
-                trimmed_lines[0] if trimmed_lines else f"{tool_name} completed",
-                tool_input,
-            )
-        )
-        output_lines = trimmed_lines[:1]
-        return _normalize_summary_text(summary), output_lines
+    if tool_name in ("Write", "Edit"):
+        first = trimmed_lines[0] if trimmed_lines else f"{tool_name} completed"
+        summary = truncate_preview_line(_compact_path(first))
+        return _norm(summary), trimmed_lines[:1]
 
     if tool_name == "Bash":
-        command = tool_input.get("command", "")
-        if command:
-            summary = f"Ran: {truncate_preview_line(command, COMMAND_PREVIEW_MAX_WIDTH)}"
-        else:
-            summary = "Command completed"
-        output_lines = trimmed_lines
-        return _normalize_summary_text(summary), output_lines
+        cmd = tool_input.get("command", "")
+        summary = f"Ran: {truncate_preview_line(cmd, COMMAND_PREVIEW_MAX_WIDTH)}" if cmd else "Command completed"
+        return _norm(summary), trimmed_lines
 
-    summary = truncate_preview_line(
-        _compact_file_path_in_summary(
-            trimmed_lines[0] if trimmed_lines else f"{tool_name} completed",
-            tool_input,
-        )
-    )
-    output_lines = trimmed_lines[1:] or trimmed_lines[:1]
-    return _normalize_summary_text(summary), output_lines
+    first = trimmed_lines[0] if trimmed_lines else f"{tool_name} completed"
+    summary = truncate_preview_line(_compact_path(first))
+    return _norm(summary), trimmed_lines[1:] or trimmed_lines[:1]
 
 
 def summarize_tool_use(tool_name: str, tool_input: dict) -> str:

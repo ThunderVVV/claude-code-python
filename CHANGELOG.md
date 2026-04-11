@@ -6,7 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Changed - 2025-04-12
+### Changed - 2026-04-11
+
+#### UI Utils Simplification - Remove Over-engineering
+- Merged 12 over-abstracted helper functions into `summarize_tool_result()` internal nested functions
+- Eliminated unnecessary function chain: `_normalize_summary_text`, `_compact_file_path_in_summary`, `_basename_from_tool_input`, `_quote_search_pattern`, `_prefix_tool_name`, `_append_matching_pattern`, `_summarize_glob_result`, `_summarize_grep_result`, `_summarize_tool_error`
+- Kept identical functionality while reducing cognitive overhead
+- Code reduction: 287 lines → 191 lines (~33% reduction)
+
+### Changed - 2026-04-11
 
 #### Message Widgets Refactoring - Remove Over-engineering and Redundancy
 - Merged `ThinkingWidget` into `ThinkingBlockWidget` - eliminated unnecessary class layer
@@ -25,16 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Removed `_tool_widgets` list from `MessageWidget` (was unused, only `_tool_widgets_by_id` needed)
 - Code reduction: 664 lines → 604 lines (~9% reduction)
 
-### Changed - 2025-04-11
-
-#### Session Storage Optimization
-- Removed redundant `message` field from persisted messages (can be reconstructed from `content`)
-- Removed redundant `tool_use_result` field from persisted messages (can be derived from `content[0].content`)
-- Added `_reconstruct_message_dict()` function to rebuild message dict from content blocks on load
-- Maintained backward compatibility: old JSON files with `message`/`tool_use_result` fields still load correctly
-- Reduces JSON file size by ~39 bytes per message
-
-### Changed - 2025-04-13
+### Changed - 2026-04-11
 
 #### Tool Result Display Refactor with Log Widget
 - Replaced manual text truncation with Textual's `Log` widget for tool results
@@ -55,7 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Clean UI without visible scrollbars
   - Better readability with syntax highlighting
 
-### Changed - 2025-04-13
+### Changed - 2026-04-11
 
 #### Refactor Streaming Markdown Component
 - Renamed `TranscriptMarkdownWidget` to `StreamingMarkdownWidget` for clarity
@@ -78,7 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Removed `_clear_tooltips()` and `_schedule_tooltip_cleanup()` methods from `TranscriptMarkdownWidget` as they are no longer needed
 - Simplified tooltip management by using a single global patch instead of per-instance cleanup
 
-### Changed - 2025-04-13
+### Changed - 2026-04-11
 
 #### UI Code Cleanup
 - Removed unused variables: `_current_thinking`, `_current_text`, `_tool_use_context`
@@ -90,7 +89,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Reduced code duplication by eliminating redundant state variables
 - Improved code maintainability by removing 15 lines of unused/redundant code
 
-### Changed - 2025-04-13
+### Changed - 2026-04-11
 
 #### gRPC Interface Simplification
 - Simplified `StreamChat` RPC from streaming request to unary request
@@ -196,7 +195,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added `_persist_session()` method to persist on session end
 - Added `session_store` parameter for server-side persistence
 
-### Changed - 2025-04-12
+### Changed - 2026-04-11
 
 #### Code Cleanup
 - Removed unused `ToolProtocol` class and `ToolInputSchema.additional_properties` field
@@ -206,7 +205,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fixed API URL normalization bug in CLI
 - Reduced ~50 lines of redundant code
 
-### Changed - 2025-04-11
+### Changed - 2026-04-11
 
 #### Code Refactoring
 - Removed unused `StreamEvent` subclasses and redundant tool helper functions
@@ -214,7 +213,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Simplified environment variable handling and API URL normalization
 - Reduced ~126 lines of redundant code
 
-### Removed - 2025-04-11
+### Removed - 2026-04-11
 
 #### CLI Mode Removal
 - Removed CLI mode (`--cli` flag) - the project now exclusively uses TUI interface

@@ -207,7 +207,7 @@ class ToolUseWidget(VerticalGroup):
             for line in detail_lines:
                 yield Static(line, classes="tool-param", markup=False)
         elif self._result is None:
-            yield Static("No input parameters", classes="tool-param", markup=False)
+            yield Static("Waiting for parameters", classes="tool-param", markup=False)
 
         # Diff view or output
         diff_view = self._build_diff_view()
