@@ -343,6 +343,7 @@ class QueryEngine:
                 if current_task in self._cancelled_tasks:
                     self._cancelled_tasks.discard(current_task)
                 self._persist_session()
+                self.clear_interrupt()
                 return
             raise
         finally:
