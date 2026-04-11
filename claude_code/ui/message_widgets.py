@@ -233,17 +233,14 @@ class ToolUseWidget(VerticalGroup):
 
     def _build_diff_view(self) -> DiffView | None:
         """Build an inline diff widget for successful file-editing tool calls."""
-        if self._result is None or self._result[1]:  # No result or error
+        if self._result is None or self._result[1]:
             return None
 
         file_path = str(self.tool_input.get("file_path", "")).strip()
         if not file_path:
             return None
 
-        # 首先确定基础的 old_text 和 new_text（使用原始方法）
-        old_text = ""
-        new_text = ""
-        
+        # Get base text
         if self.tool_name == "Edit":
             old_string = self.tool_input.get("old_string")
             new_string = self.tool_input.get("new_string")
@@ -258,42 +255,29 @@ class ToolUseWidget(VerticalGroup):
         else:
             return None
 
-        # 尝试获取完整文件内容
+        # Try to get full file content
         try:
             from claude_code.tools.file_utils import expand_path
             
             full_path = expand_path(file_path)
             
             if self.tool_name == "Edit":
-                # 尝试读取修改后的文件并重建原始文件
-                try:
-                    replace_all = self.tool_input.get("replace_all", False)
-                    
-                    # 读取修改后的文件
-                    with open(full_path, "r", encoding="utf-8") as f:
-                        current_content = f.read()
-                    
-                    # 尝试反向替换：从当前内容替换 new_string 为 old_string
-                    # 先使用工具输入中的字符串
-                    test_old = current_content
-                    if replace_all:
-                        test_old = test_old.replace(new_string, old_string)
-                    else:
-                        test_old = test_old.replace(new_string, old_string, 1)
-                    
-                    # 只有当替换确实生效时才使用完整文件
-                    if test_old != current_content:
-                        old_text = test_old
-                        new_text = current_content
-                except Exception:
-                    # 如果失败，保持使用原始片段
-                    pass
-        
+                replace_all = self.tool_input.get("replace_all", False)
+                with open(full_path, "r", encoding="utf-8") as f:
+                    current_content = f.read()
+                
+                # Reverse replacement to reconstruct original file
+                test_old = current_content
+                if replace_all:
+                    test_old = test_old.replace(new_string, old_string)
+                else:
+                    test_old = test_old.replace(new_string, old_string, 1)
+                
+                if test_old != current_content:
+                    old_text, new_text = test_old, current_content
         except Exception:
-            # 任何错误都继续使用原始方法
             pass
 
-        # 最后返回 DiffView
         try:
             return DiffView(
                 file_path,

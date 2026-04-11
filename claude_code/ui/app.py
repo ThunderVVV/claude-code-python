@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from textual.app import App
 from textual.binding import Binding
 from textual.widget import Widget
-from textual.widgets import Label
 
 from claude_code.ui.styles import TUI_CSS
 from claude_code.ui.screens import REPLScreen

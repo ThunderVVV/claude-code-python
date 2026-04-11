@@ -226,7 +226,7 @@ class REPLScreen(Screen):
 
     def _context_usage_text(self) -> str:
         if not self._latest_usage:
-            return f"Context: unavailable (waiting for server)"
+            return "Context: unavailable (waiting for server)"
         used_tokens = get_used_context_tokens(self._latest_usage)
         used_percentage = get_used_context_percentage(
             self._latest_usage,
