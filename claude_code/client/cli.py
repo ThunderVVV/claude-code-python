@@ -92,24 +92,5 @@ def create_session(ctx: click.Context, working_directory: str) -> None:
     asyncio.run(run())
 
 
-@main.command("delete-session")
-@click.argument("session_id")
-@click.pass_context
-def delete_session(ctx: click.Context, session_id: str) -> None:
-    """Delete a session"""
-    host = ctx.obj["host"]
-    port = ctx.obj["port"]
-
-    async def run():
-        async with ClaudeCodeClient(host, port) as client:
-            success = await client.delete_session(session_id)
-            if success:
-                click.echo(f"Deleted session: {session_id}")
-            else:
-                click.echo(f"Failed to delete session: {session_id}", err=True)
-
-    asyncio.run(run())
-
-
 if __name__ == "__main__":
     main()
