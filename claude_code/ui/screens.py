@@ -153,11 +153,13 @@ class REPLScreen(Screen):
         self._start_message_submission(text)
 
     async def on_mouse_down(self, event: events.MouseDown) -> None:
-        input_widget = self.query_one("#user-input", InputTextArea)
-        if not input_widget.has_focus and not self._is_processing:
-            input_widget.focus()
+        self._focus_input_if_needed()
 
     async def on_mouse_up(self, event: events.MouseUp) -> None:
+        self._focus_input_if_needed()
+
+    def _focus_input_if_needed(self) -> None:
+        """Focus input widget if not already focused and not processing."""
         input_widget = self.query_one("#user-input", InputTextArea)
         if not input_widget.has_focus and not self._is_processing:
             input_widget.focus()
@@ -523,7 +525,6 @@ class REPLScreen(Screen):
         """Render a list of messages."""
         assistant_widget: Optional[AssistantMessageWidget] = None
         tool_widget_context: dict[str, ToolUseWidget] = {}
-        tool_use_context: dict[str, ToolUseContent] = {}
 
         for message in messages:
             auto_follow = message_list.should_auto_follow_output()
@@ -533,11 +534,6 @@ class REPLScreen(Screen):
                     message=message, auto_follow=auto_follow
                 )
                 tool_widget_context = assistant_widget.get_tool_widgets()
-                tool_use_context = {
-                    tool_use.id: tool_use
-                    for tool_use in message.get_tool_uses()
-                    if tool_use.id
-                }
                 continue
 
             if message.type == MessageRole.TOOL:
@@ -559,6 +555,5 @@ class REPLScreen(Screen):
                 continue
 
             assistant_widget = None
-            tool_use_context = {}
             tool_widget_context = {}
             await message_list.add_message(message, auto_follow=auto_follow)
