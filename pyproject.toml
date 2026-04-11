@@ -17,6 +17,9 @@ dependencies = [
     "grpcio-tools>=1.60.0",
     "protobuf>=4.25.0",
     "aiohttp>=3.9.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "pydantic>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +37,7 @@ cc-py = "claude_code.cli:main"
 cc-server = "claude_code.server.cli:main"
 cc-client = "claude_code.client.cli:main"
 cc-web = "claude_code.web.cli:main"
+cc-web-v2 = "claude_code.web_v2.cli:main"
 
 [build-system]
 requires = ["hatchling"]
