@@ -2,15 +2,41 @@
 
 ## Source Of Truth
 
-- This repository is a Python port of the official TypeScript Claude Code project (/Users/MacbookAir/Downloads/Framework-Reading/claude-code)
+- This repository is a Python port of the official TypeScript Claude Code project.
 - When behavior is ambiguous, align with the TypeScript implementation before adding Python-specific logic.
 - Tool descriptions, system prompts, and prompt-building helpers must stay exactly aligned with the TypeScript version.
+
+## Architecture
+
+This project uses a frontend-backend separation architecture with gRPC communication.
+
+**Frontend (TUI Client):**
+- `REPLScreen` - Textual TUI interface
+- `ClaudeCodeClient` - gRPC client
+
+**Backend (gRPC Server):**
+- `ChatServiceServicer` + `SessionServiceServicer` - gRPC server
+- `QueryEngine` - Core query engine
+- `OpenAIClient` - OpenAI-compatible API client
+
+**Communication Flow:**
+```
+REPLScreen -> ClaudeCodeClient --gRPC--> ChatServiceServicer -> QueryEngine -> OpenAIClient
+```
+
+**Key Directories:**
+- `claude_code/ui/` - Frontend TUI (Textual)
+- `claude_code/client/` - gRPC client
+- `claude_code/server/` - gRPC server
+- `claude_code/core/` - Core logic (QueryEngine, tools, messages)
+- `claude_code/services/` - OpenAI client
+- `claude_code/proto/` - gRPC protocol definitions
 
 ## Repository Hygiene
 
 - Keep the project root limited to product files and top-level docs.
-- Reusable developer utilities belong in `scripts/debug/`.
-- Screenshots, archived notes, and long-form references belong in `docs/`.
+- Reusable developer utilities belong in `scripts/`.
+- Screenshots and assets belong in `docs/assets/`.
 - Runtime logs belong in `.logs/`.
 - Do not add new root-level `debug*.py`, `diagnose*.py`, `*.log`, or ad hoc `test_*.py` files.
 
@@ -55,18 +81,6 @@ This path previously rendered as a black screen. Tests must cover tool-only and 
 - Auto-follow should stay active only while the user is effectively pinned near the bottom.
 - Changes to streaming, scrolling, or collapsible tool blocks should be verified with headless Textual tests.
 - Prefer a single assistant widget that can start with text or with tool blocks; do not assume text arrives first.
-
-## Testing
-
-- Keep automated tests under `tests/` only.
-- Prefer headless `Textual` tests for TUI regressions instead of one-off manual scripts.
-- When touching `claude_code/ui/`, cover tool-only responses, mixed text/tool sequences, copy behavior, and input disable/reset state.
-
-## Debugging Utilities
-
-- `scripts/debug/diagnose_api.py` checks DNS, TCP, HTTP, and chat completion connectivity against the current `.env`.
-- `scripts/debug/debug_query.py` traces a single query loop and prints the emitted events.
-- `scripts/debug/debug_tui.py` launches the TUI with safe fallback credentials for layout debugging.
 
 ## Documentation
 
