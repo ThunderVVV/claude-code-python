@@ -42,7 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### Added Utility Module
 - Added `claude_code/utils/logging_config.py` for unified logging configuration
-- Provides `setup_server_logging()`, `setup_client_logging()` and `log_exception()` functions
+- Provides `setup_server_logging()`, `setup_client_logging()` and `log_full_exception()` functions
 
 #### Proto Updates
 - Removed `python_package` option (using dynamic imports)
