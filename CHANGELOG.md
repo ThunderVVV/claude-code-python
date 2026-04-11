@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2025-04-13
 
+#### Tooltip Global Disable via Monkey Patch
+- Added monkey patch in `claude_code/__init__.py` to override `textual.widget.Widget.with_tooltip` method
+- All tooltip calls now set `self.tooltip = None` globally, effectively disabling all tooltips
+- Removed `_clear_tooltips()` and `_schedule_tooltip_cleanup()` methods from `TranscriptMarkdownWidget` as they are no longer needed
+- Simplified tooltip management by using a single global patch instead of per-instance cleanup
+
+### Changed - 2025-04-13
+
 #### UI Code Cleanup
 - Removed unused variables: `_current_thinking`, `_current_text`, `_tool_use_context`
 - Removed unused local variable `tool_use_context` in `_render_messages` method

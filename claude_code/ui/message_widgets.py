@@ -60,32 +60,6 @@ class TranscriptMarkdownWidget(Markdown):
             **kwargs,
         )
 
-    def _clear_tooltips(self) -> None:
-        """Remove built-in Textual markdown tooltips from markdown tables."""
-        self.tooltip = None
-        for table in self.query(textual_markdown.MarkdownTableContent):
-            table.tooltip = None
-            for child in table.walk_children(with_self=False):
-                child.tooltip = None
-
-    def _schedule_tooltip_cleanup(self, update: AwaitComplete) -> None:
-        """Clear table tooltips after the current markdown update completes."""
-        if "|" not in self._markdown_text:
-            self.tooltip = None
-            return
-        future = getattr(update, "_future", None)
-        if future is None:
-            self.call_after_refresh(self._clear_tooltips)
-            return
-
-        def cleanup_callback(_future) -> None:
-            try:
-                self.call_after_refresh(self._clear_tooltips)
-            except Exception as e:
-                log_full_exception(logger, "Failed to clear tooltips", e)
-
-        future.add_done_callback(cleanup_callback)
-
     def get_block_class(
         self,
         block_name: str,
@@ -100,7 +74,6 @@ class TranscriptMarkdownWidget(Markdown):
         normalized = sanitize_terminal_text(markdown)
         self._markdown_text = normalized
         update = super().update(normalized)
-        self._schedule_tooltip_cleanup(update)
         return update
 
     def _get_stream(self) -> textual_markdown.MarkdownStream:
