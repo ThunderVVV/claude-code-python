@@ -97,16 +97,19 @@ pip install -e .
 
 ## 配置
 
-创建 `.env`：
+创建 `.env`，或直接复制 `.env.example` 后修改：
 
 ```env
 CLAUDE_CODE_API_URL=https://api.openai.com/v1
 CLAUDE_CODE_API_KEY=your-api-key
 CLAUDE_CODE_MODEL=gpt-4.1
 CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
+# 可选：cc-py 的 TUI 主题，默认是 tokyo-night
+CLAUDE_CODE_THEME=atom-one-dark
 ```
 
 > 注：`CLAUDE_CODE_API_URL`、`CLAUDE_CODE_API_KEY` 和 `CLAUDE_CODE_MODEL` 同时供 `cc-api` 和 `cc-py` 使用。
+> `CLAUDE_CODE_THEME` 仅影响 `cc-py` 的 TUI 主题，默认值是 `tokyo-night`。
 
 ## 运行
 

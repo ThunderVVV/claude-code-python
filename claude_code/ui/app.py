@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import logging
+import os
+from typing import TYPE_CHECKING, Any, Mapping
 
 from textual.app import App
 from textual.binding import Binding
@@ -15,9 +17,39 @@ if TYPE_CHECKING:
     from claude_code.client.http_client import ClaudeCodeHttpClient
 
 
+logger = logging.getLogger(__name__)
+
+THEME_ENV_VAR = "CLAUDE_CODE_THEME"
+DEFAULT_THEME_NAME = "tokyo-night"
+
+
+def _resolve_theme_name(
+    available_themes: Mapping[str, Any],
+    requested_theme: str | None,
+) -> str:
+    """Return a valid theme name, falling back to the default when needed."""
+    if not requested_theme:
+        return DEFAULT_THEME_NAME
+
+    theme_name = requested_theme.strip()
+    if not theme_name:
+        return DEFAULT_THEME_NAME
+
+    if theme_name not in available_themes:
+        logger.warning(
+            "Ignoring unsupported theme %r from %s; falling back to %s",
+            theme_name,
+            THEME_ENV_VAR,
+            DEFAULT_THEME_NAME,
+        )
+        return DEFAULT_THEME_NAME
+
+    return theme_name
+
+
 class ClaudeCodeApp(App):
     CSS = TUI_CSS
-    DEFAULT_THEME = "tokyo-night"
+    DEFAULT_THEME = DEFAULT_THEME_NAME
     ALLOW_SELECT = True
     BINDINGS = [
         Binding(
@@ -38,7 +70,10 @@ class ClaudeCodeApp(App):
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
-        self.theme = self.DEFAULT_THEME
+        self.theme = _resolve_theme_name(
+            self.available_themes,
+            os.environ.get(THEME_ENV_VAR),
+        )
         self.client = client
         self.working_directory = working_directory
 
