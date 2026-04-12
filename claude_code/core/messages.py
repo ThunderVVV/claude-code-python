@@ -116,6 +116,7 @@ class Message:
         default_factory=list
     )  # List of FileExpansion objects
     original_text: str = ""  # Original user text before expansion (for display)
+    web_enabled: bool = False  # Whether @web was referenced in the message
 
     @classmethod
     def user_message(
@@ -123,6 +124,7 @@ class Message:
         text: str,
         file_expansions: Optional[List[Any]] = None,
         original_text: str = "",
+        web_enabled: bool = False,
     ) -> "Message":
         """Create a user message"""
         return cls(
@@ -131,6 +133,7 @@ class Message:
             message={"role": "user", "content": text},
             file_expansions=file_expansions or [],
             original_text=original_text or text,
+            web_enabled=web_enabled,
         )
 
     @classmethod

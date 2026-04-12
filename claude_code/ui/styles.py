@@ -391,4 +391,34 @@ MarkdownHorizontalRule {
     border-left: solid $primary;
     color: $text-muted;
 }
+
+.web-enabled-label {
+    width: auto;
+    padding: 0 1;
+    margin: 0;
+    color: $primary;
+    border: round $primary;
+}
+
+.file-expansion-collapsible {
+    width: 100%;
+    border: round $border;
+    padding: 0 1;
+    margin: 0;
+    height: auto;
+}
+
+.file-expansion-collapsible CollapsibleTitle {
+    padding: 0 1;
+    color: $primary;
+}
+
+.file-expansion-collapsible > Contents {
+    padding: 0 1;
+}
+
+.file-expansion-content {
+    color: $text-muted;
+    padding: 0 1;
+}
 """

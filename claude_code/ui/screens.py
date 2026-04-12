@@ -390,19 +390,9 @@ class REPLScreen(Screen):
         """Send message to server and process event stream."""
         message_list = self.query_one("#message-list", MessageList)
         try:
-            # Expand @file_path references
-            expanded_text, file_expansions = expand_file_references(
-                user_text, self.working_directory
-            )
-            if file_expansions:
-                logger.debug(f"expanded {len(file_expansions)} files")
-            user_message = Message.user_message(
-                text=expanded_text,
-                file_expansions=file_expansions,
-                original_text=user_text,
-            )
-            await message_list.add_message(user_message, auto_follow=True)
-
+            # Don't create user message locally - wait for MessageCompleteEvent from server
+            # This aligns behavior with Web UI
+            
             async for event in self.client.stream_chat(
                 user_text, self.session_id, self.working_directory
             ):
@@ -488,7 +478,12 @@ class REPLScreen(Screen):
         elif isinstance(event, MessageCompleteEvent):
             if event.message:
                 auto_follow = message_list.should_auto_follow_output()
-                if event.message.type == MessageRole.ASSISTANT:
+                if event.message.type == MessageRole.USER:
+                    # Handle user message from server (align with Web UI behavior)
+                    await message_list.add_message(
+                        event.message, auto_follow=auto_follow
+                    )
+                elif event.message.type == MessageRole.ASSISTANT:
                     usage = event.message.get_usage()
                     if usage is not None:
                         self._latest_usage = usage
@@ -499,11 +494,8 @@ class REPLScreen(Screen):
                         else {}
                     )
                     message_list.schedule_scroll_to_latest(auto_follow)
-                elif (
-                    event.message.type != MessageRole.TOOL
-                    and event.message.type != MessageRole.USER
-                ):
-                    # tool message is already added in ToolResultEvent, user message is already added in _process_message
+                elif event.message.type != MessageRole.TOOL:
+                    # tool message is already added in ToolResultEvent
                     await message_list.add_message(
                         event.message, auto_follow=auto_follow
                     )

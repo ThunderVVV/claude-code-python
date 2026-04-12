@@ -372,14 +372,27 @@ class MessageWidget(VerticalGroup):
         if message.type not in {MessageRole.USER, MessageRole.ASSISTANT}:
             yield Label(role_config["label"], classes=f"message-role {role_config['role_class']}", markup=False)
         
+        # Web enabled flag for user messages
+        if message.type == MessageRole.USER and getattr(message, "web_enabled", False):
+            yield Label("@web enabled", classes="web-enabled-label", markup=False)
+        
         # File expansions for user messages
         if message.type == MessageRole.USER and message.file_expansions:
             for expansion in message.file_expansions:
-                log_widget = ToolResultLogWidget(classes="file-expansion-log")
-                yield log_widget
-                lines = self._format_file_expansion_lines(expansion)
-                for line in lines:
-                    log_widget.write_line(line)
+                # Use a simpler approach - format content first
+                expansion_content = "\n".join(self._format_file_expansion_lines(expansion))
+                with Collapsible(
+                    title=f"@{expansion.display_path}",
+                    collapsed=True,
+                    collapsed_symbol=">",
+                    expanded_symbol="v",
+                    classes="file-expansion-collapsible",
+                ):
+                    yield Static(
+                        sanitize_terminal_text(expansion_content),
+                        classes="file-expansion-content",
+                        markup=False,
+                    )
         
         # Content blocks
         for block in message.content:

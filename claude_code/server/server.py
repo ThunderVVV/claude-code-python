@@ -140,6 +140,19 @@ def message_to_proto(msg: Message) -> "claude_code_pb2.Message":
     pb.uuid = msg.uuid
     pb.timestamp = int(msg.timestamp.timestamp()) if msg.timestamp else 0
     pb.original_text = msg.original_text or ""
+    
+    # Handle web_enabled
+    pb.web_enabled = getattr(msg, "web_enabled", False)
+    
+    # Handle file_expansions
+    if hasattr(msg, "file_expansions") and msg.file_expansions:
+        for exp in msg.file_expansions:
+            file_exp_pb = claude_code_pb2.FileExpansion()
+            file_exp_pb.file_path = getattr(exp, "file_path", "")
+            file_exp_pb.content = getattr(exp, "content", "")
+            # Note: proto FileExpansion doesn't have display_path, 
+            # but we can use file_path for now
+            pb.file_expansions.append(file_exp_pb)
 
     for block in msg.content:
         pb.content.append(content_block_to_proto(block))
@@ -154,12 +167,22 @@ def message_to_proto(msg: Message) -> "claude_code_pb2.Message":
 
 def proto_to_message(pb: "claude_code_pb2.Message") -> Message:
     from datetime import datetime
+    from claude_code.core.file_expansion import FileExpansion
 
     content_blocks = []
     for block_pb in pb.content:
         block = proto_to_content_block(block_pb)
         if block:
             content_blocks.append(block)
+    
+    # Handle file_expansions
+    file_expansions = []
+    for file_exp_pb in pb.file_expansions:
+        file_expansions.append(FileExpansion(
+            file_path=file_exp_pb.file_path,
+            content=file_exp_pb.content,
+            display_path=file_exp_pb.file_path,  # use file_path as display_path
+        ))
 
     return Message(
         type=proto_to_message_role(pb.role),
@@ -169,6 +192,8 @@ def proto_to_message(pb: "claude_code_pb2.Message") -> Message:
         if pb.timestamp
         else datetime.now(),
         original_text=pb.original_text,
+        file_expansions=file_expansions,
+        web_enabled=pb.web_enabled,
     )
 
 

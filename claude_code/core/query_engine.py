@@ -300,18 +300,25 @@ class QueryEngine:
         try:
             self._raise_if_interrupted()
 
+            from claude_code.core.file_expansion import has_web_reference
+            
             # Expand @file_path references
             expanded_text, file_expansions = expand_file_references(
                 user_text, self._cwd
             )
+            
+            # Check for @web reference
+            web_enabled = has_web_reference(user_text)
 
-            # Create and add user message with file expansion info
+            # Create and add user message with file expansion info and web flag
             user_message = Message.user_message(
                 text=expanded_text,
                 file_expansions=file_expansions,
                 original_text=user_text,
+                web_enabled=web_enabled,
             )
             self.state.add_message(user_message)
+            logger.info(f"User message created - session_id={self._session_id}, web_enabled={web_enabled}")
             yield MessageCompleteEvent(message=user_message)
 
             # Run the query loop

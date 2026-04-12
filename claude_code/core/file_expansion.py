@@ -103,6 +103,13 @@ def read_file_content(file_path: str) -> Optional[str]:
     except (IOError, OSError, PermissionError):
         return None
 
+def has_web_reference(text: str) -> bool:
+    """Check if text contains @web reference."""
+    import re
+    pattern = r"(?<!\S)@web(?=$|[\s,;:!?()])"
+    return bool(re.search(pattern, text))
+
+
 def expand_web(text: str) -> str:
     web_skill_file_prompt = (
         "@.claude/skills/tavily-search/SKILL.md",

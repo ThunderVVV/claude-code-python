@@ -21,6 +21,7 @@ from claude_code.core.file_expansion import (
     parse_file_references,
     read_file_content,
     resolve_file_path,
+    has_web_reference,
 )
 
 logger = logging.getLogger(__name__)
@@ -203,8 +204,7 @@ def message_to_dict(message, working_directory: str = "") -> dict:
             )
 
     if message_dict["role"] == "user":
-        source_text = message.original_text or ""
-        message_dict["web_enabled"] = has_web_reference(source_text)
+        message_dict["web_enabled"] = getattr(message, "web_enabled", False)
 
     return message_dict
 

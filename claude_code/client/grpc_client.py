@@ -71,11 +71,22 @@ def proto_to_message_role(role: int) -> MessageRole:
 
 
 def proto_to_message(pb) -> Message:
+    from claude_code.core.file_expansion import FileExpansion
+    
     content_blocks = []
     for block_pb in pb.content:
         block = proto_to_content_block(block_pb)
         if block:
             content_blocks.append(block)
+    
+    # Handle file_expansions
+    file_expansions = []
+    for file_exp_pb in pb.file_expansions:
+        file_expansions.append(FileExpansion(
+            file_path=file_exp_pb.file_path,
+            content=file_exp_pb.content,
+            display_path=file_exp_pb.file_path,  # use file_path as display_path
+        ))
 
     msg = Message(
         type=proto_to_message_role(pb.role),
@@ -86,6 +97,8 @@ def proto_to_message(pb) -> Message:
         else datetime.now(),
         original_text=pb.original_text,
         message={},
+        file_expansions=file_expansions,
+        web_enabled=pb.web_enabled,
     )
 
     if pb.HasField("usage"):
