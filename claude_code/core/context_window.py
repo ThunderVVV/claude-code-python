@@ -43,10 +43,7 @@ def get_used_context_tokens(usage: Optional[Usage]) -> int:
     if usage is None:
         return 0
 
-    return (
-        usage.input_tokens
-        + usage.output_tokens
-    )
+    return usage.input_tokens + usage.output_tokens
 
 
 def get_used_context_percentage(

@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-from openai import AsyncOpenAI, APIError
+from openai import AsyncOpenAI
 from claude_code.utils.logging_config import log_full_exception
 
 from claude_code.core.messages import (
@@ -355,8 +355,14 @@ class OpenAIClient:
                     args = {}
 
                 args_full_str = str(args)
-                args_str = args_full_str[:50] + "..." if len(args_full_str) > 50 else args_full_str
-                logger.debug(f"Full tool call parsed: {tc.name}, id: {tc.id}, args: {args_str}")
+                args_str = (
+                    args_full_str[:50] + "..."
+                    if len(args_full_str) > 50
+                    else args_full_str
+                )
+                logger.debug(
+                    f"Full tool call parsed: {tc.name}, id: {tc.id}, args: {args_str}"
+                )
                 blocks.append(
                     ToolUseContent(
                         id=tc.id,

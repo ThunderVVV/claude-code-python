@@ -1,4 +1,3 @@
-
 """Glob tool - aligned with GlobTool.ts"""
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ class GlobTool(BaseTool):
         properties={
             "pattern": {
                 "type": "string",
-                "description": "The glob pattern to match files against (e.g., \"**/*.js\")",
+                "description": 'The glob pattern to match files against (e.g., "**/*.js")',
             },
             "path": {
                 "type": "string",
@@ -41,13 +40,17 @@ class GlobTool(BaseTool):
     def is_concurrency_safe(self, input: Dict[str, Any]) -> bool:
         return True
 
-    def get_tool_use_summary(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_tool_use_summary(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if not input:
             return None
         pattern = input.get("pattern", "")
         return f"'{pattern}'" if pattern else None
 
-    def get_activity_description(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_activity_description(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if not input:
             return "Searching for files"
         pattern = input.get("pattern", "")
@@ -66,7 +69,10 @@ class GlobTool(BaseTool):
         try:
             full_pattern = os.path.join(full_search_path, pattern)
             matches = glob_module.glob(full_pattern, recursive=True)
-            matches.sort(key=lambda x: os.path.getmtime(x) if os.path.exists(x) else 0, reverse=True)
+            matches.sort(
+                key=lambda x: os.path.getmtime(x) if os.path.exists(x) else 0,
+                reverse=True,
+            )
 
             if not matches:
                 return f"No files found matching pattern: {pattern}"

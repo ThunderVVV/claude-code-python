@@ -1,10 +1,8 @@
-
 """File-related utility functions shared across tools"""
 
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 
 def expand_path(path: str) -> str:
@@ -118,13 +116,21 @@ def _apply_curly_single_quotes(s: str) -> str:
     return "".join(result)
 
 
-def preserve_quote_style(old_string: str, actual_old_string: str, new_string: str) -> str:
+def preserve_quote_style(
+    old_string: str, actual_old_string: str, new_string: str
+) -> str:
     """Preserves the quote style from the actual_old_string in the new_string"""
     if old_string == actual_old_string:
         return new_string
 
-    has_double_quotes = LEFT_DOUBLE_CURLY_QUOTE in actual_old_string or RIGHT_DOUBLE_CURLY_QUOTE in actual_old_string
-    has_single_quotes = LEFT_SINGLE_CURLY_QUOTE in actual_old_string or RIGHT_SINGLE_CURLY_QUOTE in actual_old_string
+    has_double_quotes = (
+        LEFT_DOUBLE_CURLY_QUOTE in actual_old_string
+        or RIGHT_DOUBLE_CURLY_QUOTE in actual_old_string
+    )
+    has_single_quotes = (
+        LEFT_SINGLE_CURLY_QUOTE in actual_old_string
+        or RIGHT_SINGLE_CURLY_QUOTE in actual_old_string
+    )
 
     if not has_double_quotes and not has_single_quotes:
         return new_string
@@ -136,4 +142,3 @@ def preserve_quote_style(old_string: str, actual_old_string: str, new_string: st
         result = _apply_curly_single_quotes(result)
 
     return result
-

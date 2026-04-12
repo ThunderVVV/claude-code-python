@@ -1,4 +1,3 @@
-
 """Read tool - aligned with FileReadTool.ts"""
 
 from __future__ import annotations
@@ -60,7 +59,9 @@ Usage:
     def get_path(self, input: Dict[str, Any]) -> Optional[str]:
         return input.get("file_path")
 
-    def get_tool_use_summary(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_tool_use_summary(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if not input:
             return None
         path = input.get("file_path", "")
@@ -68,7 +69,9 @@ Usage:
             return os.path.basename(path)
         return None
 
-    def get_activity_description(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_activity_description(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if not input:
             return "Reading file"
         path = input.get("file_path", "")
@@ -132,7 +135,9 @@ Usage:
 
             actual_end_line = min(offset + limit - 1, total_lines)
 
-            return format_file_result(full_path, content, offset, actual_end_line, total_lines)
+            return format_file_result(
+                full_path, content, offset, actual_end_line, total_lines
+            )
 
         except PermissionError:
             return f"Error: Permission denied reading file: {full_path}"

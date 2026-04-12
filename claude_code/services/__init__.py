@@ -1,4 +1,3 @@
-
 """Services module - exports API clients and related utilities"""
 
 from claude_code.services.openai_client import (

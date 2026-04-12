@@ -334,7 +334,7 @@ async def event_stream(chat_request: ChatRequest):
             )
             yield f"data: {json.dumps(event_dict)}\n\n"
 
-        logger.debug(f"Streaming completed - session_id={session_id}")
+        logger.info(f"Streaming completed - session_id={session_id}")
 
     except Exception as e:
         logger.exception("event_stream failed")

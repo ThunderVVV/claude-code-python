@@ -1,4 +1,3 @@
-
 """System prompt definitions - aligned with TypeScript prompts.ts"""
 
 from __future__ import annotations
@@ -6,7 +5,6 @@ from __future__ import annotations
 import os
 import platform
 import sys
-from datetime import datetime
 from typing import List, Optional
 
 
@@ -54,7 +52,7 @@ def get_simple_system_section() -> str:
 
 def get_simple_doing_tasks_section() -> str:
     code_style_subitems = [
-        'Don\'t add features, refactor code, or make "improvements" beyond what was asked. A bug fix doesn\'t need surrounding code cleaned up. A simple feature doesn\'t need extra configurability. Don\'t add docstrings, comments, or type annotations to code you didn\'t change. Only add comments where the logic isn\'t self-evident.',
+        "Don't add features, refactor code, or make \"improvements\" beyond what was asked. A bug fix doesn't need surrounding code cleaned up. A simple feature doesn't need extra configurability. Don't add docstrings, comments, or type annotations to code you didn't change. Only add comments where the logic isn't self-evident.",
         "Don't add error handling, fallbacks, or validation for scenarios that can't happen. Trust internal code and framework guarantees. Only validate at system boundaries (user input, external APIs). Don't use feature flags or backwards-compatibility shims when you can just change the code.",
         "Don't create helpers, utilities, or abstractions for one-time operations. Don't design for hypothetical future requirements. The right amount of complexity is what the task actually requires—no speculative abstractions, but no half-finished implementations either. Three similar lines of code is better than a premature abstraction.",
     ]
@@ -65,7 +63,7 @@ def get_simple_doing_tasks_section() -> str:
     ]
 
     items = [
-        "The user will primarily request you to perform software engineering tasks. These may include solving bugs, adding new functionality, refactoring code, explaining code, and more. When given an unclear or generic instruction, consider it in the context of these software engineering tasks and the current working directory. For example, if the user asks you to change \"methodName\" to snake case, do not reply with just \"method_name\", instead find the method in the code and modify the code.",
+        'The user will primarily request you to perform software engineering tasks. These may include solving bugs, adding new functionality, refactoring code, explaining code, and more. When given an unclear or generic instruction, consider it in the context of these software engineering tasks and the current working directory. For example, if the user asks you to change "methodName" to snake case, do not reply with just "method_name", instead find the method in the code and modify the code.',
         "You are highly capable and often allow users to complete ambitious tasks that would otherwise be too complex or take too long. You should defer to user judgement about whether a task is too large to attempt.",
         "In general, do not propose changes to code you haven't read. If a user asks about or wants you to modify a file, read it first. Understand existing code before suggesting modifications.",
         "Do not create files unless they're absolutely necessary for achieving your goal. Generally prefer editing an existing file to creating a new one, as this prevents file bloat and builds on existing work more effectively.",
@@ -120,7 +118,7 @@ def get_simple_tone_and_style_section() -> str:
         "Your responses should be short and concise.",
         "When referencing specific functions or pieces of code include the pattern file_path:line_number to allow the user to easily navigate to the source code location.",
         "When referencing GitHub issues or pull requests, use the owner/repo#123 format (e.g. anthropics/claude-code#100) so they render as clickable links.",
-        "Do not use a colon before tool calls. Your tool calls may not be shown directly in the output, so text like \"Let me read the file:\" followed by a read tool call should just be \"Let me read the file.\" with a period.",
+        'Do not use a colon before tool calls. Your tool calls may not be shown directly in the output, so text like "Let me read the file:" followed by a read tool call should just be "Let me read the file." with a period.',
     ]
 
     return ["# Tone and style"] + prepend_bullets(items)
@@ -164,10 +162,15 @@ def compute_env_info(cwd: str, model_name: str) -> str:
         f"You are powered by the model {model_name}.",
     ]
 
-    return ["# Environment", "You have been invoked in the following environment: "] + prepend_bullets(env_items)
+    return [
+        "# Environment",
+        "You have been invoked in the following environment: ",
+    ] + prepend_bullets(env_items)
 
 
-def create_default_system_prompt(cwd: Optional[str] = None, model_name: str = "claude-sonnet-4-6") -> str:
+def create_default_system_prompt(
+    cwd: Optional[str] = None, model_name: str = "claude-sonnet-4-6"
+) -> str:
     """Create the default system prompt for the assistant - aligned with TypeScript getSystemPrompt()"""
     if cwd is None:
         cwd = os.getcwd()

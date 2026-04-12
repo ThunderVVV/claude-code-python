@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 
@@ -31,7 +30,7 @@ def parse_file_references(text: str) -> List[Tuple[str, int, int]]:
     # Pattern matches @ followed by a path
     # Valid path characters: alphanumeric, dots, dashes, underscores, slashes, backslashes, colon (for Windows drive)
     # Strategy: match the path, then strip trailing dots (which are likely sentence-ending punctuation)
-    pattern = r'@([a-zA-Z0-9._\-/~\\:]+)'
+    pattern = r"@([a-zA-Z0-9._\-/~\\:]+)"
 
     matches = []
     for match in re.finditer(pattern, text):
@@ -43,10 +42,10 @@ def parse_file_references(text: str) -> List[Tuple[str, int, int]]:
         if end_pos < len(text):
             next_char = text[end_pos]
             # If followed by alphanumeric or underscore, it's not a valid reference
-            if next_char.isalnum() or next_char == '_':
+            if next_char.isalnum() or next_char == "_":
                 continue
             # If followed by space or punctuation, strip trailing dots
-            if next_char in ' \t\n\r,;:!?()':
+            if next_char in " \t\n\r,;:!?()":
                 should_strip_dots = True
         else:
             # End of string - also strip trailing dots
@@ -54,7 +53,7 @@ def parse_file_references(text: str) -> List[Tuple[str, int, int]]:
 
         if should_strip_dots:
             # Strip trailing dots from the path (likely sentence-ending punctuation)
-            file_path = file_path.rstrip('.')
+            file_path = file_path.rstrip(".")
 
         start_pos = match.start()
         matches.append((file_path, start_pos, end_pos))
@@ -69,7 +68,7 @@ def resolve_file_path(file_path: str, working_directory: str) -> Optional[str]:
     Returns None if the path cannot be resolved or doesn't exist.
     """
     # Expand ~ to home directory
-    if file_path.startswith('~'):
+    if file_path.startswith("~"):
         file_path = os.path.expanduser(file_path)
 
     # If already absolute, use as-is
@@ -98,14 +97,16 @@ def read_file_content(file_path: str) -> Optional[str]:
     Returns None if the file cannot be read.
     """
     try:
-        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
     except (IOError, OSError, PermissionError):
         return None
 
+
 def has_web_reference(text: str) -> bool:
     """Check if text contains @web reference."""
     import re
+
     pattern = r"(?<!\S)@web(?=$|[\s,;:!?()])"
     return bool(re.search(pattern, text))
 
@@ -113,10 +114,11 @@ def has_web_reference(text: str) -> bool:
 def expand_web(text: str) -> str:
     web_skill_file_prompt = (
         "@.claude/skills/tavily-search/SKILL.md",
-        "@.claude/skills/tavily-extract/SKILL.md"
+        "@.claude/skills/tavily-extract/SKILL.md",
     )
     text = text.replace("@web", " ".join(web_skill_file_prompt) + " ")
     return text
+
 
 def expand_file_references(
     text: str,
@@ -156,11 +158,13 @@ def expand_file_references(
             continue
 
         seen_paths.add(file_path)
-        expansions.append(FileExpansion(
-            file_path=full_path,
-            content=content,
-            display_path=file_path,
-        ))
+        expansions.append(
+            FileExpansion(
+                file_path=full_path,
+                content=content,
+                display_path=file_path,
+            )
+        )
 
     if not expansions:
         return text, []
@@ -204,7 +208,9 @@ def format_expansion_for_display(expansion: FileExpansion, max_lines: int = 5) -
     return result
 
 
-def format_expansions_for_display(expansions: List[FileExpansion], max_lines: int = 5) -> str:
+def format_expansions_for_display(
+    expansions: List[FileExpansion], max_lines: int = 5
+) -> str:
     """
     Format multiple file expansions for TUI display.
 

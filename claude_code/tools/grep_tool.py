@@ -1,12 +1,16 @@
-
 """Grep tool - aligned with GrepTool.ts"""
 
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-from claude_code.core.tools import BaseTool, ToolContext, ToolInputSchema, ValidationResult
+from claude_code.core.tools import (
+    BaseTool,
+    ToolContext,
+    ToolInputSchema,
+    ValidationResult,
+)
 from claude_code.tools.file_utils import expand_path
 from claude_code.tools.ripgrep import (
     VCS_DIRECTORIES_TO_EXCLUDE,
@@ -103,7 +107,7 @@ class GrepTool(BaseTool):
             },
             "type": {
                 "type": "string",
-                "description": 'File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types.',
+                "description": "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types.",
             },
             "head_limit": {
                 "type": "integer",
@@ -131,13 +135,17 @@ class GrepTool(BaseTool):
     def is_concurrency_safe(self, input: Dict[str, Any]) -> bool:
         return True
 
-    def get_tool_use_summary(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_tool_use_summary(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if not input:
             return None
         pattern = input.get("pattern", "")
         return f"'{pattern}'" if pattern else None
 
-    def get_activity_description(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_activity_description(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if not input:
             return "Searching"
         pattern = input.get("pattern", "")
@@ -313,7 +321,10 @@ class GrepTool(BaseTool):
                 return "No files found"
 
             pagination = _format_pagination_info(applied_limit, offset)
-            result = f"Found {len(relative_matches)} {'file' if len(relative_matches) == 1 else 'files'}{pagination}\n" + "\n".join(relative_matches)
+            result = (
+                f"Found {len(relative_matches)} {'file' if len(relative_matches) == 1 else 'files'}{pagination}\n"
+                + "\n".join(relative_matches)
+            )
 
             return result
 

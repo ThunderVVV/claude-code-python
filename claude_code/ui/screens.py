@@ -9,8 +9,6 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-logger = logging.getLogger(__name__)
-
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, VerticalGroup
 from textual.widgets import Label, LoadingIndicator
@@ -47,7 +45,8 @@ from claude_code.ui.message_widgets import (
 )
 from claude_code.ui.session_resume_modal import SessionResumeModal
 from claude_code.utils.logging_config import log_full_exception
-from claude_code.core.file_expansion import expand_file_references
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from claude_code.client.http_client import ClaudeCodeHttpClient

@@ -1,19 +1,17 @@
-
 """Tool system base classes and interfaces - aligned with TypeScript version"""
 
 from __future__ import annotations
 
 import asyncio
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class ToolInputSchema:
     """JSON Schema for tool input validation"""
+
     type: str = "object"
     properties: Dict[str, Any] = field(default_factory=dict)
     required: List[str] = field(default_factory=list)
@@ -29,6 +27,7 @@ class ToolInputSchema:
 @dataclass
 class PermissionResult:
     """Result of a permission check"""
+
     behavior: str = "allow"  # allow, deny, ask
     message: Optional[str] = None
     updated_input: Optional[Dict[str, Any]] = None
@@ -37,6 +36,7 @@ class PermissionResult:
 @dataclass
 class ValidationResult:
     """Result of input validation"""
+
     result: bool = True
     message: Optional[str] = None
     error_code: int = 0
@@ -45,6 +45,7 @@ class ValidationResult:
 @dataclass
 class ToolContext:
     """Context passed to tools during execution"""
+
     working_directory: str
     project_root: str
     session_id: str
@@ -127,11 +128,15 @@ class BaseTool(ABC):
         """Get human-readable name for the tool"""
         return self.name
 
-    def get_tool_use_summary(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_tool_use_summary(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         """Get a short summary of this tool use for display"""
         return None
 
-    def get_activity_description(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_activity_description(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         """Get present-tense activity description for spinner"""
         return None
 
@@ -167,7 +172,7 @@ class ToolRegistry:
         """Register a tool"""
         self._tools[tool.name] = tool
         # Also register aliases
-        for alias in getattr(tool, 'aliases', []):
+        for alias in getattr(tool, "aliases", []):
             self._tools[alias] = tool
 
     def unregister(self, name: str) -> None:
@@ -197,5 +202,3 @@ class ToolRegistry:
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
         """Get tool definitions for OpenAI API"""
         return [tool.to_openai_tool() for tool in self.list_enabled_tools()]
-
-

@@ -1,4 +1,3 @@
-
 """Edit tool - aligned with FileEditTool.ts"""
 
 from __future__ import annotations
@@ -66,7 +65,9 @@ Usage:
     def get_path(self, input: Dict[str, Any]) -> Optional[str]:
         return input.get("file_path")
 
-    def get_tool_use_summary(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_tool_use_summary(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if not input:
             return None
         path = input.get("file_path", "")
@@ -74,7 +75,9 @@ Usage:
             return os.path.basename(path)
         return None
 
-    def get_activity_description(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_activity_description(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if not input:
             return "Editing file"
         path = input.get("file_path", "")
@@ -152,7 +155,9 @@ Usage:
             if actual_old_string is None:
                 return f"Error: Could not find the specified text in {full_path}"
 
-            actual_new_string = preserve_quote_style(old_string, actual_old_string, new_string)
+            actual_new_string = preserve_quote_style(
+                old_string, actual_old_string, new_string
+            )
 
             count = content.count(actual_old_string)
             if count > 1 and not replace_all:

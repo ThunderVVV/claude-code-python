@@ -9,8 +9,6 @@ import os
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, List, Optional
 
-logger = logging.getLogger(__name__)
-
 from claude_code.core.messages import (
     ContentBlock,
     Message,
@@ -38,6 +36,8 @@ from claude_code.services.openai_client import (
     APIError,
 )
 from claude_code.utils.logging_config import log_full_exception
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -301,12 +301,12 @@ class QueryEngine:
             self._raise_if_interrupted()
 
             from claude_code.core.file_expansion import has_web_reference
-            
+
             # Expand @file_path references
             expanded_text, file_expansions = expand_file_references(
                 user_text, self._cwd
             )
-            
+
             # Check for @web reference
             web_enabled = has_web_reference(user_text)
 
@@ -318,7 +318,9 @@ class QueryEngine:
                 web_enabled=web_enabled,
             )
             self.state.add_message(user_message)
-            logger.info(f"User message created - session_id={self._session_id}, web_enabled={web_enabled}")
+            logger.info(
+                f"User message created - session_id={self._session_id}, web_enabled={web_enabled}"
+            )
             yield MessageCompleteEvent(message=user_message)
 
             # Run the query loop
@@ -517,7 +519,9 @@ class QueryEngine:
                 tool_calls_info = []
                 for tool_use in tool_use_blocks:
                     input_str = str(tool_use.input)
-                    truncated = input_str[:50] + "..." if len(input_str) > 50 else input_str
+                    truncated = (
+                        input_str[:50] + "..." if len(input_str) > 50 else input_str
+                    )
                     tool_calls_info.append(f"{tool_use.name}({truncated})")
                 logger.info(
                     f"Executing {len(tool_use_blocks)} tool calls: {tool_calls_info}"

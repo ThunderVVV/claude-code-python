@@ -1,15 +1,12 @@
-
 """Bash tool for executing shell commands - aligned with TypeScript version"""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import re
-import shlex
 import shutil
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from claude_code.core.tools import (
     BaseTool,
@@ -26,24 +23,58 @@ MAX_TIMEOUT_MS = 600000  # 10 minutes
 
 # Commands that typically produce no stdout on success
 SILENT_COMMANDS = {
-    "mv", "cp", "rm", "mkdir", "rmdir", "chmod", "chown", "chgrp",
-    "touch", "ln", "cd", "export", "unset", "wait",
+    "mv",
+    "cp",
+    "rm",
+    "mkdir",
+    "rmdir",
+    "chmod",
+    "chown",
+    "chgrp",
+    "touch",
+    "ln",
+    "cd",
+    "export",
+    "unset",
+    "wait",
 }
 
 # Search commands for collapsible display
 SEARCH_COMMANDS = {
-    "find", "grep", "rg", "ag", "ack", "locate", "which", "whereis",
+    "find",
+    "grep",
+    "rg",
+    "ag",
+    "ack",
+    "locate",
+    "which",
+    "whereis",
 }
 
 # Read/view commands for collapsible display
 READ_COMMANDS = {
-    "cat", "head", "tail", "less", "more", "wc", "stat", "file",
-    "strings", "jq", "awk", "cut", "sort", "uniq", "tr",
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "more",
+    "wc",
+    "stat",
+    "file",
+    "strings",
+    "jq",
+    "awk",
+    "cut",
+    "sort",
+    "uniq",
+    "tr",
 }
 
 # List commands for collapsible display
 LIST_COMMANDS = {
-    "ls", "tree", "du",
+    "ls",
+    "tree",
+    "du",
 }
 
 
@@ -161,7 +192,11 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
     def is_read_only(self, input: Dict[str, Any]) -> bool:
         """Check if command is read-only"""
         command = input.get("command", "")
-        return is_search_command(command) or is_read_command(command) or is_list_command(command)
+        return (
+            is_search_command(command)
+            or is_read_command(command)
+            or is_list_command(command)
+        )
 
     def is_concurrency_safe(self, input: Dict[str, Any]) -> bool:
         """Check if command can run concurrently"""
@@ -176,7 +211,9 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
                 return True
         return False
 
-    def get_tool_use_summary(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_tool_use_summary(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         """Get summary for display"""
         if not input:
             return None
@@ -194,7 +231,9 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
 
         return None
 
-    def get_activity_description(self, input: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def get_activity_description(
+        self, input: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         """Get activity description for spinner"""
         if not input:
             return "Running command"
@@ -293,7 +332,6 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
             return "Error: 'command' parameter is required"
 
         timeout_ms = input.get("timeout", DEFAULT_TIMEOUT_MS)
-        description = input.get("description", "")
 
         # Convert timeout to seconds
         timeout_seconds = min(timeout_ms / 1000, MAX_TIMEOUT_MS / 1000)
@@ -391,6 +429,6 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
         except FileNotFoundError as e:
             return f"Error: Command not found: {str(e)}"
         except PermissionError:
-            return f"Error: Permission denied executing command"
+            return "Error: Permission denied executing command"
         except Exception as e:
             return f"Error executing command: {str(e)}"

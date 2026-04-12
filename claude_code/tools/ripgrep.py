@@ -1,4 +1,3 @@
-
 """Ripgrep integration for Python - aligned with TypeScript version"""
 
 from __future__ import annotations
@@ -6,7 +5,6 @@ from __future__ import annotations
 import os
 import platform
 import subprocess
-import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -97,9 +95,7 @@ def apply_head_limit(
     return (sliced, effective_limit if was_truncated else None)
 
 
-def rip_grep(
-    args: List[str], target: str, timeout: Optional[int] = None
-) -> List[str]:
+def rip_grep(args: List[str], target: str, timeout: Optional[int] = None) -> List[str]:
     """Run ripgrep and return results - aligned with TypeScript version"""
     rg_path, rg_args = ripgrep_command()
 
@@ -132,7 +128,7 @@ def rip_grep(
 
     except subprocess.TimeoutExpired:
         raise RipgrepTimeoutError(
-            f"Ripgrep search timed out after {timeout/1000} seconds. "
+            f"Ripgrep search timed out after {timeout / 1000} seconds. "
             f"The search may have matched files but did not complete in time. "
             f"Try searching a more specific path or pattern.",
             [],
@@ -141,4 +137,3 @@ def rip_grep(
         return []
     except Exception:
         return []
-

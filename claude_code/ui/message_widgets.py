@@ -9,8 +9,6 @@ from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
 from textual.widgets import Collapsible, Label, Static, Log
 
-logger = logging.getLogger(__name__)
-
 from claude_code.core.messages import (
     Message,
     MessageRole,
@@ -30,13 +28,31 @@ from claude_code.ui.utils import (
 )
 from claude_code.utils.logging_config import log_full_exception
 
+logger = logging.getLogger(__name__)
+
 
 # Role configuration - single source of truth
 ROLE_CONFIG = {
-    MessageRole.USER: {"label": "You", "role_class": "role-user", "block_class": "user-message-block"},
-    MessageRole.ASSISTANT: {"label": "Claude", "role_class": "role-assistant", "block_class": "assistant-message-block"},
-    MessageRole.SYSTEM: {"label": "System", "role_class": "role-system", "block_class": "system-message-block"},
-    MessageRole.TOOL: {"label": "Tool", "role_class": "role-tool", "block_class": "tool-result-block"},
+    MessageRole.USER: {
+        "label": "You",
+        "role_class": "role-user",
+        "block_class": "user-message-block",
+    },
+    MessageRole.ASSISTANT: {
+        "label": "Claude",
+        "role_class": "role-assistant",
+        "block_class": "assistant-message-block",
+    },
+    MessageRole.SYSTEM: {
+        "label": "System",
+        "role_class": "role-system",
+        "block_class": "system-message-block",
+    },
+    MessageRole.TOOL: {
+        "label": "Tool",
+        "role_class": "role-tool",
+        "block_class": "tool-result-block",
+    },
 }
 
 
@@ -149,7 +165,7 @@ class ToolUseWidget(VerticalGroup):
         )
         self._result = (summary, is_error)
         self._output_lines = output_lines
-        
+
         if self._collapsible:
             self._collapsible.title = self._build_title()
             self._auto_expand_once()
@@ -178,7 +194,9 @@ class ToolUseWidget(VerticalGroup):
         """Return the current single-line title for the tool call."""
         if self._result is None:
             return Content.from_text(
-                sanitize_terminal_text(summarize_tool_use(self.tool_name, self.tool_input)),
+                sanitize_terminal_text(
+                    summarize_tool_use(self.tool_name, self.tool_input)
+                ),
                 markup=False,
             )
         summary, is_error = self._result
@@ -258,21 +276,21 @@ class ToolUseWidget(VerticalGroup):
         # Try to get full file content
         try:
             from claude_code.tools.file_utils import expand_path
-            
+
             full_path = expand_path(file_path)
-            
+
             if self.tool_name == "Edit":
                 replace_all = self.tool_input.get("replace_all", False)
                 with open(full_path, "r", encoding="utf-8") as f:
                     current_content = f.read()
-                
+
                 # Reverse replacement to reconstruct original file
                 test_old = current_content
                 if replace_all:
                     test_old = test_old.replace(new_string, old_string)
                 else:
                     test_old = test_old.replace(new_string, old_string, 1)
-                
+
                 if test_old != current_content:
                     old_text, new_text = test_old, current_content
         except Exception:
@@ -297,7 +315,7 @@ class ToolUseWidget(VerticalGroup):
             child.remove()
         for widget in self._compose_details():
             self._container.mount(widget)
-        
+
         # Write output lines to the Log widget if present
         if self._output_lines:
             try:
@@ -314,26 +332,30 @@ class MessageWidget(VerticalGroup):
     Consolidates both static and streaming message display.
     """
 
-    def __init__(self, message: Optional[Message] = None, streaming: bool = False, **kwargs):
+    def __init__(
+        self, message: Optional[Message] = None, streaming: bool = False, **kwargs
+    ):
         super().__init__(**kwargs)
         self._streaming = streaming
         self._message = message
-        
+
         # Internal state for streaming
         self._thinking_content: str = ""
         self._text_content: str = ""
         self._tool_uses: List[ToolUseContent] = []
         self._tool_use_ids: set[str] = set()
         self._tool_widgets_by_id: dict[str, ToolUseWidget] = {}
-        
+
         # Widget references
         self._thinking_widget: Optional[ThinkingBlockWidget] = None
         self._streaming_widget: Optional[StreamingMarkdownWidget] = None
         self._content_container: Optional[VerticalGroup] = None
-        
+
         self.add_class("message-block")
         if message:
-            role_config = ROLE_CONFIG.get(message.type, ROLE_CONFIG[MessageRole.ASSISTANT])
+            role_config = ROLE_CONFIG.get(
+                message.type, ROLE_CONFIG[MessageRole.ASSISTANT]
+            )
             self.add_class(role_config["block_class"])
             self._load_message(message)
         else:
@@ -367,20 +389,26 @@ class MessageWidget(VerticalGroup):
     def _compose_static_message(self, message: Message) -> ComposeResult:
         """Compose a static (non-streaming) message."""
         role_config = ROLE_CONFIG.get(message.type, ROLE_CONFIG[MessageRole.ASSISTANT])
-        
+
         # Role label
         if message.type not in {MessageRole.USER, MessageRole.ASSISTANT}:
-            yield Label(role_config["label"], classes=f"message-role {role_config['role_class']}", markup=False)
-        
+            yield Label(
+                role_config["label"],
+                classes=f"message-role {role_config['role_class']}",
+                markup=False,
+            )
+
         # Web enabled flag for user messages
         if message.type == MessageRole.USER and getattr(message, "web_enabled", False):
             yield Label("@web enabled", classes="web-enabled-label", markup=False)
-        
+
         # File expansions for user messages
         if message.type == MessageRole.USER and message.file_expansions:
             for expansion in message.file_expansions:
                 # Use a simpler approach - format content first
-                expansion_content = "\n".join(self._format_file_expansion_lines(expansion))
+                expansion_content = "\n".join(
+                    self._format_file_expansion_lines(expansion)
+                )
                 with Collapsible(
                     title=f"@{expansion.display_path}",
                     collapsed=True,
@@ -393,7 +421,7 @@ class MessageWidget(VerticalGroup):
                         classes="file-expansion-content",
                         markup=False,
                     )
-        
+
         # Content blocks
         for block in message.content:
             if isinstance(block, ThinkingContent):
@@ -424,9 +452,16 @@ class MessageWidget(VerticalGroup):
             elif isinstance(block, ToolResultContent):
                 content = block.content
                 if len(content) > TOOL_RESULT_TRUNCATE_LENGTH:
-                    content = content[:TOOL_RESULT_TRUNCATE_LENGTH] + f"\n... ({len(block.content) - TOOL_RESULT_TRUNCATE_LENGTH} more chars)"
-                summary, preview_lines = summarize_tool_result("Tool", {}, content, block.is_error)
-                yield Static(sanitize_terminal_text(summary), classes="tool-result", markup=False)
+                    content = (
+                        content[:TOOL_RESULT_TRUNCATE_LENGTH]
+                        + f"\n... ({len(block.content) - TOOL_RESULT_TRUNCATE_LENGTH} more chars)"
+                    )
+                summary, preview_lines = summarize_tool_result(
+                    "Tool", {}, content, block.is_error
+                )
+                yield Static(
+                    sanitize_terminal_text(summary), classes="tool-result", markup=False
+                )
                 if preview_lines:
                     log_widget = ToolResultLogWidget(classes="tool-result-log")
                     yield log_widget

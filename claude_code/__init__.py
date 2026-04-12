@@ -1,4 +1,3 @@
-
 """Claude Code Python - AI programming assistant
 
 A Python implementation of Claude Code that helps with software engineering tasks.
@@ -16,6 +15,7 @@ if TYPE_CHECKING:
     from textual.renders import Visual
     from typing_extensions import Self
 
+
 def _patched_with_tooltip(self, tooltip: "Visual | str | None") -> "Self":
     """Chainable method to set a tooltip (disabled globally).
 
@@ -27,5 +27,6 @@ def _patched_with_tooltip(self, tooltip: "Visual | str | None") -> "Self":
     """
     self.tooltip = None
     return self
+
 
 Widget.with_tooltip = _patched_with_tooltip
