@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 from claude_code.core.messages import Message, MessageCompleteEvent
-from claude_code.core.tools import ToolRegistry
-from claude_code.services.openai_client import OpenAIClientConfig
-from claude_code.api.server import create_app as create_api_app
-from claude_code.web.server import (
+from claude_code.api.server import (
     build_visible_file_expansions,
-    create_combined_app,
+    create_app as create_api_app,
     event_to_dict,
     message_to_dict,
 )
-from starlette.routing import Mount
 
 
 def test_build_visible_file_expansions_skips_web_marker(tmp_path):
@@ -84,23 +80,3 @@ def test_create_api_app_can_build_unprefixed_routes():
     assert "/sessions" in paths
     assert "/health" in paths
     assert "/api/chat" not in paths
-
-
-def test_create_combined_app_mounts_unprefixed_api_under_api():
-    app = create_combined_app(
-        OpenAIClientConfig(
-            api_url="https://example.com/v1",
-            api_key="test-key",
-            model_name="test-model",
-        ),
-        ToolRegistry(),
-    )
-
-    mount = next(
-        route for route in app.routes if isinstance(route, Mount) and route.path == "/api"
-    )
-    paths = {route.path for route in mount.app.routes if hasattr(route, "path")}
-
-    assert "/chat" in paths
-    assert "/interrupt" in paths
-    assert "/sessions" in paths

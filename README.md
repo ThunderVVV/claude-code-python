@@ -38,7 +38,7 @@
 - **OpenAI 兼容**：使用官方 OpenAI Python SDK，支持所有 OpenAI 兼容的 API
 - **工具集**：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
 - **系统提示词对齐**：与 TypeScript 版本保持一致的系统提示词和工具描述
-- **HTTP 前后端分离**：`cc-api` 独立部署，`cc-py` 通过 HTTP 连接；`cc-web` 则自带 FastAPI API 后端，浏览器直接访问
+- **HTTP 前后端统一**：`cc-api` 同时提供 API 和浏览器界面，`cc-py` 通过 HTTP 连接
 
 ### TUI 特性
 - **推理/思考内容支持**：显示模型的推理过程
@@ -49,8 +49,8 @@
 - **文件引用扩展**：支持 `@file_path` 语法在消息中引用文件内容，自动展开并显示
 - **@web 搜索**：支持 `@web` 语法触发 Web 搜索能力（需配置 tavily skills，详见下方说明）
 
-### Web UI 特性 (实验)
-- **现代化浏览器界面**：基于 Vue + FastAPI 的响应式 Web 界面，内置 API 后端
+### 浏览器界面特性 (实验)
+- **现代化浏览器界面**：由 `cc-api` 提供的 Vue + FastAPI 响应式界面
 - **Markdown 渲染**：支持完整的 Markdown 语法渲染，代码高亮显示
 - **流式响应**：实时显示 AI 响应流，支持流式输出
 - **会话管理**：创建、切换、恢复历史会话，会话持久化存储
@@ -106,7 +106,7 @@ CLAUDE_CODE_MODEL=gpt-4.1
 CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
 ```
 
-> 注：`CLAUDE_CODE_API_URL`、`CLAUDE_CODE_API_KEY` 和 `CLAUDE_CODE_MODEL` 同时供 `cc-api` 和 `cc-web` 使用。
+> 注：`CLAUDE_CODE_API_URL`、`CLAUDE_CODE_API_KEY` 和 `CLAUDE_CODE_MODEL` 同时供 `cc-api` 和 `cc-py` 使用。
 
 ## 运行
 
@@ -123,25 +123,25 @@ cc-py
 
 > 注意：必须先启动 API 服务器，再启动客户端。如果后端未运行，客户端会提示错误并退出。
 
-### Web UI 模式（可选，实验特性）
+### 浏览器界面模式（可选，实验特性）
 
-> ⚠️ **实验特性**：Web UI 目前处于实验阶段，功能可能不完善，不建议在生产环境使用。
+> ⚠️ **实验特性**：浏览器界面目前处于实验阶段，功能可能不完善，不建议在生产环境使用。
 
-Web UI 直接启动即可，不需要额外运行 `cc-api`：
+启动 `cc-api` 后即可直接访问浏览器界面：
 
 ```bash
-cc-web
+cc-api
 ```
 
-默认访问地址：http://localhost:8080
+默认访问地址：http://localhost:8000/
 
-Web UI 特性：
+浏览器界面特性：
 - 现代化浏览器界面，支持 Markdown 渲染
 - 流式响应显示
 - 会话管理（创建、切换、恢复历史会话）
 - 工具调用可视化展示
 - Diff 内容渲染（Edit/Write 工具结果）
-- 浏览器界面和 API 由同一个 `cc-web` 进程提供
+- 浏览器界面和 API 由同一个 `cc-api` 进程提供
 
 ## 调试
 
@@ -154,8 +154,8 @@ cc-api --debug
 # TUI 客户端调试
 cc-py --debug
 
-# Web UI 调试
-cc-web --debug
+# 浏览器界面调试
+cc-api --debug
 ```
 
 自动写到当前目录下的 `.logs`。
@@ -194,18 +194,17 @@ TUI 路径
 REPLScreen -> ClaudeCodeHttpClient --HTTP--> cc-api -> QueryEngine -> OpenAIClient
 
 Web 路径
-Browser(Vue) -> cc-web(FastAPI) -> QueryEngine -> OpenAIClient
+Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 ```
 
-- `cc-api` 负责 TUI 模式的 FastAPI 后端
-- `cc-web` 负责 Web UI 和内置 FastAPI API
+- `cc-api` 负责 TUI 模式的 FastAPI 后端，也负责浏览器界面和内置 API
 - `cc-py` 通过 `ClaudeCodeHttpClient` 连接 API 服务器
 - 两条路径共享核心提示词、消息模型、工具实现和 OpenAI-compatible 配置
 
 **启动命令：**
 - TUI 后端：`cc-api`
 - TUI 客户端：`cc-py`
-- Web UI：`cc-web`
+- 浏览器界面：`cc-api`
 
 ## TODO
 

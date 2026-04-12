@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -17,14 +16,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from claude_code.core.messages import (
-    Message,
-    MessageRole,
     TextContent,
     ThinkingContent,
     ToolUseContent,
     ToolResultContent,
-    Usage,
-    QueryEvent,
     TextEvent as CoreTextEvent,
     ThinkingEvent as CoreThinkingEvent,
     ToolUseEvent as CoreToolUseEvent,
@@ -39,10 +34,8 @@ from claude_code.core.tools import ToolRegistry
 from claude_code.core.session_store import (
     SessionStore,
     PersistedSession,
-    SessionSummary,
 )
 from claude_code.services.openai_client import OpenAIClientConfig
-from claude_code.utils.logging_config import log_full_exception
 from claude_code.core.file_expansion import (
     FileExpansion,
     parse_file_references,
@@ -55,7 +48,6 @@ logger = logging.getLogger(__name__)
 
 # Global state
 _session_manager: Optional[object] = None
-_WEB_REFERENCE_PATTERN = re.compile(r"(?<!\S)@web(?=$|[\s,;:!?()])")
 
 
 class SessionManager:
@@ -124,11 +116,6 @@ class ChatRequest(BaseModel):
 class InterruptRequest(BaseModel):
     session_id: str
     reason: str = "user_interrupt"
-
-
-def has_web_reference(text: str) -> bool:
-    """Return True when the user explicitly requested @web."""
-    return bool(_WEB_REFERENCE_PATTERN.search(text))
 
 
 def _normalize_api_prefix(api_prefix: str) -> str:
@@ -314,37 +301,31 @@ def require_global_dependencies() -> tuple[OpenAIClientConfig, ToolRegistry]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle"""
-    logger.info("FastAPI server starting")
+    logger.info("Server starting")
     yield
-    logger.info("FastAPI server shutting down")
+    logger.info("Server shutting down")
 
 
 async def event_stream(chat_request: ChatRequest):
     """Generate SSE events from QueryEngine directly"""
-    logger.debug(f"[SERVER] event_stream called with: {chat_request.user_text[:50]}...")
 
     try:
         session_id = chat_request.session_id
-        logger.debug(f"[SERVER] Getting global dependencies...")
         client_config, tool_registry = require_global_dependencies()
-        logger.debug(f"[SERVER] Getting session manager...")
         session_manager = get_session_manager()
 
         if not session_id:
             session_id = generate_uuid()
-        logger.debug(f"[SERVER] Session ID: {session_id}")
 
         yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
-        logger.debug(f"[SERVER] Yielded session_id")
+        logger.debug("Yielded session_id")
 
-        logger.debug(f"[SERVER] Getting or creating engine...")
         engine = await session_manager.get_or_create_engine(
             session_id,
             client_config,
             tool_registry,
             chat_request.working_directory,
         )
-        logger.debug(f"[SERVER] Engine created, submitting message...")
 
         async for event in engine.submit_message(chat_request.user_text):
             event_dict = event_to_dict(
@@ -353,13 +334,10 @@ async def event_stream(chat_request: ChatRequest):
             )
             yield f"data: {json.dumps(event_dict)}\n\n"
 
-        logger.debug(f"[SERVER] Streaming completed - session_id={session_id}")
+        logger.debug(f"Streaming completed - session_id={session_id}")
 
     except Exception as e:
-        logger.error(f"[SERVER] ERROR in event_stream: {e}")
-        import traceback
-
-        logger.error(traceback.format_exc())
+        logger.exception("event_stream failed")
         error_dict = {"type": "error", "error": str(e), "is_fatal": True}
         yield f"data: {json.dumps(error_dict)}\n\n"
 
@@ -367,9 +345,8 @@ async def event_stream(chat_request: ChatRequest):
 @api_router.post("/chat")
 async def chat(request: ChatRequest):
     """Stream chat response via SSE"""
-    logger.debug("[SERVER] chat endpoint called")
     logger.debug(
-        f"[SERVER] Request: user_text={request.user_text[:50]}..., session_id={request.session_id}"
+        f"Request: user_text={request.user_text[:50]}..., session_id={request.session_id}"
     )
     return StreamingResponse(
         event_stream(request),

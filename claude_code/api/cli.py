@@ -77,7 +77,7 @@ def main(
     env_file: Optional[str],
     debug: bool,
 ) -> None:
-    """Start the Claude Code FastAPI server"""
+    """Start the Claude Code FastAPI server and browser UI"""
     setup_server_logging(debug=debug)
     if debug:
         click.echo(click.style("Debug logging enabled", fg="yellow"))
@@ -118,7 +118,11 @@ def main(
     click.echo(
         click.style(f"Starting Claude Code FastAPI server on {host}:{port}", fg="green")
     )
-    click.echo(click.style(f"Health check: http://{host}:{port}/health", fg="yellow"))
+    display_host = "localhost" if host == "0.0.0.0" else host
+    click.echo(
+        click.style(f"Health check: http://{display_host}:{port}/health", fg="yellow")
+    )
+    click.echo(click.style(f"Browser UI: http://{display_host}:{port}/", fg="yellow"))
 
     config = uvicorn.Config(
         app,

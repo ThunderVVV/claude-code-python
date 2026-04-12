@@ -32,7 +32,6 @@ dev = [
 claude-code-python = "claude_code.cli:main"
 cc-py = "claude_code.cli:main"
 cc-api = "claude_code.api.cli:main"
-cc-web = "claude_code.web.cli:main"
 
 [build-system]
 requires = ["hatchling"]

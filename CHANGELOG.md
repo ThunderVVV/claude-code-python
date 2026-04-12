@@ -6,22 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-13
+
+#### Browser UI Consolidation
+- Removed the standalone browser UI entry point and its package modules
+- Moved browser UI startup into `cc-api`, which now serves the Vue frontend and FastAPI API from one process
+- Updated README, startup output, and tests to point to `cc-api` only
+
 ### Fixed - 2026-04-12
 
 #### Web UI / API Mount Compatibility
 - Added `create_app(api_prefix=...)` in `claude_code.api.server` so the FastAPI backend can run directly or be mounted under `/api`
-- Fixed `cc-web` startup by mounting the unprefixed API app without double-prefixing browser routes
+- Fixed browser UI startup by mounting the unprefixed API app without double-prefixing browser routes
 - Restored `web_enabled` serialization from `@web` in `message_to_dict()` so web-enabled messages serialize correctly
 - Added tests for direct and mounted API route layouts plus `@web` serialization
 
 #### Documentation Alignment
-- Updated `README.md` to distinguish the TUI HTTP path from the self-contained `cc-web` FastAPI path
+- Updated `README.md` to distinguish the TUI HTTP path from the browser UI FastAPI path
 
 ### Changed - 2026-04-12
 
+#### Logging Tag Standardization
+- Standardized log output to use source-based tags: `[FASTAPI]`, `[ENGINE]`, `[CLIENT]`, and `[TUI]`
+- Removed stale `[SERVER]` prefixes from API server logs so the emitted format now reflects the actual module source
+
 #### HTTP API Runtime Migration
 - Replaced the old gRPC client/server stack with `ClaudeCodeHttpClient` and the standalone `cc-api` FastAPI server for the TUI path
-- Refactored `cc-web` to share the same FastAPI API layer while serving the Vue frontend from one process
+- Refactored the browser UI to share the same FastAPI API layer while serving the Vue frontend from one process
 - Added/updated CLI entry points and package metadata to match the HTTP-based runtime
 - Fully removed the obsolete gRPC proto/client/server implementation and generation script from the active codebase
 
@@ -50,7 +61,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### Web UI with Vue 3 (FastAPI-based)
 - Refactored `web` module with FastAPI backend and Vue 3 frontend
-- CLI command: `cc-web` to launch Vue 3-based web interface
+- Browser UI is served by `cc-api` at `/`
 - Single-file Vue 3 frontend (`index.html`) with Tailwind CSS styling
 - Added dependencies: FastAPI, uvicorn, pydantic to `pyproject.toml`
 - Features:
@@ -90,7 +101,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Store tool name and input in DOM data attributes for later retrieval
   - Always save tool info to `pendingToolUses` even if block already exists
   - Use `updateToolResult` consistently for diff rendering
-- Marked Web UI as experimental feature in README
+- Marked browser UI as experimental feature in README
 
 ### Changed - 2026-04-11
 
