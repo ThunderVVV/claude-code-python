@@ -169,7 +169,6 @@
 
         .diff-container {
             border-radius: 6px;
-            overflow: auto;
             border: 1px solid rgba(71, 85, 105, 0.4);
             max-width: 100%;
         }
@@ -184,7 +183,12 @@
         .d2h-diff-table { font-family: 'JetBrains Mono', monospace !important; font-size: var(--font-size-code) !important; line-height: 1.2 !important; }
         .d2h-diff-table td, .d2h-diff-table th { padding: 0 2px !important; line-height: 1.2 !important; }
         .d2h-code-line-ctn { color: var(--color-text-primary) !important; padding: 0 2px !important; line-height: 1.2 !important; }
-        .d2h-line-num { color: var(--color-text-secondary) !important; padding: 0 4px !important; min-width: 28px !important; }
+        .d2h-line-num { 
+            color: var(--color-text-secondary) !important; 
+            padding: 0 4px !important; 
+            min-width: 28px !important;
+            position: relative !important;
+        }
         .d2h-code-line del, .d2h-code-line ins,
         .d2h-code-side-line del, .d2h-code-side-line ins {
             background: transparent !important;
@@ -196,6 +200,19 @@
         .d2h-info { background: transparent !important; border: none !important; }
         .d2h-diff-table td, .d2h-diff-table th,
         .d2h-diff-table, .d2h-code-line, .d2h-code-side-line { border: none !important; }
+        
+        /* Fix for sticky line numbers in diff2html */
+        .d2h-code-side-linenumber,
+        .d2h-code-linenumber {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+        }
+        
+        .d2h-side-by-side .d2h-code-side-line,
+        .d2h-side-by-side .d2h-code-line {
+            display: table-row !important;
+        }
 
         .modal-overlay { background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); }
         .session-item:hover { background: rgba(59, 130, 246, 0.1); }

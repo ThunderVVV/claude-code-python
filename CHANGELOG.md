@@ -49,6 +49,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed - 2026-04-12
 
+#### Web UI Markdown File Diff Display Issue
+- Fixed sticky line numbers in diff display for markdown files not scrolling properly
+- Root cause: diff2html library uses `position: sticky` for line numbers, which breaks when parent container has `overflow: auto`
+- Fix: Removed `overflow: auto` from `.diff-container` and forced `position: relative` on line number elements
+- Line numbers now scroll normally with content instead of being "stuck" at the top
+
 #### Tool Use Duplicate Rendering in Web UI
 - Fixed duplicate tool blocks appearing in web frontend
 - Root cause: Backend sent `ToolUseEvent` twice (preview phase + before execution)
