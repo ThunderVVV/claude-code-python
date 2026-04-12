@@ -7,7 +7,7 @@ from typing import List, Optional
 from textual.app import ComposeResult
 from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
-from textual.widgets import Collapsible, Label, Static, Log
+from textual.widgets import Collapsible, Label, RichLog, Static
 
 from claude_code.core.messages import (
     Message,
@@ -97,14 +97,16 @@ class ThinkingBlockWidget(VerticalGroup):
         pass
 
 
-class ToolResultLogWidget(Log):
+class ToolResultLogWidget(RichLog):
     """Widget for displaying tool results with auto-scroll and syntax highlighting."""
 
     DEFAULT_CSS = """
     ToolResultLogWidget {
+        width: 100%;
         height: auto;
         min-height: 1;
         max-height: 10;
+        overflow-x: hidden;
         scrollbar-visibility: hidden;
         background: $surface;
         padding: 1 1;
@@ -116,9 +118,18 @@ class ToolResultLogWidget(Log):
             highlight=True,
             max_lines=1000,
             auto_scroll=True,
+            wrap=True,
+            markup=False,
+            min_width=1,
             **kwargs,
         )
         self.add_class("tool-result-log")
+
+    def write_line(
+        self, line: str, scroll_end: bool | None = None
+    ) -> "ToolResultLogWidget":
+        """Compatibility helper matching Log.write_line."""
+        return self.write(line, scroll_end=scroll_end)
 
 
 class ToolUseWidget(VerticalGroup):
@@ -489,7 +500,7 @@ class MessageWidget(VerticalGroup):
                 yield tool_widget
 
     def _format_file_expansion_lines(self, expansion) -> List[str]:
-        """Format file expansion content as lines for Log widget."""
+        """Format file expansion content as lines for the tool result log widget."""
         lines = expansion.content.splitlines()
         formatted_lines = [f"@{expansion.display_path}:"]
         for i, line in enumerate(lines, start=1):
