@@ -10,6 +10,7 @@ from textual.widgets import Label, Static, TextArea
 from textual import events
 
 from claude_code.ui.utils import sanitize_terminal_text
+from claude_code.utils.logging_config import tui_log
 
 
 class InputTextArea(TextArea):
@@ -25,9 +26,13 @@ class InputTextArea(TextArea):
 
     async def _on_key(self, event: events.Key) -> None:
         """Handle Enter key for sending message, Shift+Enter for new line."""
+        tui_log(f"InputTextArea._on_key: key={event.key!r}, text={self.text!r}")
         if event.key == "enter":
             event.stop()
             event.prevent_default()
+            tui_log(
+                f"Enter pressed, text={self.text!r}, callback={self._on_submit is not None}"
+            )
             if self._on_submit:
                 self._on_submit(self.text)
             return

@@ -95,6 +95,26 @@ class SessionManager:
         return self._session_store.list_sessions()
 
     def get_session(self, session_id: str) -> Optional[PersistedSession]:
+        # First try to get from engine (in-memory, most up-to-date)
+        engine = self._engines.get(session_id)
+        if engine:
+            from claude_code.core.session_store import PersistedSession
+            from claude_code.core.messages import Usage
+
+            messages = engine.get_messages()
+            return PersistedSession(
+                session_id=session_id,
+                title=engine._session_title or "",
+                created_at=engine._session_created_at or "",
+                updated_at="",
+                working_directory=engine.get_working_directory(),
+                current_turn=engine.state.current_turn,
+                model_name=engine.client_config.model_name,
+                total_usage=engine.state.total_usage or Usage(),
+                messages=messages,
+                revert_state=None,
+            )
+        # Fall back to disk
         return self._session_store.load_session(session_id)
 
 
@@ -116,6 +136,16 @@ class ChatRequest(BaseModel):
 class InterruptRequest(BaseModel):
     session_id: str
     reason: str = "user_interrupt"
+
+
+class RevertRequest(BaseModel):
+    session_id: str
+    target_message_id: Optional[str] = None
+    target_part_id: Optional[str] = None
+
+
+class UnrevertRequest(BaseModel):
+    session_id: str
 
 
 def _normalize_api_prefix(api_prefix: str) -> str:
@@ -205,6 +235,7 @@ def content_block_to_dict(block) -> dict:
 def message_to_dict(message, working_directory: str = "") -> dict:
     """Serialize a message for web transport."""
     message_dict = {
+        "uuid": message.uuid,
         "role": message.type.value
         if hasattr(message.type, "value")
         else str(message.type),
@@ -213,6 +244,11 @@ def message_to_dict(message, working_directory: str = "") -> dict:
 
     if message.original_text:
         message_dict["original_text"] = message.original_text
+
+    if message.message:
+        usage = message.message.get("usage")
+        if usage:
+            message_dict["usage"] = usage
 
     if getattr(message, "file_expansions", None):
         message_dict["file_expansions"] = serialize_file_expansions(
@@ -371,6 +407,157 @@ async def interrupt(request: InterruptRequest):
         return {"success": False}
     except Exception as e:
         logger.exception("Failed to send interrupt")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/revert")
+async def revert(request: RevertRequest):
+    """Revert file changes from a specific point"""
+    try:
+        # Normalize empty strings to None
+        target_message_id = request.target_message_id or None
+        target_part_id = request.target_part_id or None
+
+        logger.debug(
+            f"Revert request: session_id={request.session_id}, "
+            f"target_message_id={target_message_id}, "
+            f"target_part_id={target_part_id}"
+        )
+
+        session_manager = get_session_manager()
+        engine = session_manager.get_engine(request.session_id)
+        if not engine:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        revert_service = engine.get_revert_service()
+        if not revert_service:
+            raise HTTPException(status_code=500, detail="Revert service not available")
+
+        result = await revert_service.revert(
+            engine,
+            target_message_id=target_message_id,
+            target_part_id=target_part_id,
+        )
+
+        if result.success:
+            response = {
+                "success": True,
+                "message": result.message,
+            }
+            if result.summary:
+                response["summary"] = {
+                    "additions": result.summary.additions,
+                    "deletions": result.summary.deletions,
+                    "files": result.summary.files,
+                }
+            return response
+        else:
+            return {"success": False, "message": result.message}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to revert")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/unrevert")
+async def unrevert(request: UnrevertRequest):
+    """Undo a previous revert operation"""
+    try:
+        session_manager = get_session_manager()
+        engine = session_manager.get_engine(request.session_id)
+        if not engine:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        revert_service = engine.get_revert_service()
+        if not revert_service:
+            raise HTTPException(status_code=500, detail="Revert service not available")
+
+        result = await revert_service.unrevert(engine)
+
+        if result.success:
+            response = {
+                "success": True,
+                "message": result.message,
+            }
+            if result.summary:
+                response["summary"] = {
+                    "additions": result.summary.additions,
+                    "deletions": result.summary.deletions,
+                    "files": result.summary.files,
+                }
+            return response
+        else:
+            return {"success": False, "message": result.message}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to unrevert")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/revert_state/{session_id}")
+async def get_revert_state(session_id: str):
+    """Get the current revert state for a session"""
+    try:
+        session_manager = get_session_manager()
+        engine = session_manager.get_engine(session_id)
+        if not engine:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        revert_state = engine.get_revert_state()
+        if revert_state:
+            return {
+                "has_revert": True,
+                "message_id": revert_state.message_id,
+                "part_id": revert_state.part_id,
+                "snapshot": revert_state.snapshot,
+                "summary": {
+                    "additions": revert_state.diff.additions
+                    if revert_state.diff
+                    else 0,
+                    "deletions": revert_state.diff.deletions
+                    if revert_state.diff
+                    else 0,
+                    "files": revert_state.diff.files if revert_state.diff else 0,
+                },
+            }
+        else:
+            return {"has_revert": False}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get revert state")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/snapshot_status/{session_id}")
+async def get_snapshot_status(session_id: str):
+    """Get the snapshot status (files modified, additions, deletions)"""
+    try:
+        session_manager = get_session_manager()
+        engine = session_manager.get_engine(session_id)
+        if not engine:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        total_diff = engine.get_total_diff()
+        if not total_diff:
+            return {"available": False}
+
+        return {
+            "available": True,
+            "files": total_diff.files,
+            "additions": total_diff.additions,
+            "deletions": total_diff.deletions,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get snapshot status")
         raise HTTPException(status_code=500, detail=str(e))
 
 

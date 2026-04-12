@@ -211,6 +211,8 @@ Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 
 ## TODO
 
+- 输入自动补全
+- model实时切换
 - Web界面风格优化
 
 ## 许可证

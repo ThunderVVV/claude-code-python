@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-13
+
+#### File Rewind/Revert Feature
+- Added `/rewind` command in TUI to revert file changes to a previous conversation point
+- Created `claude_code/core/snapshot.py` - Git-based independent snapshot system for tracking file changes during tool execution
+- Created `claude_code/core/revert.py` - Session revert service supporting undo/redo of file changes
+- Created `claude_code/ui/rewind_modal.py` - TUI modal for selecting a message to rewind to
+- Added `PatchContent` and `StepStartContent` message blocks for tracking file modifications
+- Added API endpoints: `/revert`, `/unrevert`, `/revert_state/{session_id}`, `/snapshot_status/{session_id}`
+- Session persistence now includes `revert_state` and `total_diff` for tracking file change history
+- TUI context bar now shows file modification stats (additions/deletions/files) when files have been modified
+
 ### Changed - 2026-04-13
 
 #### Browser UI Consolidation

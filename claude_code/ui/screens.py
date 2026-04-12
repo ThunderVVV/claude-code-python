@@ -44,7 +44,8 @@ from claude_code.ui.message_widgets import (
     ToolUseWidget,
 )
 from claude_code.ui.session_resume_modal import SessionResumeModal
-from claude_code.utils.logging_config import log_full_exception
+from claude_code.ui.rewind_modal import RewindModal
+from claude_code.utils.logging_config import log_full_exception, tui_log
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ class REPLScreen(Screen):
         self._show_welcome = True
         self._tool_widget_context: dict[str, ToolUseWidget] = {}
         self._query_worker: Optional[Worker] = None
+        self._snapshot_status: Optional[dict] = None
 
         self._history: list[str] = []
         self._history_index: int = 0
@@ -149,6 +151,7 @@ class REPLScreen(Screen):
         input_widget.focus()
 
     def _on_input_submit(self, text: str) -> None:
+        tui_log(f"_on_input_submit: text={text!r}")
         self._start_message_submission(text)
 
     async def on_mouse_down(self, event: events.MouseDown) -> None:
@@ -224,23 +227,45 @@ class REPLScreen(Screen):
         return "Type your message and press Enter (Shift+Enter for new line)"
 
     def _context_usage_text(self) -> str:
-        if not self._latest_usage:
-            return "Context: unavailable (waiting for server)"
-        used_tokens = get_used_context_tokens(self._latest_usage)
-        used_percentage = get_used_context_percentage(
-            self._latest_usage,
-            self._context_window_tokens,
-        )
-        return (
-            "Context: "
-            f"{format_token_count(used_tokens)}/"
-            f"{format_token_count(self._context_window_tokens)} "
-            f"({used_percentage}%)"
-        )
+        if self._latest_usage:
+            used_tokens = get_used_context_tokens(self._latest_usage)
+            used_percentage = get_used_context_percentage(
+                self._latest_usage,
+                self._context_window_tokens,
+            )
+            context_text = (
+                "Context: "
+                f"{format_token_count(used_tokens)}/"
+                f"{format_token_count(self._context_window_tokens)} "
+                f"({used_percentage}%)"
+            )
+        else:
+            context_text = "Context: unavailable (waiting for server)"
+
+        snapshot_text = ""
+        if self._snapshot_status and self._snapshot_status.get("available"):
+            additions = self._snapshot_status.get("additions", 0)
+            deletions = self._snapshot_status.get("deletions", 0)
+            files = self._snapshot_status.get("files", 0)
+            if files > 0:
+                snapshot_text = (
+                    f" | Modified: +{additions}/-{deletions} in {files} file(s)"
+                )
+
+        return context_text + snapshot_text
 
     def _refresh_context_usage_label(self) -> None:
         label = self.query_one("#context-usage", Label)
         label.update(self._context_usage_text())
+
+    async def _refresh_snapshot_status(self) -> None:
+        """Fetch snapshot status and update the context label."""
+        try:
+            status = await self.client.get_snapshot_status(self.session_id)
+            self._snapshot_status = status
+            self._refresh_context_usage_label()
+        except Exception as e:
+            logger.debug(f"Failed to refresh snapshot status: {e}")
 
     def _reset_streaming_state(self) -> None:
         self._current_assistant_widget = None
@@ -250,6 +275,7 @@ class REPLScreen(Screen):
         self._tool_widget_context = {}
 
     def _start_message_submission(self, submitted_value: str) -> None:
+        tui_log(f"_start_message_submission: {submitted_value!r}")
         if self._is_processing:
             return
 
@@ -269,6 +295,60 @@ class REPLScreen(Screen):
 
         if user_text.lower() == "/sessions":
             self._show_sessions_modal()
+            return
+
+        if user_text.lower() == "/rewind":
+            tui_log("REWIND COMMAND DETECTED!")
+            asyncio.create_task(self._show_rewind_modal())
+            return
+
+        input_widget = self.query_one("#user-input", InputTextArea)
+        user_text = submitted_value.strip()
+
+        if not user_text:
+            return
+
+        if user_text.lower() == "/exit":
+            self.app.exit()
+            return
+
+        if user_text.lower() in ("/clear", "/new"):
+            asyncio.create_task(self._start_new_session())
+            return
+
+        if user_text.lower() == "/sessions":
+            self._show_sessions_modal()
+            return
+
+        if user_text.lower() == "/rewind":
+            tui_log("REWIND COMMAND DETECTED!")
+            asyncio.create_task(self._show_rewind_modal())
+            return
+
+        input_widget = self.query_one("#user-input", InputTextArea)
+        user_text = submitted_value.strip()
+
+        if not user_text:
+            return
+
+        if user_text.lower() == "/exit":
+            self.app.exit()
+            return
+
+        if user_text.lower() in ("/clear", "/new"):
+            asyncio.create_task(self._start_new_session())
+            return
+
+        if user_text.lower() == "/sessions":
+            self._show_sessions_modal()
+            return
+
+        if user_text.lower() == "/rewind":
+            import sys
+
+            print("[TUI DEBUG] /rewind command detected", file=sys.stderr)
+            logger.info("[TUI] /rewind command detected")
+            asyncio.create_task(self._show_rewind_modal())
             return
 
         self._hide_welcome_widget()
@@ -301,6 +381,7 @@ class REPLScreen(Screen):
 
         self._session_title = None
         self._latest_usage = None
+        self._snapshot_status = None
         self._reset_streaming_state()
         self._reset_tool_contexts()
 
@@ -327,6 +408,104 @@ class REPLScreen(Screen):
             current_session_id=self.session_id,
         )
         self.app.push_screen(modal, self._on_session_selected)
+
+    async def _show_rewind_modal(self) -> None:
+        """Show the rewind modal for selecting a message to rewind to."""
+        tui_log("_show_rewind_modal called")
+        if self._is_processing:
+            tui_log("_show_rewind_modal: processing, returning")
+            return
+
+        session_info = await self.client.get_session(self.session_id)
+        tui_log(
+            f"_show_rewind_modal: session_info={session_info is not None}, messages={len(session_info.messages) if session_info else 0}"
+        )
+        if session_info is None:
+            return
+
+        modal = RewindModal(
+            messages=session_info.messages,
+            client=self.client,
+            session_id=self.session_id,
+        )
+        self.app.push_screen(modal, self._on_rewind_selected)
+
+    async def _on_rewind_selected(self, result) -> None:
+        """Handle rewind selection from the modal."""
+        tui_log(f"_on_rewind_selected: result={result!r}")
+        if result is None:
+            return
+
+        message_id, message_idx = result
+        tui_log(
+            f"_on_rewind_selected: message_id={message_id!r}, message_idx={message_idx}"
+        )
+
+        self._set_processing_state(True)
+        try:
+            session_info = await self.client.get_session(self.session_id)
+            if not session_info:
+                return
+
+            revert_result = await self.client.revert(
+                self.session_id,
+                target_message_id=message_id,
+            )
+
+            if revert_result.get("success"):
+                summary = revert_result.get("summary", {})
+                additions = summary.get("additions", 0)
+                deletions = summary.get("deletions", 0)
+                files = summary.get("files", 0)
+
+                message_list = self.query_one("#message-list", MessageList)
+                message_list.clear()
+
+                session_info = await self.client.get_session(self.session_id)
+                if session_info and session_info.messages:
+                    messages_to_render = (
+                        session_info.messages[:-1]
+                        if len(session_info.messages) > 0
+                        else []
+                    )
+                    await self._render_messages(message_list, messages_to_render)
+
+                    last_msg = (
+                        session_info.messages[-1] if session_info.messages else None
+                    )
+                    if last_msg and last_msg.type == MessageRole.USER:
+                        pending_text = last_msg.original_text or last_msg.get_text()
+                        input_widget = self.query_one("#user-input", InputTextArea)
+                        input_widget.load_text(pending_text)
+                        line_count = input_widget.document.line_count
+                        if line_count > 0:
+                            last_line = line_count - 1
+                            last_col = len(input_widget.document.get_line(last_line))
+                            input_widget.move_cursor((last_line, last_col))
+
+                info_msg = Message.system_message(
+                    f"Rewound to message #{message_idx + 1}. "
+                    f"Undid changes in {files} file(s): "
+                    f"removed {additions} line(s), restored {deletions} line(s)."
+                )
+                await message_list.add_message(info_msg)
+                await self._refresh_snapshot_status()
+            else:
+                error_msg = revert_result.get("message", "Unknown error")
+                message_list = self.query_one("#message-list", MessageList)
+                error_widget = Message.system_message(f"Rewind failed: {error_msg}")
+                await message_list.add_message(error_widget)
+
+        except Exception as e:
+            log_full_exception(logger, "Rewind error", e)
+            message_list = self.query_one("#message-list", MessageList)
+            error_widget = Message.system_message(f"Rewind error: {str(e)}")
+            await message_list.add_message(error_widget)
+
+        finally:
+            self._set_processing_state(False)
+            input_widget = self.query_one("#user-input", InputTextArea)
+            input_widget.focus()
 
     async def _on_session_selected(self, session_summary) -> None:
         """Handle session selection from the modal."""
@@ -360,6 +539,7 @@ class REPLScreen(Screen):
         await self._render_messages(message_list, messages)
 
         self._refresh_context_usage_label()
+        await self._refresh_snapshot_status()
 
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.load_text(pending_user_text or "")
@@ -502,6 +682,7 @@ class REPLScreen(Screen):
         elif isinstance(event, TurnCompleteEvent):
             self._reset_tool_contexts()
             self._current_assistant_widget = None
+            asyncio.create_task(self._refresh_snapshot_status())
 
         elif isinstance(event, ErrorEvent):
             logger.debug(f"ErrorEvent received: {event.error}")

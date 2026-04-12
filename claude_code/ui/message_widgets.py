@@ -296,14 +296,16 @@ class ToolUseWidget(VerticalGroup):
                     current_content = f.read()
 
                 # Reverse replacement to reconstruct original file
-                test_old = current_content
-                if replace_all:
-                    test_old = test_old.replace(new_string, old_string)
-                else:
-                    test_old = test_old.replace(new_string, old_string, 1)
+                # Only attempt if new_string is non-empty and exists in current_content
+                if new_string and new_string in current_content:
+                    test_old = current_content
+                    if replace_all:
+                        test_old = test_old.replace(new_string, old_string)
+                    else:
+                        test_old = test_old.replace(new_string, old_string, 1)
 
-                if test_old != current_content:
-                    old_text, new_text = test_old, current_content
+                    if test_old != current_content:
+                        old_text, new_text = test_old, current_content
         except Exception:
             pass
 

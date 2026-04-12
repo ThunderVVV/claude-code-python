@@ -16,6 +16,8 @@ from claude_code.core.messages import (
     ThinkingContent,
     ToolResultContent,
     ToolUseContent,
+    PatchContent,
+    StepStartContent,
     Usage,
     generate_uuid,
 )
@@ -27,6 +29,18 @@ _DISPLAY_TAG_PATTERN = re.compile(
     re.MULTILINE,
 )
 _WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
+@dataclass
+class RevertStateData:
+    """Persisted revert state data."""
+
+    message_id: str = ""
+    part_id: Optional[str] = None
+    snapshot: Optional[str] = None
+    additions: int = 0
+    deletions: int = 0
+    files: int = 0
 
 
 @dataclass
@@ -42,6 +56,8 @@ class PersistedSession:
     model_name: Optional[str] = None
     total_usage: Usage = field(default_factory=Usage)
     messages: list[Message] = field(default_factory=list)
+    revert_state: Optional[RevertStateData] = None
+    total_diff: Optional[dict] = None
 
 
 @dataclass
@@ -92,6 +108,8 @@ class SessionStore:
         created_at: Optional[str] = None,
         model_name: Optional[str] = None,
         total_usage: Optional[Usage] = None,
+        revert_state: Optional[RevertStateData] = None,
+        total_diff: Optional[dict] = None,
     ) -> PersistedSession:
         """Persist a stable session snapshot to disk."""
         existing = self.load_session(session_id)
@@ -102,6 +120,7 @@ class SessionStore:
             or (existing.title if existing else "")
             or derive_session_title(messages, fallback_session_id=session_id)
         )
+        resolved_total_diff = total_diff or (existing.total_diff if existing else None)
 
         session = PersistedSession(
             session_id=session_id,
@@ -117,6 +136,8 @@ class SessionStore:
                 total_usage or (existing.total_usage if existing else None)
             ),
             messages=list(messages),
+            revert_state=revert_state,
+            total_diff=resolved_total_diff,
         )
         self.save_session(session)
         return session
@@ -136,6 +157,8 @@ class SessionStore:
             "model_name": session.model_name,
             "total_usage": _usage_to_dict(session.total_usage),
             "messages": [_message_to_dict(message) for message in session.messages],
+            "revert_state": _revert_state_to_dict(session.revert_state),
+            "total_diff": session.total_diff,
         }
         tmp_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -169,6 +192,8 @@ class SessionStore:
                     for message_data in payload.get("messages", [])
                     if isinstance(message_data, dict)
                 ],
+                revert_state=_revert_state_from_dict(payload.get("revert_state")),
+                total_diff=payload.get("total_diff"),
             )
         except Exception:
             return None
@@ -255,6 +280,32 @@ def _usage_from_dict(data: Any) -> Usage:
     )
 
 
+def _revert_state_to_dict(state: Optional[RevertStateData]) -> Optional[dict[str, Any]]:
+    if state is None:
+        return None
+    return {
+        "message_id": state.message_id,
+        "part_id": state.part_id,
+        "snapshot": state.snapshot,
+        "additions": state.additions,
+        "deletions": state.deletions,
+        "files": state.files,
+    }
+
+
+def _revert_state_from_dict(data: Any) -> Optional[RevertStateData]:
+    if not isinstance(data, dict):
+        return None
+    return RevertStateData(
+        message_id=str(data.get("message_id", "")),
+        part_id=data.get("part_id"),
+        snapshot=data.get("snapshot"),
+        additions=int(data.get("additions", 0)),
+        deletions=int(data.get("deletions", 0)),
+        files=int(data.get("files", 0)),
+    )
+
+
 def _content_block_to_dict(block: Any) -> dict[str, Any]:
     if isinstance(block, TextContent):
         return {"type": "text", "text": block.text}
@@ -277,6 +328,18 @@ def _content_block_to_dict(block: Any) -> dict[str, Any]:
             "tool_use_id": block.tool_use_id,
             "content": block.content,
             "is_error": block.is_error,
+        }
+    if isinstance(block, PatchContent):
+        return {
+            "type": "patch",
+            "prev_hash": block.prev_hash,
+            "hash": block.hash,
+            "files": block.files,
+        }
+    if isinstance(block, StepStartContent):
+        return {
+            "type": "step_start",
+            "snapshot": block.snapshot,
         }
     raise TypeError(f"Unsupported content block: {type(block)!r}")
 
@@ -301,6 +364,17 @@ def _content_block_from_dict(data: dict[str, Any]) -> Any:
             tool_use_id=str(data.get("tool_use_id", "")),
             content=str(data.get("content", "")),
             is_error=bool(data.get("is_error", False)),
+        )
+    if block_type == "patch":
+        files = data.get("files", [])
+        return PatchContent(
+            prev_hash=str(data.get("prev_hash", "")),
+            hash=str(data.get("hash", "")),
+            files=files if isinstance(files, list) else [],
+        )
+    if block_type == "step_start":
+        return StepStartContent(
+            snapshot=str(data.get("snapshot", "")),
         )
     raise ValueError(f"Unknown content block type: {block_type!r}")
 

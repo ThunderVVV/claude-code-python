@@ -12,6 +12,7 @@ from typing import Any, AsyncGenerator, List, Optional
 from claude_code.core.messages import (
     ContentBlock,
     Message,
+    MessageRole,
     QueryState,
     QueryEvent,
     TextContent,
@@ -24,11 +25,14 @@ from claude_code.core.messages import (
     MessageCompleteEvent,
     TurnCompleteEvent,
     ErrorEvent,
+    PatchContent,
     generate_uuid,
 )
 from claude_code.core.tools import ToolContext, ToolRegistry
 from claude_code.core.prompts import create_default_system_prompt
 from claude_code.core.file_expansion import expand_file_references
+from claude_code.core.snapshot import SnapshotManager, DiffSummary
+from claude_code.core.revert import RevertState, SessionRevertService
 from claude_code.services.openai_client import (
     OpenAIClient,
     OpenAIClientConfig,
@@ -109,6 +113,13 @@ class QueryEngine:
         self._session_title = session_title
         self._session_created_at = session_created_at
 
+        # Snapshot system for file revert
+        self._snapshot_manager: Optional[SnapshotManager] = None
+        self._current_snapshot: Optional[str] = None
+        self._revert_state: Optional[RevertState] = None
+        self._revert_service: Optional[SessionRevertService] = None
+        self._total_diff: Optional[DiffSummary] = None
+
     @classmethod
     async def create_from_session_id(
         cls,
@@ -144,13 +155,41 @@ class QueryEngine:
             session_created_at=persisted.created_at if persisted else None,
         )
 
+        if persisted and persisted.revert_state:
+            from claude_code.core.snapshot import DiffSummary
+
+            engine._initial_revert_state = RevertState(
+                message_id=persisted.revert_state.message_id,
+                part_id=persisted.revert_state.part_id,
+                snapshot=persisted.revert_state.snapshot,
+                diff=DiffSummary(
+                    additions=persisted.revert_state.additions,
+                    deletions=persisted.revert_state.deletions,
+                    files=persisted.revert_state.files,
+                ),
+            )
+
+        if persisted and persisted.total_diff:
+            engine._total_diff = DiffSummary(
+                additions=persisted.total_diff.get("additions", 0),
+                deletions=persisted.total_diff.get("deletions", 0),
+                files=persisted.total_diff.get("files", 0),
+            )
+
         await engine.initialize()
+        if engine._snapshot_manager:
+            engine.recalculate_total_diff()
         return engine
 
     async def initialize(self) -> None:
         """Initialize the engine (create HTTP client)"""
         if not self._is_initialized:
             self._client = OpenAIClient(self.client_config)
+            self._snapshot_manager = SnapshotManager(self._cwd)
+            self._revert_service = SessionRevertService(self._snapshot_manager)
+            if hasattr(self, "_initial_revert_state"):
+                self._revert_state = self._initial_revert_state
+                delattr(self, "_initial_revert_state")
             self._is_initialized = True
 
     async def close(self) -> None:
@@ -181,6 +220,71 @@ class QueryEngine:
     def get_messages(self) -> List[Message]:
         """Get all messages in the conversation"""
         return self.state.messages
+
+    def truncate_messages_to(self, message_id: str) -> int:
+        """Truncate messages list to exclude messages after the given message_id.
+
+        Returns the number of messages removed.
+        """
+        truncate_idx = None
+        for idx, msg in enumerate(self.state.messages):
+            if msg.uuid == message_id:
+                truncate_idx = idx + 1
+                break
+
+        if truncate_idx is not None and truncate_idx < len(self.state.messages):
+            removed_count = len(self.state.messages) - truncate_idx
+            self.state.messages = self.state.messages[:truncate_idx]
+            return removed_count
+        return 0
+
+    def get_revert_state(self) -> Optional[RevertState]:
+        """Get the current revert state"""
+        return self._revert_state
+
+    def set_revert_state(self, state: Optional[RevertState]) -> None:
+        """Set the revert state"""
+        self._revert_state = state
+
+    def clear_revert_state(self) -> None:
+        """Clear the revert state"""
+        self._revert_state = None
+
+    def get_snapshot_manager(self) -> Optional[SnapshotManager]:
+        """Get the snapshot manager"""
+        return self._snapshot_manager
+
+    def get_revert_service(self) -> Optional[SessionRevertService]:
+        """Get the revert service"""
+        return self._revert_service
+
+    def get_total_diff(self) -> Optional[DiffSummary]:
+        """Get the total diff accumulated from all AI tool operations"""
+        return self._total_diff
+
+    def recalculate_total_diff(self) -> None:
+        """Recalculate total_diff from all PatchContent in messages."""
+        if not self._snapshot_manager:
+            return
+        additions = 0
+        deletions = 0
+        all_file_paths: set = set()
+        for message in self.state.messages:
+            for content in message.content:
+                if isinstance(content, PatchContent):
+                    if content.prev_hash and content.hash:
+                        patch_diff = self._snapshot_manager.diff(
+                            content.prev_hash, content.hash
+                        )
+                        additions += patch_diff.additions
+                        deletions += patch_diff.deletions
+                        all_file_paths.update(patch_diff.file_paths)
+        self._total_diff = DiffSummary(
+            additions=additions,
+            deletions=deletions,
+            files=len(all_file_paths),
+            file_paths=all_file_paths,
+        )
 
     def _get_tool_context(self) -> ToolContext:
         """Get tool execution context"""
@@ -239,17 +343,41 @@ class QueryEngine:
         """Return the current interrupt reason, if any."""
         return self._interrupt_reason
 
+    def persist_session(self) -> None:
+        """Persist session to disk. Public method for external callers."""
+        self._persist_session()
+
     def _persist_session(self) -> None:
         """Persist session to disk."""
         if self._session_store is None:
             return
 
         try:
-            from claude_code.core.session_store import derive_session_title
+            from claude_code.core.session_store import (
+                derive_session_title,
+                RevertStateData,
+            )
 
             self._session_title = self._session_title or derive_session_title(
                 self.state.messages, self._session_id
             )
+
+            revert_data: Optional[RevertStateData] = None
+            if self._revert_state:
+                revert_data = RevertStateData(
+                    message_id=self._revert_state.message_id,
+                    part_id=self._revert_state.part_id,
+                    snapshot=self._revert_state.snapshot,
+                    additions=self._revert_state.diff.additions
+                    if self._revert_state.diff
+                    else 0,
+                    deletions=self._revert_state.diff.deletions
+                    if self._revert_state.diff
+                    else 0,
+                    files=self._revert_state.diff.files
+                    if self._revert_state.diff
+                    else 0,
+                )
 
             session = self._session_store.save_snapshot(
                 session_id=self._session_id,
@@ -260,6 +388,14 @@ class QueryEngine:
                 created_at=self._session_created_at,
                 model_name=self.client_config.model_name,
                 total_usage=self.state.total_usage,
+                revert_state=revert_data,
+                total_diff={
+                    "additions": self._total_diff.additions if self._total_diff else 0,
+                    "deletions": self._total_diff.deletions if self._total_diff else 0,
+                    "files": self._total_diff.files if self._total_diff else 0,
+                }
+                if self._total_diff
+                else None,
             )
             self._session_title = session.title
             self._session_created_at = session.created_at
@@ -317,10 +453,35 @@ class QueryEngine:
                 original_text=user_text,
                 web_enabled=web_enabled,
             )
-            self.state.add_message(user_message)
-            logger.info(
-                f"User message created - session_id={self._session_id}, web_enabled={web_enabled}"
-            )
+
+            # Check if we're in a rewind state - replace last message instead of appending
+            if self._revert_state and self.state.messages:
+                last_msg = self.state.messages[-1]
+                if (
+                    last_msg.type == MessageRole.USER
+                    and last_msg.uuid == self._revert_state.message_id
+                ):
+                    # Replace the last user message (rewound message) with the new one
+                    user_message.uuid = (
+                        last_msg.uuid
+                    )  # Keep the same UUID for consistency
+                    self.state.messages[-1] = user_message
+                    logger.info(
+                        f"Replaced rewound user message - session_id={self._session_id}"
+                    )
+                    # Clear revert state since user has submitted a new message
+                    self.clear_revert_state()
+                else:
+                    self.state.add_message(user_message)
+                    logger.info(
+                        f"User message created - session_id={self._session_id}, web_enabled={web_enabled}"
+                    )
+            else:
+                self.state.add_message(user_message)
+                logger.info(
+                    f"User message created - session_id={self._session_id}, web_enabled={web_enabled}"
+                )
+
             yield MessageCompleteEvent(message=user_message)
 
             # Run the query loop
@@ -528,6 +689,20 @@ class QueryEngine:
                 )
                 tool_results: List[tuple] = []
 
+                # Track snapshots for file-modifying tools
+                step_snapshot: Optional[str] = None
+                has_file_modifying_tools = any(
+                    tool_use.name in ("Edit", "Write")
+                    for tool_use in tool_use_blocks
+                    if tool_use.name
+                )
+                if has_file_modifying_tools and self._snapshot_manager:
+                    try:
+                        step_snapshot = self._snapshot_manager.track()
+                        logger.debug(f"Created step snapshot: {step_snapshot[:8]}")
+                    except Exception as e:
+                        logger.warning(f"Failed to create step snapshot: {e}")
+
                 for tool_use in tool_use_blocks:
                     self._raise_if_interrupted()
                     if not tool_use.id or not tool_use.name:
@@ -572,6 +747,38 @@ class QueryEngine:
                             is_error=True,
                         )
                         tool_results.append((tool_use.id, error_msg, True))
+
+                # Create patch after tool execution if we had a snapshot
+                if step_snapshot and self._snapshot_manager:
+                    try:
+                        patch = self._snapshot_manager.patch(step_snapshot)
+                        if patch.files:
+                            patch_content = PatchContent(
+                                prev_hash=step_snapshot,
+                                hash=patch.hash,
+                                files=patch.files,
+                            )
+                            logger.info(
+                                f"Created patch: prev={step_snapshot[:8]} -> {patch.hash[:8]} with {len(patch.files)} files"
+                            )
+                            # Attach patch to the last assistant message
+                            if self.state.messages:
+                                last_msg = self.state.messages[-1]
+                                if last_msg.type.value == "assistant":
+                                    last_msg.content.append(patch_content)
+
+                            # Accumulate diff to total_diff
+                            patch_diff = self._snapshot_manager.diff(
+                                step_snapshot, patch.hash
+                            )
+                            if self._total_diff is None:
+                                self._total_diff = DiffSummary()
+                            self._total_diff.additions += patch_diff.additions
+                            self._total_diff.deletions += patch_diff.deletions
+                            self._total_diff.file_paths.update(patch_diff.file_paths)
+                            self._total_diff.files = len(self._total_diff.file_paths)
+                    except Exception as e:
+                        logger.warning(f"Failed to create patch: {e}")
 
                 # Add tool result messages
                 self._raise_if_interrupted()

@@ -81,8 +81,46 @@ class ToolResultContent:
         }
 
 
-# Content block union type
-ContentBlock = Union[TextContent, ThinkingContent, ToolUseContent, ToolResultContent]
+@dataclass
+class PatchContent:
+    """Patch content block for file revert tracking - aligned with OpenCode PatchPart"""
+
+    type: str = field(default="patch", init=False)
+    prev_hash: str = ""  # Git tree hash BEFORE changes (snapshot before tool execution)
+    hash: str = ""  # Git tree hash AFTER changes
+    files: List[str] = field(default_factory=list)  # List of changed file paths
+
+    def to_api_format(self) -> Dict[str, Any]:
+        return {
+            "type": "patch",
+            "prev_hash": self.prev_hash,
+            "hash": self.hash,
+            "files": self.files,
+        }
+
+
+@dataclass
+class StepStartContent:
+    """Step start content block for tracking tool execution start"""
+
+    type: str = field(default="step_start", init=False)
+    snapshot: str = ""  # Git tree hash before tool execution
+
+    def to_api_format(self) -> Dict[str, Any]:
+        return {
+            "type": "step_start",
+            "snapshot": self.snapshot,
+        }
+
+
+ContentBlock = Union[
+    TextContent,
+    ThinkingContent,
+    ToolUseContent,
+    ToolResultContent,
+    PatchContent,
+    StepStartContent,
+]
 
 
 def generate_uuid() -> str:

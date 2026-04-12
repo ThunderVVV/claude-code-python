@@ -93,10 +93,10 @@ def dict_to_message(data: dict) -> Message:
     msg = Message(
         type=dict_to_message_role(data.get("role", "user")),
         content=content_blocks,
-        uuid="",
+        uuid=data.get("uuid", ""),
         timestamp=datetime.now(),
         original_text=data.get("original_text", ""),
-        message={},
+        message={"usage": data.get("usage")} if data.get("usage") else {},
         file_expansions=file_expansions,
         web_enabled=data.get("web_enabled", False),
     )
@@ -341,3 +341,85 @@ class ClaudeCodeHttpClient:
         except httpx.HTTPError as e:
             logger.error(f"List sessions request failed: {e}")
             return []
+
+    async def revert(
+        self,
+        session_id: str,
+        target_message_id: Optional[str] = None,
+        target_part_id: Optional[str] = None,
+    ) -> dict:
+        """Revert file changes from a specific point."""
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        request_data = {
+            "session_id": session_id,
+            "target_message_id": target_message_id,
+            "target_part_id": target_part_id,
+        }
+        logger.info(
+            f"[CLIENT] Revert request: session_id={session_id}, "
+            f"target_message_id={target_message_id!r}"
+        )
+
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/api/revert",
+                json=request_data,
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Revert request failed: {e}")
+            return {"success": False, "message": str(e)}
+
+    async def unrevert(self, session_id: str) -> dict:
+        """Undo a previous revert operation."""
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        request_data = {"session_id": session_id}
+        logger.debug(f"Sending Unrevert request - session_id: {session_id}")
+
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/api/unrevert",
+                json=request_data,
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Unrevert request failed: {e}")
+            return {"success": False, "message": str(e)}
+
+    async def get_revert_state(self, session_id: str) -> dict:
+        """Get the current revert state for a session."""
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        logger.debug(f"Sending GetRevertState request - session_id: {session_id}")
+
+        try:
+            response = await self._client.get(
+                f"{self._base_url}/api/revert_state/{session_id}",
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Get revert state request failed: {e}")
+            return {"has_revert": False}
+
+    async def get_snapshot_status(self, session_id: str) -> dict:
+        """Get the snapshot status (files modified, additions, deletions)."""
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        try:
+            response = await self._client.get(
+                f"{self._base_url}/api/snapshot_status/{session_id}",
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Get snapshot status request failed: {e}")
+            return {"available": False}

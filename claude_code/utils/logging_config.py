@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,15 @@ def _resolve_log_tag(logger_name: str, default_tag: str) -> str:
             return tag
     return default_tag
 
+_TUI_LOG_PATH = os.path.expanduser("~/.claude-code-python/tui.log")
+
+def tui_log(message: str, level: str = "INFO") -> None:
+    """Direct file logging for TUI - bypasses Python logging entirely."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+    line = f"{timestamp} [TUI] {level} - {message}\n"
+    with open(_TUI_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(line)
+
 
 class _SourceTagFilter(logging.Filter):
     def __init__(self, default_tag: str):
@@ -43,6 +53,8 @@ def setup_server_logging(log_dir: str = ".logs", debug: bool = True) -> None:
 
 def setup_client_logging(log_dir: str = ".logs", debug: bool = True) -> None:
     """Configure logging for the HTTP/TUI client."""
+    with open(_TUI_LOG_PATH, "w", encoding="utf-8") as f:
+        f.write("TUI logging initialized")
     _setup_logging(log_dir, debug, "cc-py")
 
 
