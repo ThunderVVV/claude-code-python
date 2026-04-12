@@ -57,6 +57,10 @@
 - **工具调用可视化**：清晰展示工具调用过程和结果
 - **Diff 内容渲染**：`Edit` 和 `Write` 工具结果以 diff 格式呈现，直观显示文件变更
 
+<p align="center">
+  <img src="docs/assets/webui.png" width="50%" alt="Web UI"/>
+</p>
+
 ### Session 管理
 - **Session 持久化**：每次 TUI 对话自动分配唯一 session ID，持久化到 `~/.claude-code-python/sessions/`
 - **Session 恢复**：通过 `--resume <session_id>` 或 `--sessions` 选择恢复历史会话
@@ -216,6 +220,10 @@ cc-web --debug
 - 后端：`cc-server`
 - TUI 客户端：`cc-py`
 - Web UI：`cc-web`
+
+## TODO
+
+- Web界面风格优化
 
 ## 许可证
 
