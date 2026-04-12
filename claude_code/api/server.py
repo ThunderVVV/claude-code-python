@@ -318,7 +318,7 @@ async def event_stream(chat_request: ChatRequest):
             session_id = generate_uuid()
 
         yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
-        logger.debug("Yielded session_id")
+        logger.debug("yielded session_id")
 
         engine = await session_manager.get_or_create_engine(
             session_id,

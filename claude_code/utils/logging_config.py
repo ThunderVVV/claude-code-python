@@ -37,29 +37,13 @@ class _SourceTagFilter(logging.Filter):
         return True
 
 
-def suppress_grpc_logs() -> None:
-    """Suppress verbose gRPC C++ core library logs when present.
-
-    These logs (like 'FD from fork parent still in poll list') come from
-    gRPC's internal event polling mechanism and are not controlled by
-    Python's logging system.
-    """
-    # Suppress INFO level logs from gRPC C++ core
-    # Options: ERROR, WARNING, INFO, DEBUG
-    os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
-    # Disable gRPC tracing (empty string means no tracers enabled)
-    os.environ.setdefault("GRPC_TRACE", "")
-
-
 def setup_server_logging(log_dir: str = ".logs", debug: bool = True) -> None:
     """Configure logging for the API server."""
-    suppress_grpc_logs()
     _setup_logging(log_dir, debug, "FASTAPI")
 
 
 def setup_client_logging(log_dir: str = ".logs", debug: bool = True) -> None:
     """Configure logging for the HTTP/TUI client."""
-    suppress_grpc_logs()
     _setup_logging(log_dir, debug, "TUI")
 
 

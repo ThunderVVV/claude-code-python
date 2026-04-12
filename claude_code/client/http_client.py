@@ -214,17 +214,13 @@ class ClaudeCodeHttpClient:
             "working_directory": working_directory,
         }
 
-        logger.debug(f"Request data: {request_data}")
-
         try:
-            logger.debug("Making stream request...")
             async with self._client.stream(
                 "POST",
                 f"{self._base_url}/api/chat",
                 json=request_data,
                 timeout=None,
             ) as response:
-                logger.debug(f"Response status: {response.status_code}")
                 response.raise_for_status()
 
                 buffer = ""
@@ -239,7 +235,6 @@ class ClaudeCodeHttpClient:
                             if data_str:
                                 try:
                                     data = json.loads(data_str)
-                                    logger.debug(f"Parsed data: {data}")
                                     if data.get("type") == "session_id":
                                         continue
                                     event = dict_to_query_event(data)
