@@ -519,7 +519,7 @@ class QueryEngine:
                     input_str = str(tool_use.input)
                     truncated = input_str[:50] + "..." if len(input_str) > 50 else input_str
                     tool_calls_info.append(f"{tool_use.name}({truncated})")
-                logger.debug(
+                logger.info(
                     f"Executing {len(tool_use_blocks)} tool calls: {tool_calls_info}"
                 )
                 tool_results: List[tuple] = []

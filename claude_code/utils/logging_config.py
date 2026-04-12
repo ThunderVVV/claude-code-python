@@ -39,12 +39,12 @@ class _SourceTagFilter(logging.Filter):
 
 def setup_server_logging(log_dir: str = ".logs", debug: bool = True) -> None:
     """Configure logging for the API server."""
-    _setup_logging(log_dir, debug, "FASTAPI")
+    _setup_logging(log_dir, debug, "cc-api")
 
 
 def setup_client_logging(log_dir: str = ".logs", debug: bool = True) -> None:
     """Configure logging for the HTTP/TUI client."""
-    _setup_logging(log_dir, debug, "TUI")
+    _setup_logging(log_dir, debug, "cc-py")
 
 
 def _setup_logging(log_dir: str, debug: bool, default_tag: str) -> None:
@@ -64,7 +64,7 @@ def _setup_logging(log_dir: str, debug: bool, default_tag: str) -> None:
         log_path = Path(log_dir) / f"claude-code_{timestamp}_{default_tag.lower()}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+        file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter(log_format))
         file_handler.addFilter(source_tag_filter)
