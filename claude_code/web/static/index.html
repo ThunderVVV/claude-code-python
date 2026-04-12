@@ -205,7 +205,7 @@
     <div id="app"></div>
 
     <script>
-    const { createApp, ref, reactive, computed, nextTick, onMounted, watch } = Vue;
+    const { createApp, ref, computed, nextTick, onMounted, onBeforeUnmount, watch } = Vue;
 
     // Utility functions
     const escapeHtml = (text) => {
@@ -213,6 +213,10 @@
         div.textContent = text;
         return div.innerHTML;
     };
+
+    const WEB_REFERENCE_PATTERN = /(^|[\s])@web(?=$|[\s,;:!?()])/;
+
+    const hasWebReference = (text) => WEB_REFERENCE_PATTERN.test(text || '');
 
     const renderMarkdown = (text) => marked.parse(text);
 
@@ -239,23 +243,6 @@
             }
         }
         return diff;
-    };
-
-    const renderDiff = (content, containerId) => {
-        try {
-            const configuration = {
-                drawFileList: false,
-                matching: 'lines',
-                outputFormat: 'side-by-side',
-                highlight: true,
-                synchronisedScroll: true,
-                colorScheme: 'dark'
-            };
-            return { diffContent: content, config: configuration, containerId };
-        } catch (e) {
-            console.error('Diff render error:', e);
-            return null;
-        }
     };
 
     // Main App
@@ -302,7 +289,7 @@
                 <!-- Chat Container -->
                 <div class="flex-1 overflow-hidden flex flex-col glass rounded-2xl shadow-2xl">
                     <!-- Messages Area -->
-                    <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                    <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-4" @scroll="handleMessagesScroll">
                         <!-- Welcome Message -->
                         <div v-if="messages.length === 0" class="text-center py-12">
                             <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-600/20 flex items-center justify-center">
@@ -345,6 +332,12 @@
 
                     <!-- Input Area -->
                     <div class="p-4 md:p-6 border-t border-slate-700/50 bg-slate-900/50">
+                        <div v-if="currentInputHasWeb" class="mb-3 flex items-center gap-2 text-xs">
+                            <span class="inline-flex items-center rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-1 font-medium text-blue-300">
+                                @web 已启用
+                            </span>
+                            <span class="text-slate-400">本次请求将启用 Web 能力</span>
+                        </div>
                         <form @submit.prevent="sendMessage" class="flex gap-3">
                             <div class="flex-1 relative">
                                 <textarea
@@ -438,17 +431,18 @@
             const showSessionsModal = ref(false);
             const sessions = ref([]);
             const sessionsLoading = ref(false);
+            const autoFollowOutput = ref(true);
 
             // Input history
             const inputHistory = ref(JSON.parse(localStorage.getItem('inputHistory') || '[]'));
-            const historyIndex = ref(-1);
+            const navItems = ref([]);
+            const historyIndex = ref(0);
 
             // Current streaming state
             const currentAssistantMessage = ref(null);
             const accumulatedText = ref('');
             const pendingToolUses = ref({});
             const toolUseCounter = ref(0);
-            const diffCounter = ref(0);
 
             // For aborting fetch request
             const abortController = ref(null);
@@ -459,14 +453,30 @@
 
             // Computed
             const statusColorClass = computed(() => `bg-${statusColor.value}-500`);
+            const currentInputHasWeb = computed(() => hasWebReference(inputText.value));
 
             // Methods
-            const scrollToBottom = () => {
+            const isNearBottom = () => {
+                if (!messagesContainer.value) return true;
+                const { scrollHeight, scrollTop, clientHeight } = messagesContainer.value;
+                return scrollHeight - scrollTop - clientHeight <= 24;
+            };
+
+            const updateAutoFollowState = () => {
+                autoFollowOutput.value = isNearBottom();
+            };
+
+            const scrollToBottom = (force = false) => {
                 nextTick(() => {
-                    if (messagesContainer.value) {
+                    if (messagesContainer.value && (force || autoFollowOutput.value)) {
                         messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+                        autoFollowOutput.value = true;
                     }
                 });
+            };
+
+            const handleMessagesScroll = () => {
+                updateAutoFollowState();
             };
 
             const autoResize = (e) => {
@@ -474,20 +484,20 @@
                 e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
             };
 
+            const resetHistoryNavigation = () => {
+                navItems.value = [...inputHistory.value, ''];
+                historyIndex.value = navItems.value.length - 1;
+            };
+
             const navigateHistory = (direction) => {
-                if (inputHistory.value.length === 0) return;
+                if (navItems.value.length === 0) return;
+
+                navItems.value[historyIndex.value] = inputText.value;
 
                 historyIndex.value += direction;
+                historyIndex.value = Math.max(0, Math.min(historyIndex.value, navItems.value.length - 1));
 
-                if (historyIndex.value < 0) {
-                    historyIndex.value = 0;
-                } else if (historyIndex.value >= inputHistory.value.length) {
-                    historyIndex.value = inputHistory.value.length;
-                    inputText.value = '';
-                    return;
-                }
-
-                inputText.value = inputHistory.value[historyIndex.value] || '';
+                inputText.value = navItems.value[historyIndex.value] || '';
                 nextTick(() => autoResize({ target: messageInput.value }));
             };
 
@@ -495,6 +505,9 @@
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
+                } else if (e.key === 'Escape' && isStreaming.value) {
+                    e.preventDefault();
+                    sendInterrupt();
                 } else if (e.key === 'ArrowUp' && !e.shiftKey) {
                     e.preventDefault();
                     navigateHistory(-1);
@@ -507,11 +520,13 @@
             const addToHistory = (text) => {
                 if (text.trim() && (inputHistory.value.length === 0 || inputHistory.value[inputHistory.value.length - 1] !== text)) {
                     inputHistory.value.push(text);
-                    if (inputHistory.value.length > 100) inputHistory.value.shift();
+                    if (inputHistory.value.length > 1000) inputHistory.value.shift();
                     localStorage.setItem('inputHistory', JSON.stringify(inputHistory.value));
                 }
-                historyIndex.value = inputHistory.value.length;
+                resetHistoryNavigation();
             };
+
+            resetHistoryNavigation();
 
             const summarizeToolUse = (toolName, toolInput) => {
                 if (!toolInput) return toolName;
@@ -640,15 +655,119 @@
                 return null;
             };
 
-            const handleEvent = (data) => {
-                isTyping.value = false;
-                statusText.value = '输出中...';
-                statusColor.value = 'blue';
+            const createUserMessage = (text, options = {}) => ({
+                type: 'user',
+                text,
+                originalText: options.originalText || text,
+                fileExpansions: options.fileExpansions || [],
+                webEnabled: options.webEnabled ?? hasWebReference(options.originalText || text)
+            });
 
+            const applyServerUserMessage = (message) => {
+                const originalText = message.original_text || '';
+                const updatedMessage = createUserMessage(originalText, {
+                    originalText,
+                    fileExpansions: message.file_expansions || [],
+                    webEnabled: Boolean(message.web_enabled)
+                });
+
+                const lastMessage = messages.value[messages.value.length - 1];
+                if (lastMessage?.type === 'user') {
+                    messages.value[messages.value.length - 1] = updatedMessage;
+                } else {
+                    messages.value.push(updatedMessage);
+                }
+            };
+
+            const getSelectedText = () => {
+                const activeElement = document.activeElement;
+                if (
+                    activeElement &&
+                    typeof activeElement.selectionStart === 'number' &&
+                    typeof activeElement.selectionEnd === 'number' &&
+                    typeof activeElement.value === 'string'
+                ) {
+                    const { selectionStart, selectionEnd, value } = activeElement;
+                    if (selectionStart !== selectionEnd) {
+                        return value.slice(selectionStart, selectionEnd);
+                    }
+                }
+                return window.getSelection()?.toString() || '';
+            };
+
+            const flashStatus = (text, color = 'emerald') => {
+                statusText.value = text;
+                statusColor.value = color;
+                setTimeout(() => {
+                    if (!isStreaming.value) {
+                        statusText.value = '就绪';
+                        statusColor.value = 'emerald';
+                    }
+                }, 1000);
+            };
+
+            const copySelectedText = async (e) => {
+                const selectedText = getSelectedText();
+                if (!selectedText) return false;
+                if (!navigator.clipboard?.writeText) return false;
+
+                try {
+                    e.preventDefault();
+                    await navigator.clipboard.writeText(selectedText);
+                    flashStatus('已复制');
+                    return true;
+                } catch (error) {
+                    console.error('Copy failed:', error);
+                    return false;
+                }
+            };
+
+            const handleGlobalKeydown = async (e) => {
+                const key = e.key.toLowerCase();
+                const isCopyShortcut = (e.metaKey || e.ctrlKey) && key === 'c' && !e.altKey;
+
+                if (isCopyShortcut) {
+                    await copySelectedText(e);
+                    return;
+                }
+
+                if (e.key === 'Escape') {
+                    if (showSessionsModal.value) {
+                        showSessionsModal.value = false;
+                    } else if (isStreaming.value) {
+                        e.preventDefault();
+                        sendInterrupt();
+                    }
+                }
+            };
+
+            const handleEvent = (data) => {
                 if (data.type === 'session_id') {
                     sessionId.value = data.session_id;
                     return;
                 }
+
+                if (data.type === 'message_complete') {
+                    if (data.message?.role === 'user') {
+                        applyServerUserMessage(data.message);
+                    }
+                    scrollToBottom();
+                    return;
+                }
+
+                if (data.type === 'turn_complete') {
+                    currentAssistantMessage.value = null;
+                    accumulatedText.value = '';
+                    pendingToolUses.value = {};
+                    statusText.value = '就绪';
+                    statusColor.value = 'emerald';
+                    scrollToBottom();
+                    return;
+                }
+
+                isTyping.value = false;
+                statusText.value = '输出中...';
+                statusColor.value = 'blue';
 
                 if (!currentAssistantMessage.value) {
                     currentAssistantMessage.value = {
@@ -709,12 +828,6 @@
                         type: 'error',
                         error: data.error
                     });
-                } else if (data.type === 'turn_complete') {
-                    currentAssistantMessage.value = null;
-                    accumulatedText.value = '';
-                    pendingToolUses.value = {};
-                    statusText.value = '就绪';
-                    statusColor.value = 'emerald';
                 }
 
                 scrollToBottom();
@@ -727,11 +840,7 @@
                 addToHistory(text);
 
                 // Add user message
-                messages.value.push({
-                    type: 'user',
-                    text,
-                    fileExpansions: []
-                });
+                messages.value.push(createUserMessage(text));
 
                 inputText.value = '';
                 if (messageInput.value) {
@@ -748,7 +857,8 @@
                 // Create AbortController for this request
                 abortController.value = new AbortController();
 
-                scrollToBottom();
+                autoFollowOutput.value = true;
+                scrollToBottom(true);
 
                 try {
                     const response = await fetch('/api/chat', {
@@ -806,21 +916,23 @@
             };
 
             const sendInterrupt = async () => {
-                if (!sessionId.value || !abortController.value) return;
+                if (!abortController.value) return;
 
                 try {
                     // First abort the fetch request
                     abortController.value.abort();
 
-                    // Then send interrupt to backend
-                    await fetch('/api/interrupt', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            session_id: sessionId.value,
-                            reason: 'user_interrupt'
-                        })
-                    });
+                    // Then send interrupt to backend when a session already exists
+                    if (sessionId.value) {
+                        await fetch('/api/interrupt', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                session_id: sessionId.value,
+                                reason: 'user_interrupt'
+                            })
+                        });
+                    }
 
                     // Reset streaming state
                     currentAssistantMessage.value = null;
@@ -837,6 +949,7 @@
                 accumulatedText.value = '';
                 statusText.value = '就绪';
                 statusColor.value = 'emerald';
+                autoFollowOutput.value = true;
             };
 
             const loadSessions = async () => {
@@ -890,9 +1003,11 @@
                                 }
 
                                 messages.value.push({
-                                    type: 'user',
-                                    text: originalText || displayText,
-                                    fileExpansions
+                                    ...createUserMessage(originalText || displayText, {
+                                        originalText: originalText || displayText,
+                                        fileExpansions,
+                                        webEnabled: Boolean(msg.web_enabled)
+                                    })
                                 });
                                 lastAssistantMsg = null;
                                 Object.keys(sessionToolUses).forEach(key => delete sessionToolUses[key]);
@@ -983,7 +1098,8 @@
                                 }
                             }
                         }
-                        scrollToBottom();
+                        autoFollowOutput.value = true;
+                        scrollToBottom(true);
                     }
 
                     if (data.total_usage) {
@@ -1016,11 +1132,11 @@
 
             // Keyboard shortcuts
             onMounted(() => {
-                document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Escape') {
-                        showSessionsModal.value = false;
-                    }
-                });
+                document.addEventListener('keydown', handleGlobalKeydown);
+            });
+
+            onBeforeUnmount(() => {
+                document.removeEventListener('keydown', handleGlobalKeydown);
             });
 
             return {
@@ -1036,9 +1152,11 @@
                 showSessionsModal,
                 sessions,
                 sessionsLoading,
+                currentInputHasWeb,
                 messagesContainer,
                 messageInput,
                 autoResize,
+                handleMessagesScroll,
                 handleKeydown,
                 sendMessage,
                 sendInterrupt,
@@ -1058,6 +1176,11 @@
         template: `
             <div v-if="message.type === 'user'" class="flex justify-end fade-in">
                 <div class="max-w-[90%]">
+                    <div v-if="message.webEnabled" class="mb-2 flex justify-end">
+                        <span class="inline-flex items-center rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-300">
+                            @web 已启用
+                        </span>
+                    </div>
                     <div v-for="(exp, idx) in message.fileExpansions" :key="idx" class="file-expansion rounded-lg p-3 mb-2">
                         <div class="text-sm text-blue-300 font-medium mb-1">@{{ exp.display_path || exp.file_path }}</div>
                         <pre class="mono text-xs text-slate-400 bg-slate-900/50 rounded p-2 overflow-x-auto max-h-32 overflow-y-auto">{{ exp.content.substring(0, 500) }}{{ exp.content.length > 500 ? '\\n... (more lines)' : '' }}</pre>

@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-12
+
+#### Web Frontend UX Improvements
+- Added `@web` reference detection with visual indicator showing when web search is enabled
+- Improved auto-scroll behavior: output now auto-follows only when user is near bottom
+- Fixed history navigation: added proper buffer management for Up/Down arrow navigation
+- Added global keyboard shortcuts: Escape to close modal or send interrupt, Ctrl/Cmd+C to copy selection
+- Refactored message creation logic with `createUserMessage()` helper for consistency
+- Server now includes full message data in `message_complete` event for proper user message display
+
+#### Web Server Improvements
+- Added `has_web_reference()` for detecting `@web` syntax in user input
+- Added `build_visible_file_expansions()` for reconstructing file references in frontend
+- Added `require_grpc_client()` helper with proper error handling
+- Improved type annotations for `_grpc_config`
+- Refactored `message_to_dict()` and `event_to_dict()` to include working directory context
+
+#### Test Additions
+- Added `tests/test_web_server.py` for web server unit tests
+- Added `tests/test_web_frontend_source.py` for frontend source validation
+
+#### Miscellaneous
+- Added `.omx/` to `.gitignore`
+
 ### Added - 2026-04-12
 
 #### Web UI with Vue 3 (FastAPI-based)

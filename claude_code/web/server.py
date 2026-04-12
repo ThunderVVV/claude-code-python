@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -15,12 +16,19 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from claude_code.client.grpc_client import ClaudeCodeClient
+from claude_code.core.file_expansion import (
+    FileExpansion,
+    parse_file_references,
+    read_file_content,
+    resolve_file_path,
+)
 
 logger = logging.getLogger(__name__)
 
 # gRPC client
 _grpc_client: Optional[ClaudeCodeClient] = None
-_grpc_config = {"host": "localhost", "port": 50051}
+_grpc_config: dict[str, str | int] = {"host": "localhost", "port": 50051}
+_WEB_REFERENCE_PATTERN = re.compile(r"(?<!\S)@web(?=$|[\s,;:!?()])")
 
 
 def set_grpc_config(host: str, port: int) -> None:
@@ -30,14 +38,21 @@ def set_grpc_config(host: str, port: int) -> None:
     _grpc_config["port"] = port
 
 
+def require_grpc_client() -> ClaudeCodeClient:
+    """Return the active gRPC client or raise if startup has not completed."""
+    if _grpc_client is None:
+        raise RuntimeError("gRPC client is not connected")
+    return _grpc_client
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - connect to gRPC on startup"""
     global _grpc_client
     try:
         _grpc_client = ClaudeCodeClient(
-            host=_grpc_config["host"],
-            port=_grpc_config["port"]
+            host=str(_grpc_config["host"]),
+            port=int(_grpc_config["port"]),
         )
         await _grpc_client.connect()
         logger.info(f"Connected to gRPC server at {_grpc_config['host']}:{_grpc_config['port']}")
@@ -67,6 +82,66 @@ class ChatRequest(BaseModel):
 class InterruptRequest(BaseModel):
     session_id: str
     reason: str = "user_interrupt"
+
+
+def has_web_reference(text: str) -> bool:
+    """Return True when the user explicitly requested @web."""
+    return bool(_WEB_REFERENCE_PATTERN.search(text))
+
+
+def serialize_file_expansions(file_expansions: list[FileExpansion]) -> list[dict]:
+    """Convert file-expansion objects into JSON-friendly dictionaries."""
+    return [
+        {
+            "file_path": exp.file_path,
+            "content": exp.content,
+            "display_path": exp.display_path,
+        }
+        for exp in file_expansions
+    ]
+
+
+def build_visible_file_expansions(
+    user_text: str,
+    working_directory: str,
+) -> list[FileExpansion]:
+    """Reconstruct visible @file_path expansions for the web frontend.
+
+    This intentionally reflects only user-authored file references. `@web` is
+    surfaced separately via a dedicated UI indicator rather than as expanded
+    hidden skill-file content.
+    """
+    if not user_text:
+        return []
+
+    expansions: list[FileExpansion] = []
+    seen_paths: set[str] = set()
+    web_requested = has_web_reference(user_text)
+
+    for file_path, _start_pos, _end_pos in parse_file_references(user_text):
+        if file_path == "web" and web_requested:
+            continue
+        if file_path in seen_paths:
+            continue
+
+        full_path = resolve_file_path(file_path, working_directory)
+        if full_path is None:
+            continue
+
+        content = read_file_content(full_path)
+        if content is None:
+            continue
+
+        seen_paths.add(file_path)
+        expansions.append(
+            FileExpansion(
+                file_path=full_path,
+                content=content,
+                display_path=file_path,
+            )
+        )
+
+    return expansions
 
 
 # Content block converters
@@ -99,7 +174,42 @@ def content_block_to_dict(block) -> dict:
     return {"type": "unknown"}
 
 
-def event_to_dict(event) -> dict:
+def message_to_dict(message, working_directory: str = "") -> dict:
+    """Serialize a message for web transport."""
+    message_dict = {
+        "role": message.type.value if hasattr(message.type, "value") else str(message.type),
+        "content_blocks": [content_block_to_dict(block) for block in message.content],
+    }
+
+    if message.original_text:
+        message_dict["original_text"] = message.original_text
+
+    if getattr(message, "file_expansions", None):
+        message_dict["file_expansions"] = serialize_file_expansions(
+            message.file_expansions
+        )
+    elif (
+        message_dict["role"] == "user"
+        and message.original_text
+        and working_directory
+    ):
+        file_expansions = build_visible_file_expansions(
+            message.original_text,
+            working_directory,
+        )
+        if file_expansions:
+            message_dict["file_expansions"] = serialize_file_expansions(
+                file_expansions
+            )
+
+    if message_dict["role"] == "user":
+        source_text = message.original_text or ""
+        message_dict["web_enabled"] = has_web_reference(source_text)
+
+    return message_dict
+
+
+def event_to_dict(event, working_directory: str = "") -> dict:
     from claude_code.core.messages import (
         TextEvent as CoreTextEvent,
         ThinkingEvent as CoreThinkingEvent,
@@ -129,7 +239,13 @@ def event_to_dict(event) -> dict:
             "is_error": event.is_error,
         }
     elif isinstance(event, CoreMessageCompleteEvent):
-        return {"type": "message_complete"}
+        event_dict: dict[str, object] = {"type": "message_complete"}
+        if event.message:
+            event_dict["message"] = message_to_dict(
+                event.message,
+                working_directory=working_directory,
+            )
+        return event_dict
     elif isinstance(event, CoreTurnCompleteEvent):
         return {
             "type": "turn_complete",
@@ -144,16 +260,20 @@ def event_to_dict(event) -> dict:
 async def event_stream(chat_request: ChatRequest):
     """Generate SSE events from gRPC stream"""
     session_id = chat_request.session_id
+    grpc_client = require_grpc_client()
     try:
         if not session_id:
-            session_id = await _grpc_client.create_session(chat_request.working_directory)
+            session_id = await grpc_client.create_session(chat_request.working_directory)
 
         yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
 
-        async for event in _grpc_client.stream_chat(
+        async for event in grpc_client.stream_chat(
             chat_request.user_text, session_id, chat_request.working_directory
         ):
-            event_dict = event_to_dict(event)
+            event_dict = event_to_dict(
+                event,
+                working_directory=chat_request.working_directory,
+            )
             yield f"data: {json.dumps(event_dict)}\n\n"
 
     except Exception as e:
@@ -186,7 +306,10 @@ async def chat(request: ChatRequest):
 async def interrupt(request: InterruptRequest):
     """Send interrupt signal to the backend"""
     try:
-        success = await _grpc_client.interrupt(request.session_id, request.reason)
+        success = await require_grpc_client().interrupt(
+            request.session_id,
+            request.reason,
+        )
         return {"success": success}
     except Exception as e:
         logger.exception("Failed to send interrupt")
@@ -197,7 +320,7 @@ async def interrupt(request: InterruptRequest):
 async def list_sessions():
     """List all sessions"""
     try:
-        sessions = await _grpc_client.list_sessions()
+        sessions = await require_grpc_client().list_sessions()
         return {
             "sessions": [
                 {
@@ -219,31 +342,15 @@ async def list_sessions():
 async def get_session(session_id: str):
     """Get session details"""
     try:
-        session_info = await _grpc_client.get_session(session_id)
+        session_info = await require_grpc_client().get_session(session_id)
         if not session_info:
             raise HTTPException(status_code=404, detail="Session not found")
 
         messages_list = []
         for msg in session_info.messages:
-            msg_dict = {
-                "role": msg.type.value if hasattr(msg.type, "value") else str(msg.type),
-                "content_blocks": [content_block_to_dict(block) for block in msg.content],
-            }
-
-            if msg.file_expansions:
-                msg_dict["file_expansions"] = [
-                    {
-                        "file_path": exp.file_path,
-                        "content": exp.content,
-                        "display_path": getattr(exp, "display_path", exp.file_path),
-                    }
-                    for exp in msg.file_expansions
-                ]
-
-            if msg.original_text:
-                msg_dict["original_text"] = msg.original_text
-
-            messages_list.append(msg_dict)
+            messages_list.append(
+                message_to_dict(msg, working_directory=session_info.working_directory)
+            )
 
         return {
             "session_id": session_info.session_id,
@@ -286,7 +393,7 @@ async def run_web_server(
     await _grpc_client.connect()
     logger.info(f"Connected to gRPC server at {grpc_host}:{grpc_port}")
 
-    app = create_app(_grpc_client)
+    app = create_app()
 
     import uvicorn
     config = uvicorn.Config(app, host=web_host, port=web_port, log_level="info")
