@@ -38,7 +38,7 @@
 - **OpenAI 兼容**：使用官方 OpenAI Python SDK，支持所有 OpenAI 兼容的 API
 - **工具集**：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
 - **系统提示词对齐**：与 TypeScript 版本保持一致的系统提示词和工具描述
-- **gRPC 前后端分离**：后端独立部署，前端通过 gRPC 连接，后端控制核心的Agent管理代码，与繁杂的前端设计解耦
+- **HTTP 前后端分离**：`cc-api` 独立部署，`cc-py` 通过 HTTP 连接；`cc-web` 则自带 FastAPI API 后端，浏览器直接访问
 
 ### TUI 特性
 - **推理/思考内容支持**：显示模型的推理过程
@@ -50,7 +50,7 @@
 - **@web 搜索**：支持 `@web` 语法触发 Web 搜索能力（需配置 tavily skills，详见下方说明）
 
 ### Web UI 特性 (实验)
-- **现代化浏览器界面**：基于 Vue + FastAPI 的响应式 Web 界面
+- **现代化浏览器界面**：基于 Vue + FastAPI 的响应式 Web 界面，内置 API 后端
 - **Markdown 渲染**：支持完整的 Markdown 语法渲染，代码高亮显示
 - **流式响应**：实时显示 AI 响应流，支持流式输出
 - **会话管理**：创建、切换、恢复历史会话，会话持久化存储
@@ -61,7 +61,7 @@
   <img src="docs/assets/webui.png" width="50%" alt="Web UI"/>
 </p>
 
-### Session 管理
+### TUI Session 管理
 - **Session 持久化**：每次 TUI 对话自动分配唯一 session ID，持久化到 `~/.claude-code-python/sessions/`
 - **Session 恢复**：通过 `--resume <session_id>` 或 `--sessions` 选择恢复历史会话
 - **Session 切换**：TUI 内使用 `/sessions` 命令切换到其他保存的会话
@@ -106,29 +106,28 @@ CLAUDE_CODE_MODEL=gpt-4.1
 CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
 ```
 
+> 注：`CLAUDE_CODE_API_URL`、`CLAUDE_CODE_API_KEY` 和 `CLAUDE_CODE_MODEL` 同时供 `cc-api` 和 `cc-web` 使用。
+
 ## 运行
 
-本项目采用前后端分离架构，需要分别在两个终端启动：
+本项目提供两种运行方式：
 
-### 1. 启动后端服务器（终端1）
+### TUI 模式
 
-```bash
-cc-server
-```
-
-### 2. 启动 TUI 客户端（终端2）
+需要分别在两个终端启动后端和客户端：
 
 ```bash
+cc-api
 cc-py
 ```
 
-> 注意：必须先启动后端服务器，再启动客户端。如果后端未运行，客户端会提示错误并退出。
+> 注意：必须先启动 API 服务器，再启动客户端。如果后端未运行，客户端会提示错误并退出。
 
-### 3. 启动 Web UI（可选，实验特性）
+### Web UI 模式（可选，实验特性）
 
 > ⚠️ **实验特性**：Web UI 目前处于实验阶段，功能可能不完善，不建议在生产环境使用。
 
-除了 TUI 客户端，项目还提供 Web UI 界面：
+Web UI 直接启动即可，不需要额外运行 `cc-api`：
 
 ```bash
 cc-web
@@ -142,16 +141,15 @@ Web UI 特性：
 - 会话管理（创建、切换、恢复历史会话）
 - 工具调用可视化展示
 - Diff 内容渲染（Edit/Write 工具结果）
-
-> 注意：Web UI 同样需要后端服务器运行，它通过 gRPC 连接后端。
+- 浏览器界面和 API 由同一个 `cc-web` 进程提供
 
 ## 调试
 
 开启调试日志：
 
 ```bash
-# 后端调试
-cc-server --debug
+# API 调试
+cc-api --debug
 
 # TUI 客户端调试
 cc-py --debug
@@ -189,35 +187,23 @@ cc-web --debug
 
 ## 架构说明
 
-本项目采用前后端分离架构，通过 gRPC 通信：
+本项目有两条独立的运行路径：
 
+```text
+TUI 路径
+REPLScreen -> ClaudeCodeHttpClient --HTTP--> cc-api -> QueryEngine -> OpenAIClient
+
+Web 路径
+Browser(Vue) -> cc-web(FastAPI) -> QueryEngine -> OpenAIClient
 ```
-┌─────────────────────────────────────────────────────────┐              ┌──────────────────────────────────────────────┐
-│                    Frontend                             │              │                  Backend                     │
-├─────────────────────────────────────────────────────────┤              ├──────────────────────────────────────────────┤
-│                                                         │              │                                              │
-│  ┌────────────────────────┐  ┌─────────────────────┐    │              │  ┌────────────────────────────────────────┐  │
-│  │     REPLScreen         │  │      Web UI         │    │              │  │           ChatServiceServicer          │  │
-│  │     (Textual TUI)      │  │   (Vue + FastAPI )  │    │              │  │         SessionServiceServicer         │  │
-│  └───────────┬────────────┘  └──────────┬──────────┘    │              │  │             (gRPC Server)              │  │
-│              │                          │               │              │  └───────────────────┬────────────────────┘  │
-│              ▼                          ▼               │              │                      │                       │
-│  ┌───────────────────────────────────────────────────┐  │    gRPC      │                      ▼                       │
-│  │              ClaudeCodeClient                     │──┼─────────────►│  ┌────────────────────────────────────────┐  │
-│  │                (gRPC Client)                      │◄─┼──────────────┤  │             QueryEngine                │  │
-│  └───────────────────────────────────────────────────┘  │              │  └───────────────────┬────────────────────┘  │
-│                                                         │              │                      │                       │
-│                                                         │              │                      │ OpenAI-compatible     │
-│                                                         │              │                      ▼                       │
-│                                                         │              │  ┌────────────────────────────────────────┐  │
-│                                                         │              │  │             OpenAIClient               │  │
-│                                                         │              │  └────────────────────────────────────────┘  │
-│                                                         │              │                                              │
-└──────────────────────────────────────────────────── ────┘              └──────────────────────────────────────────────┘
-```
+
+- `cc-api` 负责 TUI 模式的 FastAPI 后端
+- `cc-web` 负责 Web UI 和内置 FastAPI API
+- `cc-py` 通过 `ClaudeCodeHttpClient` 连接 API 服务器
+- 两条路径共享核心提示词、消息模型、工具实现和 OpenAI-compatible 配置
 
 **启动命令：**
-- 后端：`cc-server`
+- TUI 后端：`cc-api`
 - TUI 客户端：`cc-py`
 - Web UI：`cc-web`
 

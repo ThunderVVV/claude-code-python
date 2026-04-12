@@ -1,4 +1,4 @@
-"""CLI entry point for Claude Code Python - gRPC client only"""
+"""CLI entry point for Claude Code Python - HTTP client only"""
 
 from __future__ import annotations
 
@@ -27,18 +27,18 @@ def check_server_available(host: str, port: int, timeout: float = 1.0) -> bool:
 @click.command()
 @click.option(
     "--host",
-    "grpc_host",
-    envvar="CLAUDE_CODE_GRPC_HOST",
+    "api_host",
+    envvar="CLAUDE_CODE_API_HOST",
     default="localhost",
-    help="gRPC server host (default: localhost)",
+    help="API server host (default: localhost)",
 )
 @click.option(
     "--port",
-    "grpc_port",
-    envvar="CLAUDE_CODE_GRPC_PORT",
+    "api_port",
+    envvar="CLAUDE_CODE_API_PORT",
     type=int,
-    default=50051,
-    help="gRPC server port (default: 50051)",
+    default=8000,
+    help="API server port (default: 8000)",
 )
 @click.option(
     "--debug",
@@ -58,16 +58,16 @@ def check_server_available(host: str, port: int, timeout: float = 1.0) -> bool:
 )
 @click.version_option(version="0.2.0", prog_name="claude-code-python")
 def main(
-    grpc_host: str,
-    grpc_port: int,
+    api_host: str,
+    api_port: int,
     debug: bool,
     log_file: Optional[str],
     env_file: Optional[str],
 ) -> None:
-    """Claude Code Python - AI programming assistant TUI (gRPC client)
+    """Claude Code Python - AI programming assistant TUI (HTTP client)
 
-    This is the TUI client that connects to a gRPC server.
-    Start the server first with: cc-server
+    This is the TUI client that connects to a FastAPI server.
+    Start the server first with: cc-api
     """
     setup_client_logging(debug=debug)
 
@@ -79,26 +79,25 @@ def main(
     else:
         load_dotenv()
 
-    if not check_server_available(grpc_host, grpc_port):
+    if not check_server_available(api_host, api_port):
         click.echo(
             click.style("Error: ", fg="red", bold=True)
-            + f"gRPC server not running at {grpc_host}:{grpc_port}",
+            + f"API server not running at {api_host}:{api_port}",
             err=True,
         )
         click.echo(
-            click.style("Please start the server first with:", fg="yellow")
-            + " cc-server"
+            click.style("Please start the server first with:", fg="yellow") + " cc-api"
         )
         sys.exit(1)
 
     click.echo(
-        click.style(f"Connecting to gRPC server at {grpc_host}:{grpc_port}", fg="green")
+        click.style(f"Connecting to API server at {api_host}:{api_port}", fg="green")
     )
 
     try:
         run_tui(
-            grpc_host=grpc_host,
-            grpc_port=grpc_port,
+            api_host=api_host,
+            api_port=api_port,
             working_directory=os.getcwd(),
         )
     except ImportError as e:
@@ -110,14 +109,14 @@ def main(
 
 
 def run_tui(
-    grpc_host: str,
-    grpc_port: int,
+    api_host: str,
+    api_port: int,
     working_directory: str,
 ) -> None:
-    from claude_code.client.grpc_client import ClaudeCodeClient
+    from claude_code.client.http_client import ClaudeCodeHttpClient
     from claude_code.ui.app import ClaudeCodeApp
 
-    client = ClaudeCodeClient(grpc_host, grpc_port)
+    client = ClaudeCodeHttpClient(api_host, api_port)
 
     app = ClaudeCodeApp(
         client=client,

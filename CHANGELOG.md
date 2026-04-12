@@ -6,7 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-12
+
+#### Web UI / API Mount Compatibility
+- Added `create_app(api_prefix=...)` in `claude_code.api.server` so the FastAPI backend can run directly or be mounted under `/api`
+- Fixed `cc-web` startup by mounting the unprefixed API app without double-prefixing browser routes
+- Restored `web_enabled` serialization from `@web` in `message_to_dict()` so web-enabled messages serialize correctly
+- Added tests for direct and mounted API route layouts plus `@web` serialization
+
+#### Documentation Alignment
+- Updated `README.md` to distinguish the TUI HTTP path from the self-contained `cc-web` FastAPI path
+
 ### Changed - 2026-04-12
+
+#### HTTP API Runtime Migration
+- Replaced the old gRPC client/server stack with `ClaudeCodeHttpClient` and the standalone `cc-api` FastAPI server for the TUI path
+- Refactored `cc-web` to share the same FastAPI API layer while serving the Vue frontend from one process
+- Added/updated CLI entry points and package metadata to match the HTTP-based runtime
+- Fully removed the obsolete gRPC proto/client/server implementation and generation script from the active codebase
 
 #### Web Frontend UX Improvements
 - Added `@web` reference detection with visual indicator showing when web search is enabled
@@ -19,12 +36,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Web Server Improvements
 - Added `has_web_reference()` for detecting `@web` syntax in user input
 - Added `build_visible_file_expansions()` for reconstructing file references in frontend
-- Added `require_grpc_client()` helper with proper error handling
-- Improved type annotations for `_grpc_config`
-- Refactored `message_to_dict()` and `event_to_dict()` to include working directory context
+- Added `create_app(api_prefix=...)` so the shared API app can run directly or be mounted under `/api`
+- Refactored `message_to_dict()` and `event_to_dict()` to include working directory context and `@web` inference
 
 #### Test Additions
-- Added `tests/test_web_server.py` for web server unit tests
+- Added `tests/test_web_server.py` for web server unit tests and route-prefix regression coverage
 - Added `tests/test_web_frontend_source.py` for frontend source validation
 
 #### Miscellaneous

@@ -10,8 +10,8 @@ from pathlib import Path
 
 
 def suppress_grpc_logs() -> None:
-    """Suppress verbose gRPC C++ core library logs.
-    
+    """Suppress verbose gRPC C++ core library logs when present.
+
     These logs (like 'FD from fork parent still in poll list') come from
     gRPC's internal event polling mechanism and are not controlled by
     Python's logging system.
@@ -24,13 +24,13 @@ def suppress_grpc_logs() -> None:
 
 
 def setup_server_logging(log_dir: str = ".logs", debug: bool = True) -> None:
-    """Configure logging for the gRPC server."""
+    """Configure logging for the API server."""
     suppress_grpc_logs()
     _setup_logging(log_dir, debug, "server")
 
 
 def setup_client_logging(log_dir: str = ".logs", debug: bool = True) -> None:
-    """Configure logging for the gRPC client."""
+    """Configure logging for the HTTP/TUI client."""
     suppress_grpc_logs()
     _setup_logging(log_dir, debug, "client")
 

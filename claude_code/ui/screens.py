@@ -50,13 +50,13 @@ from claude_code.utils.logging_config import log_full_exception
 from claude_code.core.file_expansion import expand_file_references
 
 if TYPE_CHECKING:
-    from claude_code.client.grpc_client import ClaudeCodeClient
+    from claude_code.client.http_client import ClaudeCodeHttpClient
 
 
 class REPLScreen(Screen):
     """Main REPL screen - stateless frontend, only handles display.
 
-    All state management is done by the gRPC server.
+    All state management is done by the API server.
     This screen only:
     - Sends user input to server
     - Receives and renders events
@@ -65,7 +65,7 @@ class REPLScreen(Screen):
 
     def __init__(
         self,
-        client: "ClaudeCodeClient",
+        client: "ClaudeCodeHttpClient",
         session_id: str,
         working_directory: str = "",
         **kwargs,
@@ -392,7 +392,7 @@ class REPLScreen(Screen):
         try:
             # Don't create user message locally - wait for MessageCompleteEvent from server
             # This aligns behavior with Web UI
-            
+
             async for event in self.client.stream_chat(
                 user_text, self.session_id, self.working_directory
             ):

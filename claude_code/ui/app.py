@@ -12,7 +12,7 @@ from claude_code.ui.styles import TUI_CSS
 from claude_code.ui.screens import REPLScreen
 
 if TYPE_CHECKING:
-    from claude_code.client.grpc_client import ClaudeCodeClient
+    from claude_code.client.http_client import ClaudeCodeHttpClient
 
 
 class ClaudeCodeApp(App):
@@ -33,7 +33,7 @@ class ClaudeCodeApp(App):
 
     def __init__(
         self,
-        client: "ClaudeCodeClient",
+        client: "ClaudeCodeHttpClient",
         working_directory: str = "",
         **kwargs: Any,
     ):

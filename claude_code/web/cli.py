@@ -1,38 +1,67 @@
-"""Web server CLI entry point (FastAPI version)"""
+"""Web server CLI entry point (FastAPI version with integrated backend)"""
 
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
 from typing import Optional
 
 import click
-import uvicorn
+from dotenv import load_dotenv
 
+from claude_code.core.tools import ToolRegistry
+from claude_code.services.openai_client import OpenAIClientConfig
+from claude_code.tools import (
+    ReadTool,
+    WriteTool,
+    EditTool,
+    GlobTool,
+    GrepTool,
+)
+from claude_code.tools.bash_tool import BashTool
 from claude_code.utils.logging_config import setup_server_logging
+
+
+def create_tool_registry() -> ToolRegistry:
+    registry = ToolRegistry()
+    registry.register(ReadTool())
+    registry.register(WriteTool())
+    registry.register(EditTool())
+    registry.register(GlobTool())
+    registry.register(GrepTool())
+    registry.register(BashTool())
+    return registry
 
 
 @click.command()
 @click.option(
-    "--grpc-host",
-    default="localhost",
-    help="gRPC server host",
+    "--api-url",
+    help="OpenAI compatible API URL",
 )
 @click.option(
-    "--grpc-port",
-    default=50051,
-    type=int,
-    help="gRPC server port",
+    "--api-key",
+    help="API key for authentication",
 )
 @click.option(
-    "--web-host",
+    "--model",
+    help="Model name to use",
+)
+@click.option(
+    "--host",
     default="0.0.0.0",
     help="Host to bind the web server to",
 )
 @click.option(
-    "--web-port",
+    "--port",
     default=8080,
     type=int,
     help="Port to bind the web server to",
+)
+@click.option(
+    "--env-file",
+    type=click.Path(exists=True),
+    help="Path to .env file",
 )
 @click.option(
     "--debug",
@@ -40,41 +69,57 @@ from claude_code.utils.logging_config import setup_server_logging
     help="Enable debug logging",
 )
 def main(
-    grpc_host: str,
-    grpc_port: int,
-    web_host: str,
-    web_port: int,
+    api_url: Optional[str],
+    api_key: Optional[str],
+    model: Optional[str],
+    host: str,
+    port: int,
+    env_file: Optional[str],
     debug: bool,
 ) -> None:
-    """Start the Claude Code web server (connects to gRPC backend)"""
+    """Start the Claude Code web server with integrated FastAPI backend"""
     setup_server_logging(debug=debug)
     if debug:
         click.echo(click.style("Debug logging enabled", fg="yellow"))
 
-    from claude_code.web.server import create_app, set_grpc_config
-    from claude_code.client.grpc_client import ClaudeCodeClient
+    if env_file:
+        load_dotenv(env_file)
+    else:
+        load_dotenv()
 
-    # Set gRPC config for lifespan
-    set_grpc_config(grpc_host, grpc_port)
+    api_url = api_url or os.environ.get("CLAUDE_CODE_API_URL")
+    api_key = api_key or os.environ.get("CLAUDE_CODE_API_KEY")
+    model = model or os.environ.get("CLAUDE_CODE_MODEL")
+
+    if not api_url or not api_key or not model:
+        click.echo(
+            click.style("Error: ", fg="red", bold=True)
+            + "API URL, API key, and model must be provided.",
+            err=True,
+        )
+        sys.exit(1)
+
+    if api_url.endswith("/v1/chat/completions"):
+        api_url = api_url.removesuffix("/chat/completions")
+
+    client_config = OpenAIClientConfig(
+        api_url=api_url,
+        api_key=api_key,
+        model_name=model,
+    )
+
+    tool_registry = create_tool_registry()
+
+    from claude_code.web.server import run_web_server
 
     click.echo(
         click.style(
-            f"Starting Claude Code web server on http://{web_host}:{web_port}",
+            f"Starting Claude Code web server on http://{host}:{port}",
             fg="green",
         )
     )
-    click.echo(f"🔌 Will connect to gRPC server at: {grpc_host}:{grpc_port}")
 
-    # Create app (connection happens in lifespan)
-    app = create_app()
-
-    # Run with uvicorn
-    uvicorn.run(
-        app,
-        host=web_host,
-        port=web_port,
-        log_level="debug" if debug else "info",
-    )
+    asyncio.run(run_web_server(client_config, tool_registry, host, port))
 
 
 if __name__ == "__main__":

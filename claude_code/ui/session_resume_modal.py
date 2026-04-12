@@ -12,7 +12,7 @@ from textual.widgets import Button, DataTable, Markdown
 from claude_code.core.session_store import SessionSummary
 
 if TYPE_CHECKING:
-    from claude_code.client.grpc_client import ClaudeCodeClient
+    from claude_code.client.http_client import ClaudeCodeHttpClient
 
 HELP = """\
 # Session Resume
@@ -69,7 +69,7 @@ class SessionResumeModal(ModalScreen[Optional[SessionSummary]]):
 
     def __init__(
         self,
-        client: "ClaudeCodeClient",
+        client: "ClaudeCodeHttpClient",
         current_session_id: Optional[str] = None,
         id: Optional[str] = None,
         classes: Optional[str] = None,

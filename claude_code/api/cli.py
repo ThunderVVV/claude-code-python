@@ -1,4 +1,4 @@
-"""Server CLI entry point"""
+"""API Server CLI entry point"""
 
 from __future__ import annotations
 
@@ -37,27 +37,24 @@ def create_tool_registry() -> ToolRegistry:
 @click.command()
 @click.option(
     "--api-url",
-    envvar="CLAUDE_CODE_API_URL",
     help="OpenAI compatible API URL",
 )
 @click.option(
     "--api-key",
-    envvar="CLAUDE_CODE_API_KEY",
     help="API key for authentication",
 )
 @click.option(
     "--model",
-    envvar="CLAUDE_CODE_MODEL",
     help="Model name to use",
 )
 @click.option(
     "--host",
-    default="[::]",
+    default="0.0.0.0",
     help="Host to bind the server to",
 )
 @click.option(
     "--port",
-    default=50051,
+    default=8000,
     type=int,
     help="Port to bind the server to",
 )
@@ -80,7 +77,7 @@ def main(
     env_file: Optional[str],
     debug: bool,
 ) -> None:
-    """Start the Claude Code gRPC server"""
+    """Start the Claude Code FastAPI server"""
     setup_server_logging(debug=debug)
     if debug:
         click.echo(click.style("Debug logging enabled", fg="yellow"))
@@ -113,12 +110,34 @@ def main(
 
     tool_registry = create_tool_registry()
 
-    from claude_code.server.server import serve
+    from claude_code.api.server import set_global_dependencies, app
+    import uvicorn
+
+    set_global_dependencies(client_config, tool_registry)
 
     click.echo(
-        click.style(f"Starting Claude Code gRPC server on {host}:{port}", fg="green")
+        click.style(f"Starting Claude Code FastAPI server on {host}:{port}", fg="green")
     )
-    asyncio.run(serve(client_config, tool_registry, host, port))
+    click.echo(click.style(f"Health check: http://{host}:{port}/health", fg="yellow"))
+
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        log_level="info" if not debug else "debug",
+        access_log=debug,
+    )
+    server = uvicorn.Server(config)
+
+    try:
+        asyncio.run(server.serve())
+    except KeyboardInterrupt:
+        click.echo("\n" + click.style("Server stopped by user", fg="yellow"))
+    except Exception as e:
+        click.echo(click.style(f"Server error: {e}", fg="red"))
+        import traceback
+
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
