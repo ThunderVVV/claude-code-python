@@ -296,30 +296,68 @@ class ChatServiceServicer:
     ) -> AsyncGenerator["claude_code_pb2.ChatResponse", None]:
         from claude_code.proto import claude_code_pb2
 
-        user_text_str= request.user_text[:100] + "..." if len(request.user_text) > 100 else request.user_text
+        user_text_str = request.user_text[:100] + "..." if len(request.user_text) > 100 else request.user_text
         logger.info(f"Request received - session_id={request.session_id}, user_text={user_text_str}")
 
-        try:
-            engine = await self._session_manager.get_or_create_engine(
-                request.session_id or None,
-                self._client_config,
-                self._tool_registry,
-                request.working_directory,
-            )
+        # Queue to hold events
+        event_queue: asyncio.Queue[Optional["claude_code_pb2.QueryEvent"]] = asyncio.Queue()
 
-            async for event in engine.submit_message(request.user_text):
-                pb_event = query_event_to_proto(event)
+        async def _process_events_background():
+            """Process chat events in a background task that continues even if client disconnects."""
+            try:
+                engine = await self._session_manager.get_or_create_engine(
+                    request.session_id or None,
+                    self._client_config,
+                    self._tool_registry,
+                    request.working_directory,
+                )
+
+                async for event in engine.submit_message(request.user_text):
+                    pb_event = query_event_to_proto(event)
+                    await event_queue.put(pb_event)
+
+                logger.info(f"Streaming completed - session_id={request.session_id}")
+            except Exception as e:
+                log_full_exception(logger, "Stream chat error", e)
+                error_event = CoreErrorEvent(error=str(e), is_fatal=True)
+                pb_event = query_event_to_proto(error_event)
+                await event_queue.put(pb_event)
+            finally:
+                # Signal that we're done producing events
+                await event_queue.put(None)
+
+        # Start the background processing task
+        background_task = asyncio.create_task(_process_events_background())
+
+        try:
+            # Stream events to client while connected
+            while True:
+                # Check if client is still connected
+                if context.cancelled():
+                    logger.info(
+                        f"Client disconnected, but continuing processing in background - session_id={request.session_id}"
+                    )
+                    # Don't cancel the background task - let it finish
+                    break
+
+                # Wait for an event with a timeout to periodically check context
+                try:
+                    pb_event = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+                except asyncio.TimeoutError:
+                    continue
+
+                if pb_event is None:
+                    # No more events
+                    break
+
                 response = claude_code_pb2.ChatResponse(event=pb_event)
                 yield response
 
-            logger.info(f"Streaming completed - session_id={request.session_id}")
         except asyncio.CancelledError:
-            logger.info(f"Stream chat cancelled - session_id={request.session_id}")
-        except Exception as e:
-            log_full_exception(logger, "Stream chat error", e)
-            error_event = CoreErrorEvent(error=str(e), is_fatal=True)
-            pb_event = query_event_to_proto(error_event)
-            yield claude_code_pb2.ChatResponse(event=pb_event)
+            logger.info(
+                f"Stream cancelled, but continuing processing in background - session_id={request.session_id}"
+            )
+            # Don't re-raise - background task continues
 
     async def Interrupt(
         self,
