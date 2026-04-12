@@ -41,3 +41,12 @@ def test_web_frontend_contains_keyboard_parity_hooks():
     )
     assert "if (!abortController.value) return;" in WEB_FRONTEND_SOURCE
     assert "if (sessionId.value) {" in WEB_FRONTEND_SOURCE
+
+
+def test_web_frontend_uses_atom_one_dark_theme_tokens():
+    assert "atom-one-dark.min.css" in WEB_FRONTEND_SOURCE
+    assert "highlight.min.js" in WEB_FRONTEND_SOURCE
+    assert "--color-blue-primary: #61afef;" in WEB_FRONTEND_SOURCE
+    assert "langPrefix: 'hljs language-'" in WEB_FRONTEND_SOURCE
+    assert "class=\"app-mark" in WEB_FRONTEND_SOURCE
+    assert "class=\"composer-input" in WEB_FRONTEND_SOURCE
