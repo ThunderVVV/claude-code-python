@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added - 2026-04-14
 
+#### TUI Theme Support and UI Layout Improvements
+- Added `FlushCollapsible` and `FlushCollapsibleTitle` widgets for cleaner collapsible UI without leading spacing
+- Added tree-like output branch decoration for tool results (│ and ╰ characters)
+- Added output line count summary with scroll hint for long tool outputs
+- Added `TranscriptContainer` with FOCUS_ON_CLICK=False to prevent scroll area from stealing focus
+- Added AUTO_FOCUS="#user-input" to REPLScreen to keep composer focused
+- Added focus management to keep input focused after toggling transcript collapsibles
+- Added `markdown-host` container to own horizontal padding for markdown content
+- Updated `ToolResultLogWidget` to disable syntax highlighting and focus-on-click
+- Updated markdown spacing: reduced heading top margins, hr margins, and code fence padding
+- Updated styles to make scrollbars fully transparent
+- Updated message block padding for cleaner layout
+- Added `tests/test_ui_markdown_spacing.py` - Tests for markdown spacing improvements
+- Updated existing UI tests to cover new autofocus and output branch behavior
+
 #### Instruction Loading (CLAUDE.md, AGENTS.md)
 - Added `claude_code/core/instruction.py` - Instruction loading service for CLAUDE.md, AGENTS.md, and custom instruction files
 - Added automatic discovery and loading of project-level instruction files (searching upward from cwd)

@@ -45,10 +45,13 @@ async def _run_streaming_markdown_layout_test() -> None:
 
         markdown = widget._streaming_widget
         assert markdown is not None
+        assert markdown.parent is not None
+        assert "markdown-host" in markdown.parent.classes
         content_area = screen.query_one("#content-area")
 
         assert markdown.size.height == markdown.virtual_size.height
         assert markdown.size.height < content_area.size.height
+        assert markdown.focus_on_click() is False
 
 
 def test_streaming_markdown_widget_keeps_content_height_in_transcript() -> None:

@@ -19,9 +19,9 @@ ScrollableContainer {
     scrollbar-background: transparent;
     scrollbar-background-hover: transparent;
     scrollbar-background-active: transparent;
-    scrollbar-color: $surface;
-    scrollbar-color-hover: $surface;
-    scrollbar-color-active: $surface;
+    scrollbar-color: transparent;
+    scrollbar-color-hover: transparent;
+    scrollbar-color-active: transparent;
     scrollbar-corner-color: transparent;
 }
 
@@ -98,13 +98,13 @@ WelcomeWidget:focus {
 
 #message-list {
     height: auto;
-    padding: 0 2;
+    padding: 0 0;
 }
 
 #input-area {
     height: auto;
     dock: bottom;
-    padding: 1 0 0 0;
+    padding: 0 0 0 0;
     background: $background;
 }
 
@@ -182,12 +182,12 @@ WelcomeWidget:focus {
     width: 100%;
     height: auto;
     margin: 0 0 1 0;
-    padding: 1 1;
+    padding: 0 1;
     background: $boost;
 }
 
 .user-message-block {
-    padding: 1 1;
+    padding: 0 1;
     background: $surface;
 }
 
@@ -233,6 +233,12 @@ WelcomeWidget:focus {
     background: transparent;
 }
 
+.markdown-host {
+    width: 100%;
+    height: auto;
+    padding: 0 2;
+}
+
 .transcript-block,
 .thinking-block,
 .tool-use-block,
@@ -254,7 +260,7 @@ WelcomeWidget:focus {
 }
 
 .tool-collapsible > Contents {
-    padding: 0;
+    padding: 0 2;
 }
 
 .tool-collapsible CollapsibleTitle {
@@ -280,15 +286,31 @@ WelcomeWidget:focus {
     color: $error;
 }
 
-.tool-output-label {
-    color: $foreground;
-    text-style: bold;
-    margin-left: 0;
-}
-
 .tool-result-preview {
     color: $foreground;
     margin-left: 0;
+}
+
+.tool-output-branch {
+    color: $text-muted;
+    margin: 0;
+    padding: 0;
+}
+
+.tool-output-branch-line,
+.tool-output-branch-end {
+    width: auto;
+    margin-left: 0;
+    height: 1;
+}
+
+.tool-output-tail {
+    color: $text-muted;
+    margin-top: 0;
+}
+
+.tool-result-log-tree {
+    padding-left: 0;
 }
 
 TextArea:focus {
@@ -338,7 +360,7 @@ MarkdownBlockQuote > BlockQuote {
 }
 
 MarkdownFence {
-    margin: 1 0 1 0;
+    margin: 0 0 0 0;
 }
 
 MarkdownFence > Label {
@@ -351,7 +373,7 @@ MarkdownTable {
 
 MarkdownHorizontalRule {
     padding-top: 0;
-    margin: 0 0 1 0;
+    margin: 0 0 0 0;
 }
 
 .tool-detail-body {
@@ -398,7 +420,7 @@ MarkdownHorizontalRule {
 }
 
 .thinking-collapsible > Contents {
-    padding: 0;
+    padding: 0 2;
 }
 
 .thinking-content {
@@ -449,7 +471,7 @@ MarkdownHorizontalRule {
 }
 
 .file-expansion-collapsible > Contents {
-    padding: 0;
+    padding: 0 2;
 }
 
 .file-expansion-content {

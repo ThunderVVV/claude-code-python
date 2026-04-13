@@ -63,6 +63,12 @@ if TYPE_CHECKING:
     from claude_code.client.http_client import ClaudeCodeHttpClient
 
 
+class TranscriptContainer(ScrollableContainer):
+    """Scrollable transcript wrapper that shouldn't steal focus on click."""
+
+    FOCUS_ON_CLICK = False
+
+
 class REPLScreen(Screen):
     """Main REPL screen - stateless frontend, only handles display.
 
@@ -72,6 +78,8 @@ class REPLScreen(Screen):
     - Receives and renders events
     - Handles UI-specific state (history, scroll position)
     """
+
+    AUTO_FOCUS = "#user-input"
 
     def __init__(
         self,
@@ -136,7 +144,7 @@ class REPLScreen(Screen):
         self._history_index = len(self._nav_items) - 1
 
     def compose(self) -> ComposeResult:
-        with ScrollableContainer(id="content-area"):
+        with TranscriptContainer(id="content-area"):
             yield WelcomeWidget(
                 id="welcome-widget",
                 model_name=self._current_model_name,
@@ -170,6 +178,28 @@ class REPLScreen(Screen):
         
         # Fetch model info from server
         await self._fetch_model_info_from_server()
+
+    def _focus_input(self) -> None:
+        """Restore focus to the composer when the main REPL is active."""
+        try:
+            input_widget = self.query_one("#user-input", InputTextArea)
+        except Exception:
+            return
+
+        if not input_widget.disabled and input_widget.is_mounted:
+            input_widget.focus(scroll_visible=False)
+
+    def _schedule_input_focus(self) -> None:
+        """Restore composer focus after the current UI event completes."""
+        self.call_after_refresh(self._focus_input)
+
+    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
+        """Keep collapsible transcript controls from stealing composer focus."""
+        if isinstance(event.widget, InputTextArea):
+            return
+
+        if event.widget.__class__.__name__.endswith("CollapsibleTitle"):
+            self._schedule_input_focus()
 
     async def _fetch_model_info_from_server(self) -> None:
         """Fetch model information from server."""
@@ -269,6 +299,11 @@ class REPLScreen(Screen):
 
         input_widget.set_autocomplete_active(False)
         input_widget.focus()
+
+    def on_collapsible_toggled(self, event) -> None:
+        """Keep the composer focused after toggling transcript collapsibles."""
+        event.stop()
+        self._schedule_input_focus()
 
     def _scroll_content_area_to_bottom(self) -> None:
         """Pin the transcript to the bottom when autocomplete expands the input area."""

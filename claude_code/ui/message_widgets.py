@@ -7,7 +7,9 @@ from typing import Callable, List, Optional
 from textual.app import ComposeResult
 from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
+from textual.reactive import reactive
 from textual.widgets import Collapsible, Label, RichLog, Static
+from textual.widgets._collapsible import CollapsibleTitle
 
 from claude_code.core.messages import (
     Message,
@@ -29,6 +31,96 @@ from claude_code.ui.utils import (
 from claude_code.utils.logging_config import log_full_exception
 
 logger = logging.getLogger(__name__)
+
+
+class FlushCollapsibleTitle(Static, can_focus=True):
+    """Collapsible title that doesn't reserve leading space for an empty symbol."""
+
+    BINDING_GROUP_TITLE = "Collapsible"
+    ALLOW_SELECT = False
+    collapsed = reactive(True)
+    label = reactive(Content("Toggle"))
+
+    def __init__(
+        self,
+        *,
+        label: str | Content,
+        collapsed_symbol: str,
+        expanded_symbol: str,
+        collapsed: bool,
+    ) -> None:
+        super().__init__()
+        self.collapsed_symbol = collapsed_symbol
+        self.expanded_symbol = expanded_symbol
+        self.label = Content.from_text(label)
+        self.collapsed = collapsed
+
+    class Toggle(CollapsibleTitle.Toggle):
+        """Request toggle."""
+
+    async def _on_click(self, event) -> None:
+        event.stop()
+        self.post_message(self.Toggle())
+
+    def action_toggle_collapsible(self) -> None:
+        self.post_message(self.Toggle())
+
+    def validate_label(self, label: str | Content) -> Content:
+        return Content.from_text(label)
+
+    def _update_label(self) -> None:
+        assert isinstance(self.label, Content)
+        symbol = self.collapsed_symbol if self.collapsed else self.expanded_symbol
+        if symbol:
+            self.update(Content.assemble(symbol, " ", self.label))
+        else:
+            self.update(self.label)
+
+    def _watch_label(self) -> None:
+        self._update_label()
+
+    def _watch_collapsed(self, collapsed: bool) -> None:
+        self._update_label()
+
+
+class FlushCollapsible(Collapsible):
+    """Collapsible that uses a title widget with no implicit left gap."""
+
+    def __init__(
+        self,
+        *children,
+        title: str = "Toggle",
+        collapsed: bool = True,
+        collapsed_symbol: str = "▶",
+        expanded_symbol: str = "▼",
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+        disabled: bool = False,
+    ) -> None:
+        super().__init__(
+            *children,
+            title=title,
+            collapsed=collapsed,
+            collapsed_symbol=collapsed_symbol,
+            expanded_symbol=expanded_symbol,
+            name=name,
+            id=id,
+            classes=classes,
+            disabled=disabled,
+        )
+        self._title = FlushCollapsibleTitle(
+            label=title,
+            collapsed_symbol=collapsed_symbol,
+            expanded_symbol=expanded_symbol,
+            collapsed=collapsed,
+        )
+
+    def _on_flush_collapsible_title_toggle(
+        self, event: FlushCollapsibleTitle.Toggle
+    ) -> None:
+        event.stop()
+        self.collapsed = not self.collapsed
 
 
 # Role configuration - single source of truth
@@ -66,11 +158,11 @@ class ThinkingBlockWidget(VerticalGroup):
         self.add_class("thinking-block")
 
     def compose(self) -> ComposeResult:
-        with Collapsible(
-            title="Thinking...",
+        with FlushCollapsible(
+            title="● Thinking...",
             collapsed=True,
-            collapsed_symbol=">",
-            expanded_symbol="v",
+            collapsed_symbol="",
+            expanded_symbol="",
             classes="thinking-collapsible",
         ):
             self._content_widget = Static(
@@ -98,7 +190,9 @@ class ThinkingBlockWidget(VerticalGroup):
 
 
 class ToolResultLogWidget(RichLog):
-    """Widget for displaying tool results with auto-scroll and syntax highlighting."""
+    """Widget for displaying tool results as plain wrapped text."""
+
+    FOCUS_ON_CLICK = False
 
     DEFAULT_CSS = """
     ToolResultLogWidget {
@@ -108,14 +202,14 @@ class ToolResultLogWidget(RichLog):
         max-height: 10;
         overflow-x: hidden;
         scrollbar-visibility: hidden;
-        background: $surface;
-        padding: 1 1;
+        background: transparent;
+        padding: 0 1;
     }
     """
 
     def __init__(self, **kwargs):
         super().__init__(
-            highlight=True,
+            highlight=False,
             max_lines=1000,
             auto_scroll=True,
             wrap=True,
@@ -134,6 +228,11 @@ class ToolResultLogWidget(RichLog):
 
 class ToolUseWidget(VerticalGroup):
     """Widget for displaying tool use information"""
+
+    OUTPUT_BRANCH_VERTICAL = "│"
+    OUTPUT_BRANCH_END = "╰"
+    OUTPUT_TAIL_SCROLL_HINT = "scroll to view"
+    OUTPUT_VISIBLE_LINE_LIMIT = 10
 
     def __init__(
         self,
@@ -154,11 +253,11 @@ class ToolUseWidget(VerticalGroup):
         self.add_class("tool-use-block")
 
     def compose(self) -> ComposeResult:
-        with Collapsible(
+        with FlushCollapsible(
             title=self._build_title(),
             collapsed=not self._should_auto_expand(),
-            collapsed_symbol=">",
-            expanded_symbol="v",
+            collapsed_symbol="",
+            expanded_symbol="",
             classes="tool-collapsible tool-use-details",
         ) as collapsible:
             self._collapsible = collapsible
@@ -182,6 +281,7 @@ class ToolUseWidget(VerticalGroup):
             self._auto_expand_once()
         if self._container and self._container.is_mounted:
             self._render_details()
+            self._schedule_output_tail_sync()
 
     def update_tool_input(self, tool_name: str, tool_input: dict) -> None:
         """Refresh the tool summary/details when fuller input arrives later."""
@@ -192,6 +292,7 @@ class ToolUseWidget(VerticalGroup):
             self._auto_expand_once()
         if self._container and self._container.is_mounted:
             self._render_details()
+            self._schedule_output_tail_sync()
 
     def on_mount(self) -> None:
         """Refresh after mount in case results arrived early."""
@@ -200,6 +301,18 @@ class ToolUseWidget(VerticalGroup):
             self._auto_expand_once()
         if self._container and self._container.is_mounted and self._result:
             self._render_details()
+            self._schedule_output_tail_sync()
+
+    def on_collapsible_expanded(self, event: Collapsible.Expanded) -> None:
+        """Recompute the output tail after the detail area becomes visible."""
+        if event.collapsible is self._collapsible:
+            self._schedule_output_tail_sync()
+
+    def _schedule_output_tail_sync(self) -> None:
+        """Retry tail sync after layout settles inside collapsibles."""
+        self.call_after_refresh(self._sync_output_branch_tail)
+        self.set_timer(0.01, self._sync_output_branch_tail)
+        self.set_timer(0.05, self._sync_output_branch_tail)
 
     def _build_title(self) -> Content:
         """Return the current single-line title for the tool call."""
@@ -243,12 +356,19 @@ class ToolUseWidget(VerticalGroup):
         if diff_view is not None:
             yield diff_view
         elif self._result is not None:
-            yield Static("Output:", classes="tool-output-label", markup=False)
             if self._output_lines:
-                log_widget = ToolResultLogWidget(classes="tool-result-log")
-                yield log_widget
+                yield from self._compose_output_branch()
             else:
                 yield Static("(no output)", classes="tool-result-preview", markup=False)
+
+    def _compose_output_branch(self) -> ComposeResult:
+        """Compose the tree-like branch that wraps tool output."""
+        yield ToolResultLogWidget(classes="tool-result-log tool-result-log-tree")
+        yield Static(
+            "",
+            classes="tool-output-branch tool-output-branch-end tool-output-tail",
+            markup=False,
+        )
 
     def _get_input_exclusions(self) -> set[str]:
         """Hide raw diff payloads once a diff view is available."""
@@ -333,10 +453,43 @@ class ToolUseWidget(VerticalGroup):
         if self._output_lines:
             try:
                 log_widget = self._container.query_one(ToolResultLogWidget)
-                for line in self._output_lines:
+                for line in self._format_output_branch_lines():
                     log_widget.write_line(line)
+                self._schedule_output_tail_sync()
             except Exception:
                 pass
+
+    def _sync_output_branch_tail(self) -> None:
+        """Render a fixed tail summary based on actual scrollability."""
+        if not self._container:
+            return
+
+        try:
+            log_widget = self._container.query_one(ToolResultLogWidget)
+            tail_widget = self._container.query_one(".tool-output-tail", Static)
+        except Exception:
+            return
+
+        line_count = len(self._output_lines)
+        scrollable = line_count > self.OUTPUT_VISIBLE_LINE_LIMIT
+
+        log_widget.clear()
+        for line in self._format_output_branch_lines():
+            log_widget.write_line(line)
+
+        suffix = "line" if line_count == 1 else "lines"
+        tail_text = f"{self.OUTPUT_BRANCH_END} {line_count} {suffix} output"
+        if scrollable:
+            tail_text = f"{tail_text} ({self.OUTPUT_TAIL_SCROLL_HINT})"
+        tail_widget.update(tail_text)
+        tail_widget.display = True
+
+    def _format_output_branch_lines(self) -> List[str]:
+        """Render tree prefixes inline with the tool output content."""
+        if not self._output_lines:
+            return []
+
+        return [f"{self.OUTPUT_BRANCH_VERTICAL} {line}" for line in self._output_lines]
 
 
 class MessageWidget(VerticalGroup):
@@ -367,6 +520,7 @@ class MessageWidget(VerticalGroup):
         # Widget references
         self._thinking_widget: Optional[ThinkingBlockWidget] = None
         self._streaming_widget: Optional[StreamingMarkdownWidget] = None
+        self._streaming_host: Optional[Container] = None
         self._content_container: Optional[VerticalGroup] = None
 
         self.add_class("message-block")
@@ -404,6 +558,17 @@ class MessageWidget(VerticalGroup):
         else:
             yield from self._compose_streaming_message()
 
+    def _compose_markdown_block(self, text: str) -> ComposeResult:
+        """Wrap assistant markdown in a host container that owns horizontal padding."""
+        with Container(classes="markdown-host transcript-block") as host:
+            self._streaming_host = host
+            self._streaming_widget = StreamingMarkdownWidget(
+                text,
+                should_stream_live=self._should_stream_live,
+                classes="streaming-content",
+            )
+            yield self._streaming_widget
+
     def _compose_static_message(self, message: Message) -> ComposeResult:
         """Compose a static (non-streaming) message."""
         role_config = ROLE_CONFIG.get(message.type, ROLE_CONFIG[MessageRole.ASSISTANT])
@@ -427,11 +592,11 @@ class MessageWidget(VerticalGroup):
                 expansion_content = "\n".join(
                     self._format_file_expansion_lines(expansion)
                 )
-                with Collapsible(
+                with FlushCollapsible(
                     title=f"@{expansion.display_path}",
                     collapsed=True,
-                    collapsed_symbol=">",
-                    expanded_symbol="v",
+                    collapsed_symbol="●",
+                    expanded_symbol="●",
                     classes="file-expansion-collapsible",
                 ):
                     yield Static(
@@ -448,12 +613,7 @@ class MessageWidget(VerticalGroup):
             elif isinstance(block, TextContent):
                 if block.text.strip():
                     if message.type == MessageRole.ASSISTANT:
-                        self._streaming_widget = StreamingMarkdownWidget(
-                            block.text,
-                            should_stream_live=self._should_stream_live,
-                            classes="streaming-content transcript-block",
-                        )
-                        yield self._streaming_widget
+                        yield from self._compose_markdown_block(block.text)
                     else:
                         display_text = (
                             message.original_text
@@ -498,12 +658,7 @@ class MessageWidget(VerticalGroup):
                 self._thinking_widget = ThinkingBlockWidget(self._thinking_content)
                 yield self._thinking_widget
             if self._text_content:
-                self._streaming_widget = StreamingMarkdownWidget(
-                    self._text_content,
-                    should_stream_live=self._should_stream_live,
-                    classes="streaming-content transcript-block",
-                )
-                yield self._streaming_widget
+                yield from self._compose_markdown_block(self._text_content)
             for tool_use in self._tool_uses:
                 tool_widget = ToolUseWidget(
                     tool_name=tool_use.name,
@@ -554,12 +709,14 @@ class MessageWidget(VerticalGroup):
         if self._streaming_widget:
             await self._streaming_widget.append_text(text)
         elif self._content_container:
+            self._streaming_host = Container(classes="markdown-host transcript-block")
             self._streaming_widget = StreamingMarkdownWidget(
                 self._text_content,
                 should_stream_live=self._should_stream_live,
-                classes="streaming-content transcript-block",
+                classes="streaming-content",
             )
-            await self._content_container.mount(self._streaming_widget)
+            await self._content_container.mount(self._streaming_host)
+            await self._streaming_host.mount(self._streaming_widget)
             self.refresh(layout=True)
 
     async def update_text(self, text: str) -> None:
@@ -569,12 +726,14 @@ class MessageWidget(VerticalGroup):
             await self._streaming_widget.set_markdown_text(text)
             self.refresh(layout=True)
         elif text and self._content_container:
+            self._streaming_host = Container(classes="markdown-host transcript-block")
             self._streaming_widget = StreamingMarkdownWidget(
                 text,
                 should_stream_live=self._should_stream_live,
-                classes="streaming-content transcript-block",
+                classes="streaming-content",
             )
-            await self._content_container.mount(self._streaming_widget)
+            await self._content_container.mount(self._streaming_host)
+            await self._streaming_host.mount(self._streaming_widget)
             self.refresh(layout=True)
 
     async def add_tool_use(self, tool_use: ToolUseContent) -> Optional[ToolUseWidget]:

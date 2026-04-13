@@ -391,7 +391,7 @@ def _parse_tokens(
             slug_text = content.plain
             block_id = f"heading-{slug_for_tcss_id(slug_text)}"
 
-            top_margin = 2 if ctx["level"] <= 2 else 1
+            top_margin = 1 if ctx["level"] <= 2 else 0
             blocks.append(
                 MarkdownBlock(
                     block_type="heading",
@@ -590,7 +590,7 @@ def _parse_tokens(
                     content=Content(""),
                     source_range=source_range,
                     style_name="markdown--hr",
-                    top_margin=2,
+                    top_margin=1,
                     bottom_margin=1,
                 )
             )
@@ -687,8 +687,8 @@ def _parse_tokens(
                     code_language=language,
                     indent=indent,
                     prefix=prefix,
-                    padding_top=1,
-                    padding_bottom=1,
+                    padding_top=0,
+                    padding_bottom=0,
                     padding_left=2,
                     padding_right=1,
                     border_left=border_left,

@@ -29,6 +29,8 @@ class TranscriptMarkdownFence(MarkdownFence):
 class StreamingMarkdownWidget(Markdown):
     """Markdown widget for streaming markdown content with terminal sanitization."""
 
+    FOCUS_ON_CLICK = False
+
     def __init__(
         self,
         initial_text: str = "",
