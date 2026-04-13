@@ -11,7 +11,7 @@ REPLScreen {
     height: 1fr;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 0 1;
+    padding: 0 0;
 }
 
 ScrollableContainer {
@@ -29,7 +29,7 @@ WelcomeWidget {
     width: 100%;
     height: auto;
     border: round $border;
-    background: $boost;
+    background: transparent;
     padding: 0 1;
     margin: 0 1 1 1;
 }
@@ -104,7 +104,7 @@ WelcomeWidget:focus {
 #input-area {
     height: auto;
     dock: bottom;
-    padding: 1 2 0 2;
+    padding: 1 0 0 0;
     background: $background;
 }
 

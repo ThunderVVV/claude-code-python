@@ -110,8 +110,6 @@ class REPLScreen(Screen):
             if current_model
             else None
         )
-        self._autocomplete_scroll_baseline_height = 0
-        self._autocomplete_scroll_was_near_bottom = False
 
     def _load_history(self) -> None:
         if self._history_file.exists():
@@ -433,7 +431,7 @@ class REPLScreen(Screen):
             self._snapshot_status = status
             self._refresh_context_usage_label()
         except Exception as e:
-            logger.debug(f"Failed to refresh snapshot status: {e}")
+            tui_log(f"Failed to refresh snapshot status: {e}")
 
     def _reset_streaming_state(self) -> None:
         self._current_assistant_widget = None
@@ -922,7 +920,7 @@ class REPLScreen(Screen):
             asyncio.create_task(self._refresh_snapshot_status())
 
         elif isinstance(event, ErrorEvent):
-            logger.debug(f"ErrorEvent received: {event.error}")
+            tui_log(f"ErrorEvent received: {event.error}")
             error_msg = Message.system_message(f"Error: {event.error}")
             await message_list.add_message(error_msg)
 

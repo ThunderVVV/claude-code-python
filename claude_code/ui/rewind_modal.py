@@ -50,16 +50,19 @@ class RewindModal(ModalScreen[Optional[Tuple[str, int]]]):
             #table-container {
                 height: auto;
                 padding: 0;
+                background: $surface;
+                scrollbar-corner-color: $surface;
                 DataTable {
                     width: 1fr;
                     height: 12;
-                    scrollbar-background: transparent;
-                    scrollbar-background-hover: transparent;
-                    scrollbar-background-active: transparent;
-                    scrollbar-color: transparent;
-                    scrollbar-color-hover: transparent;
-                    scrollbar-color-active: transparent;
-                    scrollbar-corner-color: transparent;
+                    scrollbar-background: $surface;
+                    scrollbar-background-hover: $surface;
+                    scrollbar-background-active: $surface;
+                    scrollbar-color: $surface;
+                    scrollbar-color-hover: $surface;
+                    scrollbar-color-active: $surface;
+                    background: $surface;
+                    scrollbar-corner-color: $surface;
                 }
             }
             #buttons {

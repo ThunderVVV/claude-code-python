@@ -35,11 +35,6 @@ def _resolve_theme_name(
         return DEFAULT_THEME_NAME
 
     if theme_name not in available_themes:
-        logger.warning(
-            "Ignoring unsupported theme %r from settings.json; falling back to %s",
-            theme_name,
-            DEFAULT_THEME_NAME,
-        )
         return DEFAULT_THEME_NAME
 
     return theme_name
