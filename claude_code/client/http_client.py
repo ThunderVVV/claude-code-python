@@ -379,42 +379,6 @@ class ClaudeCodeHttpClient:
             logger.error(f"Revert request failed: {e}")
             return {"success": False, "message": str(e)}
 
-    async def unrevert(self, session_id: str) -> dict:
-        """Undo a previous revert operation."""
-        if not self._client:
-            raise RuntimeError("Client not connected")
-
-        request_data = {"session_id": session_id}
-        logger.debug(f"Sending Unrevert request - session_id: {session_id}")
-
-        try:
-            response = await self._client.post(
-                f"{self._base_url}/api/unrevert",
-                json=request_data,
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            logger.error(f"Unrevert request failed: {e}")
-            return {"success": False, "message": str(e)}
-
-    async def get_revert_state(self, session_id: str) -> dict:
-        """Get the current revert state for a session."""
-        if not self._client:
-            raise RuntimeError("Client not connected")
-
-        logger.debug(f"Sending GetRevertState request - session_id: {session_id}")
-
-        try:
-            response = await self._client.get(
-                f"{self._base_url}/api/revert_state/{session_id}",
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            logger.error(f"Get revert state request failed: {e}")
-            return {"has_revert": False}
-
     async def get_snapshot_status(self, session_id: str) -> dict:
         """Get the snapshot status (files modified, additions, deletions)."""
         if not self._client:

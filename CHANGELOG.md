@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed - 2025-01-14
+
+#### API Cleanup - Removed Unused Endpoints
+- Removed `GET /api/revert_state/{session_id}` endpoint - not used by any frontend (TUI or Web)
+- Removed `POST /api/unrevert` endpoint - not used by any frontend (TUI or Web)
+- Removed `UnrevertRequest` model from API server
+- Removed `ClaudeCodeHttpClient.get_revert_state()` method
+- Removed `ClaudeCodeHttpClient.unrevert()` method
+- Removed `SessionRevertService.unrevert()` method from core revert service
+- Kept internal `QueryEngine` revert state methods (`get_revert_state`, `set_revert_state`, `clear_revert_state`) as they are used by the revert workflow
+- Total code reduction: ~87 lines of unused code
+
 ### Added - 2026-04-13
 
 #### High-Performance TUI Markdown Renderer

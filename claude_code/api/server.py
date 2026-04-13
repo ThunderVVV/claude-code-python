@@ -168,10 +168,6 @@ class RevertRequest(BaseModel):
     target_part_id: Optional[str] = None
 
 
-class UnrevertRequest(BaseModel):
-    session_id: str
-
-
 class SwitchModelRequest(BaseModel):
     session_id: str
     model_id: str
@@ -489,43 +485,6 @@ async def revert(request: RevertRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/unrevert")
-async def unrevert(request: UnrevertRequest):
-    """Undo a previous revert operation"""
-    try:
-        session_manager = get_session_manager()
-        engine = session_manager.get_engine(request.session_id)
-        if not engine:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        revert_service = engine.get_revert_service()
-        if not revert_service:
-            raise HTTPException(status_code=500, detail="Revert service not available")
-
-        result = await revert_service.unrevert(engine)
-
-        if result.success:
-            response = {
-                "success": True,
-                "message": result.message,
-            }
-            if result.summary:
-                response["summary"] = {
-                    "additions": result.summary.additions,
-                    "deletions": result.summary.deletions,
-                    "files": result.summary.files,
-                }
-            return response
-        else:
-            return {"success": False, "message": result.message}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Failed to unrevert")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @api_router.post("/model")
 async def switch_model(request: SwitchModelRequest):
     """Switch the active model for a session and persist it to settings.json."""
@@ -559,42 +518,6 @@ async def switch_model(request: SwitchModelRequest):
         raise
     except Exception as e:
         logger.exception("Failed to switch model")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.get("/revert_state/{session_id}")
-async def get_revert_state(session_id: str):
-    """Get the current revert state for a session"""
-    try:
-        session_manager = get_session_manager()
-        engine = session_manager.get_engine(session_id)
-        if not engine:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        revert_state = engine.get_revert_state()
-        if revert_state:
-            return {
-                "has_revert": True,
-                "message_id": revert_state.message_id,
-                "part_id": revert_state.part_id,
-                "snapshot": revert_state.snapshot,
-                "summary": {
-                    "additions": revert_state.diff.additions
-                    if revert_state.diff
-                    else 0,
-                    "deletions": revert_state.diff.deletions
-                    if revert_state.diff
-                    else 0,
-                    "files": revert_state.diff.files if revert_state.diff else 0,
-                },
-            }
-        else:
-            return {"has_revert": False}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Failed to get revert state")
         raise HTTPException(status_code=500, detail=str(e))
 
 

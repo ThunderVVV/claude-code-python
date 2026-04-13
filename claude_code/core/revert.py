@@ -211,38 +211,3 @@ class SessionRevertService:
             revert_state=revert_point,
             summary=revert_point.diff,
         )
-
-    async def unrevert(self, engine: "QueryEngine") -> RevertResult:
-        """Undo a previous revert operation.
-
-        Args:
-            engine: The QueryEngine instance with session state
-
-        Returns:
-            RevertResult indicating success or failure
-        """
-        revert_state = engine.get_revert_state()
-        if not revert_state:
-            return RevertResult(
-                success=False,
-                message="No revert to undo",
-            )
-
-        if not revert_state.snapshot:
-            engine.clear_revert_state()
-            return RevertResult(
-                success=True,
-                message="Revert state cleared (no snapshot to restore)",
-            )
-
-        self.snapshot_manager.restore(revert_state.snapshot)
-        engine.clear_revert_state()
-
-        logger.info(f"Un-reverted to snapshot {revert_state.snapshot[:8]}")
-
-        return RevertResult(
-            success=True,
-            message="Restored previous state",
-            revert_state=None,
-            summary=revert_state.diff,
-        )
