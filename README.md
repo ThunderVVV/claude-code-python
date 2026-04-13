@@ -234,6 +234,8 @@ Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 ## TODO
 
 - 添加 /compact 命令
+- 增加 AGENTS.md, CLAUDE.md 自动读取
+- 增加 /init 命令自动生成 AGENTS.md
 
 ## 许可证
 
