@@ -232,11 +232,6 @@ Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 - TUI 客户端：`cc-py`
 - 浏览器界面：`cc-api`
 
-## TODO
-
-- 添加 /compact 命令
-- 增加 /init 命令自动生成 AGENTS.md
-
 ## 许可证
 
 MIT License
