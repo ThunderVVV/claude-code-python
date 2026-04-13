@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2025-01-15
+
+#### TUI Model Management Refactoring
+- Refactored TUI to fetch model information from server API instead of local settings
+- Added `GET /api/models` endpoint to list all available models from server
+- Added `ClaudeCodeHttpClient.list_models()` method for fetching model list
+- `ModelSelectModal` now receives models from server response instead of local `AppSettings`
+- Chat requests now include optional `model` parameter to specify model per request
+- Model info is fetched on TUI startup and after session switches
+- Context usage display now shows initial state (0 tokens) before first message
+- Usage stats are reset after model switch for accurate context display
+- Added `settings.json` to `.gitignore` to prevent accidental commit of user configs
+
 ### Fixed - 2025-01-14
 
 #### Session Persistence

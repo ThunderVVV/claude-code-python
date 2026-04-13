@@ -67,13 +67,14 @@ class SessionManager:
         session_id: Optional[str],
         tool_registry: ToolRegistry,
         working_directory: str = "",
+        model_id: Optional[str] = None,
     ) -> QueryEngine:
         async with self._lock:
             if session_id and session_id in self._engines:
                 return self._engines[session_id]
 
             engine = await self._create_engine(
-                session_id, tool_registry, working_directory
+                session_id, tool_registry, working_directory, model_id
             )
             self._engines[engine.get_session_id()] = engine
             return engine
@@ -83,8 +84,9 @@ class SessionManager:
         session_id: Optional[str],
         tool_registry: ToolRegistry,
         working_directory: str,
+        model_id: Optional[str] = None,
     ) -> QueryEngine:
-        client_config = self._resolve_client_config(session_id)
+        client_config = self._resolve_client_config(session_id, model_id)
         return await QueryEngine.create_from_session_id(
             session_id=session_id,
             client_config=client_config,
@@ -99,8 +101,15 @@ class SessionManager:
     def get_settings(self):
         return self._settings_store.ensure_settings()
 
-    def _resolve_client_config(self, session_id: Optional[str]) -> OpenAIClientConfig:
+    def _resolve_client_config(self, session_id: Optional[str], model_id: Optional[str] = None) -> OpenAIClientConfig:
         settings = self.get_settings()
+        
+        # If model_id is explicitly provided, use it
+        if model_id:
+            if model_id in settings.models:
+                return build_client_config(settings, model_id)
+        
+        # Otherwise fall back to session or default
         if session_id:
             persisted = self._session_store.load_session(session_id)
             if persisted:
@@ -108,9 +117,9 @@ class SessionManager:
                     return build_client_config(settings, persisted.model_id)
 
                 if persisted.model_name:
-                    model_id = find_model_id_by_model_name(settings, persisted.model_name)
-                    if model_id:
-                        return build_client_config(settings, model_id)
+                    persisted_model_id = find_model_id_by_model_name(settings, persisted.model_name)
+                    if persisted_model_id:
+                        return build_client_config(settings, persisted_model_id)
 
         return build_client_config(settings)
 
@@ -155,6 +164,7 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     user_text: str
     working_directory: str = os.getcwd()
+    model: Optional[str] = None  # model_id to use for this request
 
 
 class InterruptRequest(BaseModel):
@@ -385,6 +395,7 @@ async def event_stream(chat_request: ChatRequest):
             session_id,
             tool_registry,
             chat_request.working_directory,
+            model_id=chat_request.model,
         )
 
         async for event in engine.submit_message(chat_request.user_text):
@@ -482,6 +493,32 @@ async def revert(request: RevertRequest):
         raise
     except Exception as e:
         logger.exception("Failed to revert")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/models")
+async def list_models():
+    """List all available models from settings."""
+    try:
+        session_manager = get_session_manager()
+        settings = session_manager.get_settings()
+        
+        models_list = []
+        for model_id, model_settings in settings.models.items():
+            models_list.append({
+                "model_id": model_id,
+                "model_name": model_settings.model_name,
+                "context": model_settings.context,
+                "api_url": model_settings.api_url,
+                "is_current": model_id == settings.current_model,
+            })
+        
+        return {
+            "models": models_list,
+            "current_model": settings.current_model,
+        }
+    except Exception as e:
+        logger.exception("Failed to list models")
         raise HTTPException(status_code=500, detail=str(e))
 
 

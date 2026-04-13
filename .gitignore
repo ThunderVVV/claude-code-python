@@ -4,6 +4,7 @@ opencode.json
 .claude/
 .pytest_cache/
 .codex
+settings.json
 
 # Python
 __pycache__/

@@ -102,14 +102,10 @@ class REPLScreen(Screen):
         self._session_title: Optional[str] = None
         self._settings_store = SettingsStore()
         self._settings = self._settings_store.ensure_settings()
-        self._current_model_id = self._settings.current_model
-        current_model = self._settings.get_current_model()
-        self._current_model_name = current_model.model_name if current_model else "unconfigured"
-        self._context_window_tokens = (
-            get_configured_context_window_tokens(str(current_model.context))
-            if current_model
-            else None
-        )
+        # Model info will be fetched from server
+        self._current_model_id: str = ""
+        self._current_model_name: str = "unconfigured"
+        self._context_window_tokens: Optional[int] = None
 
     def _load_history(self) -> None:
         if self._history_file.exists():
@@ -171,6 +167,32 @@ class REPLScreen(Screen):
 
         autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
         autocomplete_popup.set_working_directory(self.working_directory)
+        
+        # Fetch model info from server
+        await self._fetch_model_info_from_server()
+
+    async def _fetch_model_info_from_server(self) -> None:
+        """Fetch model information from server."""
+        try:
+            result = await self.client.list_models()
+            models = result.get("models", [])
+            current_model_id = result.get("current_model", "")
+            
+            if current_model_id:
+                self._current_model_id = current_model_id
+                # Find model info
+                for model in models:
+                    if model.get("model_id") == current_model_id:
+                        self._current_model_name = model.get("model_name", "unconfigured")
+                        self._context_window_tokens = get_configured_context_window_tokens(
+                            str(model.get("context", 0))
+                        )
+                        break
+            
+            self._refresh_context_usage_label()
+            self._update_welcome_model_name()
+        except Exception as e:
+            logger.warning(f"Failed to fetch model info from server: {e}")
 
     def _on_input_submit(self, text: str) -> None:
         tui_log(f"_on_input_submit: text={text!r}")
@@ -401,18 +423,26 @@ class REPLScreen(Screen):
     def _context_usage_text(self) -> str:
         model_text = f"Model: {self._current_model_name}"
 
-        if self._latest_usage and self._context_window_tokens:
-            used_tokens = get_used_context_tokens(self._latest_usage)
-            used_percentage = get_used_context_percentage(
-                self._latest_usage,
-                self._context_window_tokens,
-            )
-            context_text = (
-                "Context: "
-                f"{format_token_count(used_tokens)}/"
-                f"{format_token_count(self._context_window_tokens)} "
-                f"({used_percentage}%)"
-            )
+        if self._context_window_tokens:
+            if self._latest_usage:
+                used_tokens = get_used_context_tokens(self._latest_usage)
+                used_percentage = get_used_context_percentage(
+                    self._latest_usage,
+                    self._context_window_tokens,
+                )
+                context_text = (
+                    "Context: "
+                    f"{format_token_count(used_tokens)}/"
+                    f"{format_token_count(self._context_window_tokens)} "
+                    f"({used_percentage}%)"
+                )
+            else:
+                # Initial state: 0 tokens used
+                context_text = (
+                    "Context: "
+                    f"{format_token_count(0)}/"
+                    f"{format_token_count(self._context_window_tokens)}"
+                )
         else:
             context_text = "Context: unavailable (waiting for server)"
 
@@ -524,27 +554,51 @@ class REPLScreen(Screen):
         if self._is_processing:
             return
 
-        self._settings = self._settings_store.ensure_settings()
-        modal = ModelSelectModal(
-            settings=self._settings,
-            current_model_id=self._current_model_id,
-        )
-        self.app.push_screen(modal, self._on_model_selected)
+        # Fetch models from server asynchronously
+        asyncio.create_task(self._show_model_modal_async())
+
+    async def _show_model_modal_async(self) -> None:
+        """Async implementation to show model selection modal."""
+        try:
+            result = await self.client.list_models()
+            models = result.get("models", [])
+            
+            modal = ModelSelectModal(
+                models=models,
+                current_model_id=self._current_model_id,
+            )
+            self.app.push_screen(modal, self._on_model_selected)
+        except Exception as e:
+            logger.error(f"Failed to fetch models: {e}")
+            message_list = self.query_one("#message-list", MessageList)
+            await message_list.add_message(
+                Message.system_message(f"Failed to fetch models: {str(e)}")
+            )
 
     async def _handle_model_command(self, user_text: str) -> None:
         """Show available models or switch to a configured model."""
         parts = user_text.split(maxsplit=1)
         if len(parts) == 1:
-            current = self._current_model_id or "unconfigured"
-            lines = [f"Current model: {current}"]
-            if self._settings.models:
-                lines.append("Available models:")
-                lines.extend(f"  {model_id}" for model_id in self._settings.models)
-            else:
-                lines.append("No models configured in ~/.claude-code-python/settings.json")
+            # Fetch models from server
+            try:
+                result = await self.client.list_models()
+                models = result.get("models", [])
+                current_model = result.get("current_model", "unconfigured")
+                
+                lines = [f"Current model: {current_model}"]
+                if models:
+                    lines.append("Available models:")
+                    lines.extend(f"  {model.get('model_id', '')}" for model in models)
+                else:
+                    lines.append("No models configured on server")
 
-            message_list = self.query_one("#message-list", MessageList)
-            await message_list.add_message(Message.system_message("\n".join(lines)))
+                message_list = self.query_one("#message-list", MessageList)
+                await message_list.add_message(Message.system_message("\n".join(lines)))
+            except Exception as e:
+                message_list = self.query_one("#message-list", MessageList)
+                await message_list.add_message(
+                    Message.system_message(f"Failed to fetch models: {str(e)}")
+                )
             return
 
         model_id = parts[1].strip()
@@ -560,7 +614,6 @@ class REPLScreen(Screen):
             )
             return
 
-        self._settings = self._settings_store.ensure_settings()
         self._current_model_id = result.get("model_id", model_id)
         self._current_model_name = result.get("model_name", self._current_model_name)
         context_value = result.get("context")
@@ -569,6 +622,8 @@ class REPLScreen(Screen):
             if context_value is not None
             else None
         )
+        # Reset usage after model switch
+        self._latest_usage = None
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.load_text("")
         input_widget.focus()
@@ -610,15 +665,9 @@ class REPLScreen(Screen):
         self._snapshot_status = None
         self._reset_streaming_state()
         self._reset_tool_contexts()
-        self._settings = self._settings_store.ensure_settings()
-        self._current_model_id = self._settings.current_model
-        current_model = self._settings.get_current_model()
-        self._current_model_name = current_model.model_name if current_model else "unconfigured"
-        self._context_window_tokens = (
-            get_configured_context_window_tokens(str(current_model.context))
-            if current_model
-            else None
-        )
+        
+        # Fetch model info from server
+        await self._fetch_model_info_from_server()
 
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.load_text("")
@@ -754,7 +803,6 @@ class REPLScreen(Screen):
             return
 
         self.session_id = session_summary.session_id
-        self._settings = self._settings_store.ensure_settings()
 
         message_list = self.query_one("#message-list", MessageList)
         message_list.clear()
@@ -763,11 +811,20 @@ class REPLScreen(Screen):
         self._latest_usage = session_info.total_usage
         self._current_model_id = session_info.model_id or self._current_model_id
         self._current_model_name = session_info.model_name or self._current_model_name
-        if self._current_model_id in self._settings.models:
-            model_settings = self._settings.models[self._current_model_id]
-            self._context_window_tokens = get_configured_context_window_tokens(
-                str(model_settings.context)
-            )
+        
+        # Fetch model context from server
+        if self._current_model_id:
+            try:
+                result = await self.client.list_models()
+                for model in result.get("models", []):
+                    if model.get("model_id") == self._current_model_id:
+                        self._context_window_tokens = get_configured_context_window_tokens(
+                            str(model.get("context", 0))
+                        )
+                        break
+            except Exception:
+                pass
+        
         self._reset_streaming_state()
         self._reset_tool_contexts()
 
@@ -819,7 +876,10 @@ class REPLScreen(Screen):
             # This aligns behavior with Web UI
 
             async for event in self.client.stream_chat(
-                user_text, self.session_id, self.working_directory
+                user_text, 
+                self.session_id, 
+                self.working_directory,
+                model=self._current_model_id if self._current_model_id else None,
             ):
                 if not self._is_processing:
                     break

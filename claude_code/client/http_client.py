@@ -204,6 +204,7 @@ class ClaudeCodeHttpClient:
         user_text: str,
         session_id: str,
         working_directory: str = "",
+        model: Optional[str] = None,
     ) -> AsyncGenerator[QueryEvent, None]:
         """Send a message and receive event stream from server."""
         logger.debug(f"stream_chat called, URL={self._base_url}/api/chat")
@@ -216,6 +217,9 @@ class ClaudeCodeHttpClient:
             "user_text": user_text,
             "working_directory": working_directory,
         }
+        
+        if model:
+            request_data["model"] = model
 
         try:
             async with self._client.stream(
@@ -414,3 +418,18 @@ class ClaudeCodeHttpClient:
         except httpx.HTTPError as e:
             logger.error(f"Switch model request failed: {e}")
             return {"success": False, "message": str(e)}
+
+    async def list_models(self) -> dict:
+        """Get list of available models from server."""
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        try:
+            response = await self._client.get(
+                f"{self._base_url}/api/models",
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"List models request failed: {e}")
+            return {"models": [], "current_model": ""}

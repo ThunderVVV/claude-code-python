@@ -145,7 +145,7 @@ cc-py
 
 ### TUI 命令
 
-- `/model`：显示当前模型和可用模型 ID
+- `/model`：显示当前模型和可用模型 ID（从服务器获取）
 - `/model <model_id>`：实时切换当前 session 的模型，并同步更新 `settings.json`
 
 ### 浏览器界面模式（可选，实验特性）

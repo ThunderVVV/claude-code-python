@@ -8,15 +8,13 @@ from textual.containers import Center, HorizontalGroup, VerticalGroup
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Markdown
 
-from claude_code.core.settings import AppSettings
-
 HELP = """\
 # Model
 """
 
 
 class ModelSelectModal(ModalScreen[Optional[str]]):
-    """Dialog to select a configured model."""
+    """Dialog to select a configured model from server."""
 
     CSS = """
     ModelSelectModal {
@@ -73,13 +71,13 @@ class ModelSelectModal(ModalScreen[Optional[str]]):
 
     def __init__(
         self,
-        settings: AppSettings,
+        models: list[dict],
         current_model_id: str = "",
         id: Optional[str] = None,
         classes: Optional[str] = None,
     ) -> None:
         super().__init__(id=id, classes=classes)
-        self.settings = settings
+        self.models = models
         self.current_model_id = current_model_id
 
     def compose(self) -> ComposeResult:
@@ -101,13 +99,14 @@ class ModelSelectModal(ModalScreen[Optional[str]]):
         table = self.query_one("#models", DataTable)
         table.add_columns("Model ID", "Model Name", "Context", "API URL")
 
-        for model_id, model in self.settings.models.items():
+        for model in self.models:
+            model_id = model.get("model_id", "")
             model_label = f"{'→ ' if model_id == self.current_model_id else ''}{model_id}"
             table.add_row(
                 model_label,
-                model.model_name,
-                str(model.context),
-                model.api_url,
+                model.get("model_name", ""),
+                str(model.get("context", "")),
+                model.get("api_url", ""),
                 key=model_id,
             )
 
