@@ -8,29 +8,30 @@
 
 ## Architecture
 
-This project uses a frontend-backend separation architecture with gRPC communication.
+This project uses a frontend-backend separation architecture with HTTP/FastAPI communication.
 
 **Frontend (TUI Client):**
 - `REPLScreen` - Textual TUI interface
-- `ClaudeCodeClient` - gRPC client
+- `ClaudeCodeHttpClient` - HTTP client
 
-**Backend (gRPC Server):**
-- `ChatServiceServicer` + `SessionServiceServicer` - gRPC server
+**Backend (FastAPI Server):**
+- `FastAPI` server with REST API endpoints
+- `SessionManager` - Session and engine lifecycle management
 - `QueryEngine` - Core query engine
 - `OpenAIClient` - OpenAI-compatible API client
 
 **Communication Flow:**
 ```
-REPLScreen -> ClaudeCodeClient --gRPC--> ChatServiceServicer -> QueryEngine -> OpenAIClient
+REPLScreen -> ClaudeCodeHttpClient --HTTP--> FastAPI Server -> QueryEngine -> OpenAIClient
 ```
 
 **Key Directories:**
 - `claude_code/ui/` - Frontend TUI (Textual)
-- `claude_code/client/` - gRPC client
-- `claude_code/server/` - gRPC server
+- `claude_code/client/` - HTTP client
+- `claude_code/api/` - FastAPI backend server
 - `claude_code/core/` - Core logic (QueryEngine, tools, messages)
 - `claude_code/services/` - OpenAI client
-- `claude_code/proto/` - gRPC protocol definitions
+- `claude_code/web/` - Web static assets
 
 ## Repository Hygiene
 
