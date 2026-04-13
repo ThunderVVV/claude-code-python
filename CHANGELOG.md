@@ -20,6 +20,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added - 2026-04-13
 
+#### Real-time Model Switching
+- Added `/model` command in TUI to display current model and available models
+- Added `/model <model_id>` command to switch model in real-time during session
+- Created `claude_code/ui/model_select_modal.py` - Modal for selecting models
+- Added API endpoint `POST /api/model` for model switching
+- Session persistence now includes `model_id` to remember model choice per session
+- Added `switch_model()` method to `QueryEngine` for dynamic model reconfiguration
+- TUI context bar now displays current model name
+- Welcome widget updates model name when model is switched
+
 #### File Rewind/Revert Feature
 - Added `/rewind` command in TUI to revert file changes to a previous conversation point
 - Created `claude_code/core/snapshot.py` - Git-based independent snapshot system for tracking file changes during tool execution

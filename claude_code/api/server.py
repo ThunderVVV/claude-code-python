@@ -35,6 +35,11 @@ from claude_code.core.session_store import (
     SessionStore,
     PersistedSession,
 )
+from claude_code.core.settings import (
+    SettingsStore,
+    build_client_config,
+    find_model_id_by_model_name,
+)
 from claude_code.services.openai_client import OpenAIClientConfig
 from claude_code.core.file_expansion import (
     FileExpansion,
@@ -54,12 +59,12 @@ class SessionManager:
     def __init__(self):
         self._engines: dict[str, QueryEngine] = {}
         self._session_store = SessionStore()
+        self._settings_store = SettingsStore()
         self._lock = asyncio.Lock()
 
     async def get_or_create_engine(
         self,
         session_id: Optional[str],
-        client_config: OpenAIClientConfig,
         tool_registry: ToolRegistry,
         working_directory: str = "",
     ) -> QueryEngine:
@@ -68,7 +73,7 @@ class SessionManager:
                 return self._engines[session_id]
 
             engine = await self._create_engine(
-                session_id, client_config, tool_registry, working_directory
+                session_id, tool_registry, working_directory
             )
             self._engines[engine.get_session_id()] = engine
             return engine
@@ -76,10 +81,10 @@ class SessionManager:
     async def _create_engine(
         self,
         session_id: Optional[str],
-        client_config: OpenAIClientConfig,
         tool_registry: ToolRegistry,
         working_directory: str,
     ) -> QueryEngine:
+        client_config = self._resolve_client_config(session_id)
         return await QueryEngine.create_from_session_id(
             session_id=session_id,
             client_config=client_config,
@@ -90,6 +95,24 @@ class SessionManager:
 
     def get_engine(self, session_id: str) -> Optional[QueryEngine]:
         return self._engines.get(session_id)
+
+    def get_settings(self):
+        return self._settings_store.ensure_settings()
+
+    def _resolve_client_config(self, session_id: Optional[str]) -> OpenAIClientConfig:
+        settings = self.get_settings()
+        if session_id:
+            persisted = self._session_store.load_session(session_id)
+            if persisted:
+                if persisted.model_id and persisted.model_id in settings.models:
+                    return build_client_config(settings, persisted.model_id)
+
+                if persisted.model_name:
+                    model_id = find_model_id_by_model_name(settings, persisted.model_name)
+                    if model_id:
+                        return build_client_config(settings, model_id)
+
+        return build_client_config(settings)
 
     def list_sessions(self):
         return self._session_store.list_sessions()
@@ -109,6 +132,7 @@ class SessionManager:
                 updated_at="",
                 working_directory=engine.get_working_directory(),
                 current_turn=engine.state.current_turn,
+                model_id=engine.client_config.model_id,
                 model_name=engine.client_config.model_name,
                 total_usage=engine.state.total_usage or Usage(),
                 messages=messages,
@@ -146,6 +170,11 @@ class RevertRequest(BaseModel):
 
 class UnrevertRequest(BaseModel):
     session_id: str
+
+
+class SwitchModelRequest(BaseModel):
+    session_id: str
+    model_id: str
 
 
 def _normalize_api_prefix(api_prefix: str) -> str:
@@ -313,25 +342,25 @@ api_router = APIRouter()
 
 
 # Global dependencies
-_client_config: Optional[OpenAIClientConfig] = None
+_settings_store: Optional[SettingsStore] = None
 _tool_registry: Optional[ToolRegistry] = None
 
 
 def set_global_dependencies(
-    client_config: OpenAIClientConfig,
+    settings_store: SettingsStore,
     tool_registry: ToolRegistry,
 ) -> None:
     """Set global dependencies before app startup"""
-    global _client_config, _tool_registry
-    _client_config = client_config
+    global _settings_store, _tool_registry
+    _settings_store = settings_store
     _tool_registry = tool_registry
 
 
-def require_global_dependencies() -> tuple[OpenAIClientConfig, ToolRegistry]:
+def require_global_dependencies() -> tuple[SettingsStore, ToolRegistry]:
     """Return global dependencies or raise if not set"""
-    if _client_config is None or _tool_registry is None:
+    if _settings_store is None or _tool_registry is None:
         raise RuntimeError("Global dependencies not set")
-    return _client_config, _tool_registry
+    return _settings_store, _tool_registry
 
 
 @asynccontextmanager
@@ -347,7 +376,7 @@ async def event_stream(chat_request: ChatRequest):
 
     try:
         session_id = chat_request.session_id
-        client_config, tool_registry = require_global_dependencies()
+        _settings_store, tool_registry = require_global_dependencies()
         session_manager = get_session_manager()
 
         if not session_id:
@@ -358,7 +387,6 @@ async def event_stream(chat_request: ChatRequest):
 
         engine = await session_manager.get_or_create_engine(
             session_id,
-            client_config,
             tool_registry,
             chat_request.working_directory,
         )
@@ -498,6 +526,42 @@ async def unrevert(request: UnrevertRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/model")
+async def switch_model(request: SwitchModelRequest):
+    """Switch the active model for a session and persist it to settings.json."""
+    try:
+        session_manager = get_session_manager()
+        engine = session_manager.get_engine(request.session_id)
+        _settings_store, tool_registry = require_global_dependencies()
+
+        settings = session_manager.get_settings()
+        if request.model_id not in settings.models:
+            raise HTTPException(status_code=404, detail="Model configuration not found")
+
+        settings.current_model = request.model_id
+        session_manager._settings_store.save(settings)
+
+        client_config = build_client_config(settings, request.model_id)
+        if engine is None:
+            engine = await session_manager.get_or_create_engine(
+                request.session_id,
+                tool_registry,
+                "",
+            )
+        await engine.switch_model(client_config)
+        return {
+            "success": True,
+            "model_id": request.model_id,
+            "model_name": client_config.model_name,
+            "context": settings.models[request.model_id].context,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to switch model")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.get("/revert_state/{session_id}")
 async def get_revert_state(session_id: str):
     """Get the current revert state for a session"""
@@ -609,6 +673,8 @@ async def get_session(session_id: str):
                 "output_tokens": session.total_usage.output_tokens,
             },
             "working_directory": session.working_directory,
+            "model_id": session.model_id,
+            "model_name": session.model_name,
         }
     except HTTPException:
         raise

@@ -53,6 +53,7 @@ class PersistedSession:
     updated_at: str
     working_directory: str
     current_turn: int = 0
+    model_id: Optional[str] = None
     model_name: Optional[str] = None
     total_usage: Usage = field(default_factory=Usage)
     messages: list[Message] = field(default_factory=list)
@@ -107,6 +108,7 @@ class SessionStore:
         title: Optional[str] = None,
         created_at: Optional[str] = None,
         model_name: Optional[str] = None,
+        model_id: Optional[str] = None,
         total_usage: Optional[Usage] = None,
         revert_state: Optional[RevertStateData] = None,
         total_diff: Optional[dict] = None,
@@ -129,6 +131,7 @@ class SessionStore:
             updated_at=now,
             working_directory=working_directory,
             current_turn=current_turn,
+            model_id=model_id if model_id is not None else (existing.model_id if existing else None),
             model_name=model_name
             if model_name is not None
             else (existing.model_name if existing else None),
@@ -154,6 +157,7 @@ class SessionStore:
             "updated_at": session.updated_at,
             "working_directory": session.working_directory,
             "current_turn": session.current_turn,
+            "model_id": session.model_id,
             "model_name": session.model_name,
             "total_usage": _usage_to_dict(session.total_usage),
             "messages": [_message_to_dict(message) for message in session.messages],
@@ -185,6 +189,7 @@ class SessionStore:
                 updated_at=str(payload.get("updated_at", "")),
                 working_directory=str(payload.get("working_directory", "")),
                 current_turn=int(payload.get("current_turn", 0)),
+                model_id=payload.get("model_id"),
                 model_name=payload.get("model_name"),
                 total_usage=_usage_from_dict(payload.get("total_usage")),
                 messages=[

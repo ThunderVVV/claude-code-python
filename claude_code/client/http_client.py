@@ -153,6 +153,8 @@ class SessionInfo:
         total_usage: Usage = None,
         working_directory: str = "",
         title: str = "",
+        model_id: str = "",
+        model_name: str = "",
     ):
         self.session_id = session_id
         self.messages = messages or []
@@ -160,6 +162,8 @@ class SessionInfo:
         self.total_usage = total_usage or Usage()
         self.working_directory = working_directory
         self.title = title
+        self.model_id = model_id
+        self.model_name = model_name
 
 
 class ClaudeCodeHttpClient:
@@ -308,6 +312,8 @@ class ClaudeCodeHttpClient:
                 ),
                 working_directory=data.get("working_directory", ""),
                 title=data.get("title", ""),
+                model_id=data.get("model_id", ""),
+                model_name=data.get("model_name", ""),
             )
         except httpx.HTTPError as e:
             logger.error(f"Get session request failed: {e}")
@@ -423,3 +429,24 @@ class ClaudeCodeHttpClient:
         except httpx.HTTPError as e:
             logger.error(f"Get snapshot status request failed: {e}")
             return {"available": False}
+
+    async def switch_model(self, session_id: str, model_id: str) -> dict:
+        """Switch the active model for a session."""
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        request_data = {
+            "session_id": session_id,
+            "model_id": model_id,
+        }
+
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/api/model",
+                json=request_data,
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Switch model request failed: {e}")
+            return {"success": False, "message": str(e)}

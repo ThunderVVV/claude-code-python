@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -22,6 +23,7 @@ from claude_code.core.context_window import (
     get_used_context_tokens,
     get_configured_context_window_tokens,
 )
+from claude_code.core.settings import SettingsStore
 from claude_code.core.messages import (
     Message,
     MessageRole,
@@ -45,6 +47,14 @@ from claude_code.ui.message_widgets import (
 )
 from claude_code.ui.session_resume_modal import SessionResumeModal
 from claude_code.ui.rewind_modal import RewindModal
+from claude_code.ui.model_select_modal import ModelSelectModal
+from claude_code.ui.autocomplete import (
+    AutocompletePopup,
+    AutocompleteMode,
+    Command,
+    CommandRegistry,
+    AtOption,
+)
 from claude_code.utils.logging_config import log_full_exception, tui_log
 
 logger = logging.getLogger(__name__)
@@ -90,8 +100,18 @@ class REPLScreen(Screen):
         self._load_history()
 
         self._session_title: Optional[str] = None
-
-        self._context_window_tokens = get_configured_context_window_tokens()
+        self._settings_store = SettingsStore()
+        self._settings = self._settings_store.ensure_settings()
+        self._current_model_id = self._settings.current_model
+        current_model = self._settings.get_current_model()
+        self._current_model_name = current_model.model_name if current_model else "unconfigured"
+        self._context_window_tokens = (
+            get_configured_context_window_tokens(str(current_model.context))
+            if current_model
+            else None
+        )
+        self._autocomplete_scroll_baseline_height = 0
+        self._autocomplete_scroll_was_near_bottom = False
 
     def _load_history(self) -> None:
         if self._history_file.exists():
@@ -125,7 +145,7 @@ class REPLScreen(Screen):
         with ScrollableContainer(id="content-area"):
             yield WelcomeWidget(
                 id="welcome-widget",
-                model_name=os.environ.get("CLAUDE_CODE_MODEL"),
+                model_name=self._current_model_name,
                 cwd=self.working_directory,
             )
             yield MessageList(id="message-list")
@@ -136,6 +156,7 @@ class REPLScreen(Screen):
                 yield Label(
                     "Working... (esc to interrupt)", id="processing-label", markup=False
                 )
+            yield AutocompletePopup(id="autocomplete-popup")
             yield InputTextArea(
                 placeholder=self._input_placeholder_text(),
                 id="user-input",
@@ -150,9 +171,93 @@ class REPLScreen(Screen):
         input_widget.set_on_submit(self._on_input_submit)
         input_widget.focus()
 
+        autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
+        autocomplete_popup.set_working_directory(self.working_directory)
+
     def _on_input_submit(self, text: str) -> None:
         tui_log(f"_on_input_submit: text={text!r}")
         self._start_message_submission(text)
+
+    def on_text_area_changed(self, event: InputTextArea.Changed) -> None:
+        """Handle text changes in the input area for autocomplete."""
+        if event.text_area.id != "user-input":
+            return
+
+        input_widget = self.query_one("#user-input", InputTextArea)
+        if not input_widget.has_focus:
+            return
+
+        cursor_pos = input_widget.cursor_location[1]
+        line_text = input_widget.document.get_line(input_widget.cursor_location[0])
+        text_before_cursor = line_text[:cursor_pos]
+
+        tui_log(f"on_user_input_changed: text_before_cursor={text_before_cursor!r}")
+
+        autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
+
+        slash_match = re.match(r"^/(\S*)$", text_before_cursor)
+        if slash_match:
+            tui_log(f"Slash match: {slash_match.group(1)}")
+            autocomplete_popup.show_slash_commands(slash_match.group(1))
+            input_widget.set_autocomplete_active(True)
+            self._schedule_autocomplete_scroll_adjustment()
+            return
+
+        at_match = re.search(r"@(\S*)$", text_before_cursor)
+        if at_match:
+            tui_log(f"At match: {at_match.group(1)}")
+            autocomplete_popup.show_at_options(at_match.group(1))
+            input_widget.set_autocomplete_active(True)
+            self._schedule_autocomplete_scroll_adjustment()
+            return
+
+        if autocomplete_popup.is_visible():
+            tui_log("Closing autocomplete")
+            autocomplete_popup.hide()
+            input_widget.set_autocomplete_active(False)
+
+    def on_autocomplete_popup_selected(self, event: AutocompletePopup.Selected) -> None:
+        """Handle selection from autocomplete popup."""
+        tui_log(f"on_autocomplete_popup_selected: item={event.item}")
+        self._handle_autocomplete_selection(event.item, event.mode)
+        autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
+        autocomplete_popup.hide()
+
+    def _navigate_autocomplete_popup(self, direction: int) -> None:
+        """Navigate autocomplete popup from InputTextArea."""
+        tui_log(f"_navigate_autocomplete_popup: direction={direction}")
+        autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
+        if direction < 0:
+            autocomplete_popup.navigate_up()
+        else:
+            autocomplete_popup.navigate_down()
+
+    def _select_autocomplete_popup(self) -> None:
+        """Select autocomplete item from InputTextArea."""
+        tui_log("_select_autocomplete_popup")
+        autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
+        selected = autocomplete_popup.select_current()
+        if selected:
+            self._handle_autocomplete_selection(selected, autocomplete_popup.mode)
+        autocomplete_popup.hide()
+
+    def _handle_autocomplete_selection(
+        self, item: Command | AtOption, mode: AutocompleteMode
+    ) -> None:
+        """Handle autocomplete item selection."""
+        tui_log(f"_handle_autocomplete_selection: item={item}, mode={mode}")
+        input_widget = self.query_one("#user-input", InputTextArea)
+
+        if isinstance(item, Command):
+            input_widget.insert_autocomplete(f"/{item.trigger} ", mode)
+        elif isinstance(item, AtOption):
+            if item.type == "web":
+                input_widget.insert_autocomplete("@web ", mode)
+            else:
+                input_widget.insert_autocomplete(f"@{item.path or item.display} ", mode)
+
+        input_widget.set_autocomplete_active(False)
+        input_widget.focus()
 
     async def on_mouse_down(self, event: events.MouseDown) -> None:
         self._focus_input_if_needed()
@@ -166,10 +271,71 @@ class REPLScreen(Screen):
         if not input_widget.has_focus and not self._is_processing:
             input_widget.focus()
 
+    def _scroll_content_area_to_bottom(self) -> None:
+        """Pin the transcript to the bottom when autocomplete expands the input area."""
+        try:
+            content_area = self.query_one("#content-area", ScrollableContainer)
+            content_area.refresh(layout=True)
+            content_area.scroll_to(
+                y=content_area.max_scroll_y,
+                animate=False,
+                force=True,
+                immediate=True,
+            )
+        except Exception:
+            pass
+
+    def _schedule_autocomplete_scroll_adjustment(self) -> None:
+        """Compensate scroll position after autocomplete expands the input area."""
+        try:
+            input_area = self.query_one("#input-area", VerticalGroup)
+            content_area = self.query_one("#content-area", ScrollableContainer)
+            self._autocomplete_scroll_baseline_height = input_area.outer_size.height
+            self._autocomplete_scroll_was_near_bottom = (
+                content_area.scroll_y >= max(content_area.max_scroll_y - 1, 0)
+            )
+        except Exception:
+            self._autocomplete_scroll_baseline_height = 0
+            self._autocomplete_scroll_was_near_bottom = False
+
+        self.refresh(layout=True)
+        self.call_after_refresh(self._apply_autocomplete_scroll_adjustment)
+        self.set_timer(0.01, self._apply_autocomplete_scroll_adjustment)
+        self.set_timer(0.05, self._apply_autocomplete_scroll_adjustment)
+
+    def _apply_autocomplete_scroll_adjustment(self) -> None:
+        """Shift transcript scroll by the popup height delta to keep the bottom anchored."""
+        try:
+            input_area = self.query_one("#input-area", VerticalGroup)
+            content_area = self.query_one("#content-area", ScrollableContainer)
+            new_height = input_area.outer_size.height
+            delta = max(new_height - self._autocomplete_scroll_baseline_height, 0)
+
+            if delta > 0:
+                target_scroll = min(
+                    content_area.max_scroll_y,
+                    content_area.scroll_y + delta,
+                )
+                content_area.scroll_to(
+                    y=target_scroll,
+                    animate=False,
+                    force=True,
+                    immediate=True,
+                )
+
+            if self._autocomplete_scroll_was_near_bottom:
+                self._scroll_content_area_to_bottom()
+        except Exception:
+            pass
+
     async def on_key(self, event: events.Key) -> None:
         if event.key == "escape" and self._is_processing:
             event.stop()
             await self._cancel_current_query()
+            return
+
+        autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
+        if autocomplete_popup.is_visible():
             return
 
         input_widget = self.query_one("#user-input", InputTextArea)
@@ -227,7 +393,9 @@ class REPLScreen(Screen):
         return "Type your message and press Enter (Shift+Enter for new line)"
 
     def _context_usage_text(self) -> str:
-        if self._latest_usage:
+        model_text = f"Model: {self._current_model_name}"
+
+        if self._latest_usage and self._context_window_tokens:
             used_tokens = get_used_context_tokens(self._latest_usage)
             used_percentage = get_used_context_percentage(
                 self._latest_usage,
@@ -252,7 +420,7 @@ class REPLScreen(Screen):
                     f" | Modified: +{additions}/-{deletions} in {files} file(s)"
                 )
 
-        return context_text + snapshot_text
+        return f"{model_text} | {context_text}{snapshot_text}"
 
     def _refresh_context_usage_label(self) -> None:
         label = self.query_one("#context-usage", Label)
@@ -285,70 +453,35 @@ class REPLScreen(Screen):
         if not user_text:
             return
 
-        if user_text.lower() == "/exit":
+        user_text_lower = user_text.lower()
+
+        if user_text_lower == "/exit":
             self.app.exit()
             return
 
-        if user_text.lower() in ("/clear", "/new"):
+        if user_text_lower in ("/clear", "/new"):
             asyncio.create_task(self._start_new_session())
             return
 
-        if user_text.lower() == "/sessions":
+        if user_text_lower == "/sessions":
             self._show_sessions_modal()
             return
 
-        if user_text.lower() == "/rewind":
+        if user_text_lower == "/rewind":
             tui_log("REWIND COMMAND DETECTED!")
             asyncio.create_task(self._show_rewind_modal())
             return
 
-        input_widget = self.query_one("#user-input", InputTextArea)
-        user_text = submitted_value.strip()
-
-        if not user_text:
+        if user_text_lower == "/help":
+            self._show_help()
             return
 
-        if user_text.lower() == "/exit":
-            self.app.exit()
+        if user_text_lower == "/model":
+            self._show_model_modal()
             return
 
-        if user_text.lower() in ("/clear", "/new"):
-            asyncio.create_task(self._start_new_session())
-            return
-
-        if user_text.lower() == "/sessions":
-            self._show_sessions_modal()
-            return
-
-        if user_text.lower() == "/rewind":
-            tui_log("REWIND COMMAND DETECTED!")
-            asyncio.create_task(self._show_rewind_modal())
-            return
-
-        input_widget = self.query_one("#user-input", InputTextArea)
-        user_text = submitted_value.strip()
-
-        if not user_text:
-            return
-
-        if user_text.lower() == "/exit":
-            self.app.exit()
-            return
-
-        if user_text.lower() in ("/clear", "/new"):
-            asyncio.create_task(self._start_new_session())
-            return
-
-        if user_text.lower() == "/sessions":
-            self._show_sessions_modal()
-            return
-
-        if user_text.lower() == "/rewind":
-            import sys
-
-            print("[TUI DEBUG] /rewind command detected", file=sys.stderr)
-            logger.info("[TUI] /rewind command detected")
-            asyncio.create_task(self._show_rewind_modal())
+        if user_text_lower.startswith("/model "):
+            asyncio.create_task(self._handle_model_command(user_text))
             return
 
         self._hide_welcome_widget()
@@ -368,6 +501,92 @@ class REPLScreen(Screen):
             exit_on_error=False,
         )
 
+    def _show_help(self) -> None:
+        """Show help information."""
+        registry = CommandRegistry.get_instance()
+        commands = registry.get_commands()
+        help_text = "Available commands:\n" + "\n".join(
+            f"  {cmd.title} - {cmd.description or 'No description'}" for cmd in commands
+        )
+        message_list = self.query_one("#message-list", MessageList)
+        help_msg = Message.system_message(help_text)
+        asyncio.create_task(message_list.add_message(help_msg))
+
+    def _show_model_modal(self) -> None:
+        """Show the model selection modal."""
+        if self._is_processing:
+            return
+
+        self._settings = self._settings_store.ensure_settings()
+        modal = ModelSelectModal(
+            settings=self._settings,
+            current_model_id=self._current_model_id,
+        )
+        self.app.push_screen(modal, self._on_model_selected)
+
+    async def _handle_model_command(self, user_text: str) -> None:
+        """Show available models or switch to a configured model."""
+        parts = user_text.split(maxsplit=1)
+        if len(parts) == 1:
+            current = self._current_model_id or "unconfigured"
+            lines = [f"Current model: {current}"]
+            if self._settings.models:
+                lines.append("Available models:")
+                lines.extend(f"  {model_id}" for model_id in self._settings.models)
+            else:
+                lines.append("No models configured in ~/.claude-code-python/settings.json")
+
+            message_list = self.query_one("#message-list", MessageList)
+            await message_list.add_message(Message.system_message("\n".join(lines)))
+            return
+
+        model_id = parts[1].strip()
+        if not model_id:
+            return
+
+        result = await self.client.switch_model(self.session_id, model_id)
+        message_list = self.query_one("#message-list", MessageList)
+        if not result.get("success"):
+            error_text = result.get("message") or f"Unknown model: {model_id}"
+            await message_list.add_message(
+                Message.system_message(f"Model switch failed: {error_text}")
+            )
+            return
+
+        self._settings = self._settings_store.ensure_settings()
+        self._current_model_id = result.get("model_id", model_id)
+        self._current_model_name = result.get("model_name", self._current_model_name)
+        context_value = result.get("context")
+        self._context_window_tokens = (
+            get_configured_context_window_tokens(str(context_value))
+            if context_value is not None
+            else None
+        )
+        input_widget = self.query_one("#user-input", InputTextArea)
+        input_widget.load_text("")
+        input_widget.focus()
+        self._refresh_context_usage_label()
+        self._update_welcome_model_name()
+        await message_list.add_message(
+            Message.system_message(
+                f"Switched model to {self._current_model_id} ({self._current_model_name})"
+            )
+        )
+
+    async def _on_model_selected(self, model_id: Optional[str]) -> None:
+        """Handle model selection from the modal."""
+        if not model_id:
+            return
+        await self._handle_model_command(f"/model {model_id}")
+
+    def _update_welcome_model_name(self) -> None:
+        """Refresh the welcome widget model label."""
+        try:
+            welcome_widget = self.query_one("#welcome-widget", WelcomeWidget)
+            welcome_widget.set_model_name(self._current_model_name)
+        except Exception:
+            pass
+
     async def _start_new_session(self) -> None:
         """Create a new session on server and reset UI."""
         if self._is_processing:
@@ -384,6 +603,15 @@ class REPLScreen(Screen):
         self._snapshot_status = None
         self._reset_streaming_state()
         self._reset_tool_contexts()
+        self._settings = self._settings_store.ensure_settings()
+        self._current_model_id = self._settings.current_model
+        current_model = self._settings.get_current_model()
+        self._current_model_name = current_model.model_name if current_model else "unconfigured"
+        self._context_window_tokens = (
+            get_configured_context_window_tokens(str(current_model.context))
+            if current_model
+            else None
+        )
 
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.load_text("")
@@ -392,6 +620,7 @@ class REPLScreen(Screen):
         try:
             welcome_widget = self.query_one("#welcome-widget", WelcomeWidget)
             welcome_widget.display = True
+            welcome_widget.set_model_name(self._current_model_name)
         except Exception:
             pass
 
@@ -517,12 +746,20 @@ class REPLScreen(Screen):
             return
 
         self.session_id = session_summary.session_id
+        self._settings = self._settings_store.ensure_settings()
 
         message_list = self.query_one("#message-list", MessageList)
         message_list.clear()
 
         self._session_title = session_info.title
         self._latest_usage = session_info.total_usage
+        self._current_model_id = session_info.model_id or self._current_model_id
+        self._current_model_name = session_info.model_name or self._current_model_name
+        if self._current_model_id in self._settings.models:
+            model_settings = self._settings.models[self._current_model_id]
+            self._context_window_tokens = get_configured_context_window_tokens(
+                str(model_settings.context)
+            )
         self._reset_streaming_state()
         self._reset_tool_contexts()
 

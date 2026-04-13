@@ -199,6 +199,17 @@ class QueryEngine:
             self._client = None
         self._is_initialized = False
 
+    async def switch_model(self, client_config: OpenAIClientConfig) -> None:
+        """Switch the active model configuration for the current session."""
+        if self._client:
+            await self._client.close()
+            self._client = None
+
+        self.client_config = client_config
+        self._is_initialized = False
+        await self.initialize()
+        self._persist_session()
+
     async def __aenter__(self) -> "QueryEngine":
         """Async context manager entry"""
         await self.initialize()
@@ -386,6 +397,7 @@ class QueryEngine:
                 current_turn=self.state.current_turn,
                 title=self._session_title,
                 created_at=self._session_created_at,
+                model_id=self.client_config.model_id,
                 model_name=self.client_config.model_name,
                 total_usage=self.state.total_usage,
                 revert_state=revert_data,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalGroup
@@ -10,6 +11,7 @@ from textual.widgets import Label, Static, TextArea
 from textual import events
 
 from claude_code.ui.utils import sanitize_terminal_text
+from claude_code.ui.autocomplete import AutocompleteMode
 from claude_code.utils.logging_config import tui_log
 
 
@@ -23,10 +25,39 @@ class InputTextArea(TextArea):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._on_submit = None
+        self._autocomplete_active = False
 
     async def _on_key(self, event: events.Key) -> None:
-        """Handle Enter key for sending message, Shift+Enter for new line."""
-        tui_log(f"InputTextArea._on_key: key={event.key!r}, text={self.text!r}")
+        """Handle key events."""
+        tui_log(
+            f"InputTextArea._on_key: key={event.key!r}, text={self.text!r}, autocomplete_active={self._autocomplete_active}"
+        )
+
+        if self._autocomplete_active:
+            if event.key in ("up", "ctrl+p"):
+                event.stop()
+                event.prevent_default()
+                self._navigate_autocomplete(-1)
+                return
+
+            if event.key in ("down", "ctrl+n"):
+                event.stop()
+                event.prevent_default()
+                self._navigate_autocomplete(1)
+                return
+
+            if event.key in ("enter", "tab"):
+                event.stop()
+                event.prevent_default()
+                self._select_autocomplete()
+                return
+
+            if event.key == "escape":
+                event.stop()
+                event.prevent_default()
+                self._autocomplete_active = False
+                return
+
         if event.key == "enter":
             event.stop()
             event.prevent_default()
@@ -57,9 +88,54 @@ class InputTextArea(TextArea):
 
         await super()._on_key(event)
 
+    def _navigate_autocomplete(self, direction: int) -> None:
+        """Navigate autocomplete via screen method."""
+        try:
+            screen = self.screen
+            if hasattr(screen, "_navigate_autocomplete_popup"):
+                screen._navigate_autocomplete_popup(direction)
+        except Exception:
+            pass
+
+    def _select_autocomplete(self) -> None:
+        """Select autocomplete item via screen method."""
+        try:
+            screen = self.screen
+            if hasattr(screen, "_select_autocomplete_popup"):
+                screen._select_autocomplete_popup()
+        except Exception:
+            pass
+
+    def set_autocomplete_active(self, active: bool) -> None:
+        """Set whether autocomplete is currently active."""
+        self._autocomplete_active = active
+
     def set_on_submit(self, callback) -> None:
         """Set callback for submit action."""
         self._on_submit = callback
+
+    def insert_autocomplete(self, replacement: str, mode: AutocompleteMode) -> None:
+        """Insert autocomplete selection into the text."""
+        line = self.cursor_location[0]
+        col = self.cursor_location[1]
+        line_text = self.document.get_line(line)
+
+        if mode == AutocompleteMode.SLASH:
+            match = re.match(r"^/(\S*)$", line_text[:col])
+            if match:
+                start_col = 0
+                end_col = col
+                self.delete((line, start_col), (line, end_col))
+                self.insert(replacement)
+        elif mode == AutocompleteMode.AT:
+            match = re.search(r"@(\S*)$", line_text[:col])
+            if match:
+                start_col = match.start()
+                end_col = col
+                self.delete((line, start_col), (line, end_col))
+                self.insert(replacement)
+
+        self._autocomplete_active = False
 
 
 class Clawd(VerticalGroup):
@@ -99,6 +175,7 @@ class WelcomeWidget(Container):
                 yield Label(
                     sanitize_terminal_text(f"{self.model_name} · API Usage Billing"),
                     classes="model-info",
+                    id="welcome-model-info",
                     markup=False,
                 )
                 yield Label(
@@ -132,3 +209,14 @@ class WelcomeWidget(Container):
         if len(path) <= max_len:
             return path
         return "..." + path[-(max_len - 3) :]
+
+    def set_model_name(self, model_name: str) -> None:
+        """Update the displayed model name."""
+        self.model_name = model_name
+        try:
+            label = self.query_one("#welcome-model-info", Label)
+            label.update(
+                sanitize_terminal_text(f"{self.model_name} · API Usage Billing")
+            )
+        except Exception:
+            pass
