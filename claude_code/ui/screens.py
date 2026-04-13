@@ -257,18 +257,6 @@ class REPLScreen(Screen):
         input_widget.set_autocomplete_active(False)
         input_widget.focus()
 
-    async def on_mouse_down(self, event: events.MouseDown) -> None:
-        self._focus_input_if_needed()
-
-    async def on_mouse_up(self, event: events.MouseUp) -> None:
-        self._focus_input_if_needed()
-
-    def _focus_input_if_needed(self) -> None:
-        """Focus input widget if not already focused and not processing."""
-        input_widget = self.query_one("#user-input", InputTextArea)
-        if not input_widget.has_focus and not self._is_processing:
-            input_widget.focus()
-
     def _scroll_content_area_to_bottom(self) -> None:
         """Pin the transcript to the bottom when autocomplete expands the input area."""
         try:
@@ -280,6 +268,22 @@ class REPLScreen(Screen):
                 force=True,
                 immediate=True,
             )
+        except Exception:
+            pass
+
+    def _should_follow_transcript(self) -> bool:
+        """Return True when new output should keep the transcript pinned to bottom."""
+        try:
+            content_area = self.query_one("#content-area", ScrollableContainer)
+        except Exception:
+            return True
+        return content_area.is_vertical_scroll_end
+
+    def _anchor_transcript(self) -> None:
+        """Anchor the transcript container so new content stays pinned to bottom."""
+        try:
+            content_area = self.query_one("#content-area", ScrollableContainer)
+            content_area.anchor()
         except Exception:
             pass
 
@@ -488,6 +492,7 @@ class REPLScreen(Screen):
         input_widget.load_text("")
         self._reset_streaming_state()
         self._reset_tool_contexts()
+        self._anchor_transcript()
 
         self._set_processing_state(True)
         self.refresh()
@@ -839,7 +844,7 @@ class REPLScreen(Screen):
     ) -> MessageWidget:
         if not self._current_assistant_widget:
             self._current_assistant_widget = await message_list.create_streaming_widget(
-                auto_follow=auto_follow
+                auto_follow=False
             )
         return self._current_assistant_widget
 
@@ -849,25 +854,25 @@ class REPLScreen(Screen):
         message_list: MessageList,
     ) -> None:
         if isinstance(event, ThinkingEvent):
-            auto_follow = message_list.should_auto_follow_output()
+            auto_follow = self._should_follow_transcript()
 
             assistant_widget = await self._ensure_assistant_widget(
-                message_list, auto_follow=auto_follow
+                message_list, auto_follow=False
             )
             await assistant_widget.append_thinking(event.thinking)
             message_list.schedule_scroll_to_latest(auto_follow)
 
         elif isinstance(event, TextEvent):
-            auto_follow = message_list.should_auto_follow_output()
+            auto_follow = self._should_follow_transcript()
 
             assistant_widget = await self._ensure_assistant_widget(
-                message_list, auto_follow=auto_follow
+                message_list, auto_follow=False
             )
             await assistant_widget.append_text(event.text)
             message_list.schedule_scroll_to_latest(auto_follow)
 
         elif isinstance(event, ToolUseEvent):
-            auto_follow = message_list.should_auto_follow_output()
+            auto_follow = self._should_follow_transcript()
             tool_use = ToolUseContent(
                 id=event.tool_use_id,
                 name=event.tool_name,
@@ -875,7 +880,7 @@ class REPLScreen(Screen):
             )
 
             assistant_widget = await self._ensure_assistant_widget(
-                message_list, auto_follow=auto_follow
+                message_list, auto_follow=False
             )
             tool_widget = await assistant_widget.add_tool_use(tool_use)
             if tool_widget:
@@ -883,7 +888,7 @@ class REPLScreen(Screen):
             message_list.schedule_scroll_to_latest(auto_follow)
 
         elif isinstance(event, ToolResultEvent):
-            auto_follow = message_list.should_auto_follow_output()
+            auto_follow = self._should_follow_transcript()
             tool_widget = self._tool_widget_context.get(event.tool_use_id)
             if tool_widget:
                 tool_widget.set_result(event.result, event.is_error)
@@ -891,11 +896,11 @@ class REPLScreen(Screen):
 
         elif isinstance(event, MessageCompleteEvent):
             if event.message:
-                auto_follow = message_list.should_auto_follow_output()
+                auto_follow = self._should_follow_transcript()
                 if event.message.type == MessageRole.USER:
                     # Handle user message from server (align with Web UI behavior)
                     await message_list.add_message(
-                        event.message, auto_follow=auto_follow
+                        event.message, auto_follow=False
                     )
                 elif event.message.type == MessageRole.ASSISTANT:
                     usage = event.message.get_usage()
@@ -911,7 +916,7 @@ class REPLScreen(Screen):
                 elif event.message.type != MessageRole.TOOL:
                     # tool message is already added in ToolResultEvent
                     await message_list.add_message(
-                        event.message, auto_follow=auto_follow
+                        event.message, auto_follow=False
                     )
 
         elif isinstance(event, TurnCompleteEvent):
@@ -934,11 +939,11 @@ class REPLScreen(Screen):
         tool_widget_context: dict[str, ToolUseWidget] = {}
 
         for message in messages:
-            auto_follow = message_list.should_auto_follow_output()
+            auto_follow = self._should_follow_transcript()
 
             if message.type == MessageRole.ASSISTANT:
                 assistant_widget = await message_list.create_streaming_widget(
-                    message=message, auto_follow=auto_follow
+                    message=message, auto_follow=False
                 )
                 tool_widget_context = assistant_widget.get_tool_widgets()
                 continue
@@ -963,4 +968,4 @@ class REPLScreen(Screen):
 
             assistant_widget = None
             tool_widget_context = {}
-            await message_list.add_message(message, auto_follow=auto_follow)
+            await message_list.add_message(message, auto_follow=False)

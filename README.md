@@ -1,6 +1,8 @@
 
 # Claude Code Python
 
+# クロード・コード・パイソン
+
 > Code Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 
 > WARNING: 本项目绝大部分为AI生成代码
@@ -43,6 +45,7 @@
 ### TUI 特性
 - **推理/思考内容支持**：显示模型的推理过程
 - **上下文使用提示**：TUI 输入框下方实时显示上下文占用情况（已用/总量/百分比）
+- **高性能 Markdown 渲染**：TUI 使用虚拟化 Markdown 组件，针对长输出和流式追加做了性能优化，同时保留文本选择、复制和目录跳转能力
 - **内联 Diff 展示**：`Edit` 和 `Write` 工具结果以 diff 格式呈现
 - **多行输入支持**：Enter 提交，Shift+Enter 换行
 - **输入历史导航**：上下键导航历史输入，持久化到 `~/.claude-code-python/input_history.json`

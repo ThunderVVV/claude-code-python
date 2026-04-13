@@ -98,6 +98,8 @@ This path previously rendered as a black screen. Tests must cover tool-only and 
 ### Transcript Behavior
 
 - Auto-follow should stay active only while the user is effectively pinned near the bottom.
+- For transcript-style views backed by a parent `ScrollableContainer`, prefer Textual's `anchor()` on the scroll container over a custom follow-state machine in child widgets.
+- Re-enable transcript auto-follow by re-anchoring the scroll container when a new user turn begins; do not force-scroll on every streamed update once the user has scrolled away.
 - Changes to streaming, scrolling, or collapsible tool blocks should be verified with headless Textual tests.
 - Prefer a single assistant widget that can start with text or with tool blocks; do not assume text arrives first.
 

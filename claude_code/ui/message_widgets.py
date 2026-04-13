@@ -620,61 +620,37 @@ class MessageList(VerticalGroup):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._message_widgets: List[Container] = []
-        self._auto_follow_output = True
-        self._suppress_scroll_tracking = False
 
-    def on_mount(self) -> None:
-        """Track manual scrolling so auto-follow only applies while pinned to bottom."""
+    def _get_content_area(self) -> ScrollableContainer | None:
+        """Return the transcript scroll container when mounted."""
         try:
-            content_area = self.screen.query_one("#content-area", ScrollableContainer)
-            self.watch(content_area, "scroll_y", self._on_content_scroll, init=False)
-        except Exception as e:
-            log_full_exception(logger, "Failed to setup scroll tracking", e)
-
-    def _on_content_scroll(self, _scroll_y: float) -> None:
-        """Disable auto-follow when the user scrolls away from the bottom."""
-        if self._suppress_scroll_tracking:
-            return
-        try:
-            content_area = self.screen.query_one("#content-area", ScrollableContainer)
-            self._auto_follow_output = content_area.scroll_y >= max(
-                content_area.max_scroll_y - 1, 0
-            )
-        except Exception as e:
-            log_full_exception(logger, "Failed to check scroll position", e)
-            self._auto_follow_output = True
+            return self.screen.query_one("#content-area", ScrollableContainer)
+        except Exception:
+            return None
 
     def _scroll_to_latest(self) -> None:
-        """Keep the parent scroll container pinned to the latest output."""
+        """Anchor the transcript scroll container to the latest output."""
+        content_area = self._get_content_area()
+        if content_area is None:
+            return
         try:
-            content_area = self.screen.query_one("#content-area", ScrollableContainer)
-            self._suppress_scroll_tracking = True
-            content_area.scroll_end(
-                animate=False,
-                force=True,
-                immediate=True,
-                x_axis=False,
-            )
-            self.set_timer(0.001, self._finish_programmatic_scroll)
+            content_area.anchor()
         except Exception as e:
-            log_full_exception(logger, "Failed to scroll to latest", e)
-            self._suppress_scroll_tracking = False
-
-    def _finish_programmatic_scroll(self) -> None:
-        """Re-enable manual scroll tracking after an automatic scroll."""
-        self._auto_follow_output = True
-        self._suppress_scroll_tracking = False
+            log_full_exception(logger, "Failed to anchor transcript", e)
 
     def should_auto_follow_output(self) -> bool:
-        """Return True when streaming output should keep following the bottom."""
-        return self._auto_follow_output
+        """Return True when the transcript is currently pinned near the bottom."""
+        content_area = self._get_content_area()
+        if content_area is None:
+            return True
+        return content_area.is_vertical_scroll_end
 
     def reset_auto_follow_output(self) -> None:
         """Re-enable transcript auto-follow for a fresh user request."""
-        self._auto_follow_output = True
+        self._scroll_to_latest()
 
     def schedule_scroll_to_latest(self, auto_follow: bool = True) -> None:
-        """Scroll after the current DOM/layout update flushes."""
+        """Anchor after the current DOM/layout update flushes."""
         if auto_follow:
             self.call_after_refresh(self._scroll_to_latest)
 

@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-13
+
+#### High-Performance TUI Markdown Renderer
+- Added `claude_code/ui/patched_markdown.py`, a virtualized Markdown renderer for the TUI transcript based on the implementation direction from `0x7c13/textual#2`
+- Replaced the heavier widget-tree markdown path with a `ScrollView` / Line API based renderer for better large-output performance
+- Preserved core Textual markdown behavior including headings, lists, blockquotes, tables, code fences, links, and table of contents integration
+- Source reference: https://github.com/0x7c13/textual/pull/2/changes
+
 ### Fixed - 2026-04-13
 
 #### TUI Markdown Text Selection
@@ -14,6 +22,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added markdown-specific `get_selection()` and `selection_updated()` handling for the custom `ScrollView` renderer
 - Added selection highlight rendering for the custom markdown line pipeline so drag selection is visible in the transcript
 - Root cause: the optimized custom markdown widget bypassed Textual's standard `Static`/`Content` selection path but did not re-implement the required Line API selection hooks
+
+#### Transcript Auto-Follow
+- Reworked TUI transcript auto-follow to use Textual's scroll anchoring on `#content-area` instead of a custom follow-state implementation in `MessageList`
+- Auto-follow now stays active while the transcript is pinned near the bottom and stops when the user scrolls away, matching Textual's intended behavior for scrollable widgets
+- New requests explicitly re-anchor the transcript so fresh streaming output starts from a pinned-to-bottom state
 
 ### Changed - 2026-04-13
 
