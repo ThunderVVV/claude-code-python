@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-13
+
+#### TUI Session Restore Auto-Follow
+- Fixed TUI session restore so loading a long persisted conversation stays pinned to the latest message while history widgets are being rebuilt
+- Restored incremental bottom anchoring during `_render_messages()` instead of waiting for a single final anchor after the full session render completes
+- Re-anchored tool-result updates during history reconstruction so assistant tool blocks do not break restore-time auto-follow
+- Added `tests/test_ui_session_restore_autofollow.py` to cover the session-load auto-follow regression
+
 ### Changed - 2025-01-15
 
 #### TUI Model Management Refactoring

@@ -1006,13 +1006,14 @@ class REPLScreen(Screen):
         """Render a list of messages."""
         assistant_widget: Optional[MessageWidget] = None
         tool_widget_context: dict[str, ToolUseWidget] = {}
+        message_list.reset_auto_follow_output()
 
         for message in messages:
             auto_follow = self._should_follow_transcript()
 
             if message.type == MessageRole.ASSISTANT:
                 assistant_widget = await message_list.create_streaming_widget(
-                    message=message, auto_follow=False
+                    message=message, auto_follow=auto_follow
                 )
                 tool_widget_context = assistant_widget.get_tool_widgets()
                 continue
@@ -1032,9 +1033,10 @@ class REPLScreen(Screen):
                 tool_widget = tool_widget_context.get(tool_result.tool_use_id)
                 if tool_widget is not None:
                     tool_widget.set_result(tool_result.content, tool_result.is_error)
+                    message_list.schedule_scroll_to_latest(auto_follow)
 
                 continue
 
             assistant_widget = None
             tool_widget_context = {}
-            await message_list.add_message(message, auto_follow=False)
+            await message_list.add_message(message, auto_follow=auto_follow)
