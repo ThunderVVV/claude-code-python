@@ -416,6 +416,7 @@ async def event_stream(chat_request: ChatRequest):
 @api_router.post("/chat")
 async def chat(request: ChatRequest):
     """Stream chat response via SSE"""
+    logger.info(f"POST /chat - session_id={request.session_id}, user_text={request.user_text[:50]}...")
     logger.debug(
         f"Request: user_text={request.user_text[:50]}..., session_id={request.session_id}"
     )
@@ -433,6 +434,7 @@ async def chat(request: ChatRequest):
 @api_router.post("/interrupt")
 async def interrupt(request: InterruptRequest):
     """Send interrupt signal to the backend"""
+    logger.info(f"POST /interrupt - session_id={request.session_id}, reason={request.reason}")
     try:
         session_manager = get_session_manager()
         engine = session_manager.get_engine(request.session_id)
@@ -448,6 +450,11 @@ async def interrupt(request: InterruptRequest):
 @api_router.post("/revert")
 async def revert(request: RevertRequest):
     """Revert file changes from a specific point"""
+    logger.info(
+        f"POST /revert - session_id={request.session_id}, "
+        f"target_message_id={request.target_message_id}, "
+        f"target_part_id={request.target_part_id}"
+    )
     try:
         # Normalize empty strings to None
         target_message_id = request.target_message_id or None
@@ -499,6 +506,7 @@ async def revert(request: RevertRequest):
 @api_router.get("/models")
 async def list_models():
     """List all available models from settings."""
+    logger.info("GET /models")
     try:
         session_manager = get_session_manager()
         settings = session_manager.get_settings()
@@ -525,6 +533,7 @@ async def list_models():
 @api_router.post("/model")
 async def switch_model(request: SwitchModelRequest):
     """Switch the active model for a session and persist it to settings.json."""
+    logger.info(f"POST /model - session_id={request.session_id}, model_id={request.model_id}")
     try:
         session_manager = get_session_manager()
         engine = session_manager.get_engine(request.session_id)
@@ -561,6 +570,7 @@ async def switch_model(request: SwitchModelRequest):
 @api_router.get("/snapshot_status/{session_id}")
 async def get_snapshot_status(session_id: str):
     """Get the snapshot status (files modified, additions, deletions)"""
+    logger.info(f"GET /snapshot_status/{session_id}")
     try:
         session_manager = get_session_manager()
         engine = session_manager.get_engine(session_id)
@@ -588,6 +598,7 @@ async def get_snapshot_status(session_id: str):
 @api_router.get("/sessions")
 async def list_sessions():
     """List all sessions"""
+    logger.info("GET /sessions")
     try:
         session_manager = get_session_manager()
         sessions = session_manager.list_sessions()
@@ -611,6 +622,7 @@ async def list_sessions():
 @api_router.get("/sessions/{session_id}")
 async def get_session(session_id: str):
     """Get session details"""
+    logger.info(f"GET /sessions/{session_id}")
     try:
         session_manager = get_session_manager()
         session = session_manager.get_session(session_id)
@@ -650,11 +662,13 @@ def create_app(api_prefix: str = "/api") -> FastAPI:
     @app.get("/health")
     async def health():
         """Health check endpoint"""
+        logger.info("GET /health")
         return {"status": "ok", "service": "claude-code-api"}
 
     @app.get("/", response_class=HTMLResponse)
     async def index():
         """Serve Vue app"""
+        logger.info("GET /")
         html_path = Path(__file__).parent.parent / "web" / "static" / "index.html"
         if html_path.exists():
             return HTMLResponse(content=html_path.read_text(), media_type="text/html")
