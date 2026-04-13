@@ -363,6 +363,20 @@ class QueryEngine:
         if self._session_store is None:
             return
 
+        # Don't save empty sessions (no user messages)
+        if not self.state.messages:
+            logger.debug(f"Skipping session persistence - no messages")
+            return
+
+        # Check if there's at least one user message
+        has_user_message = any(
+            msg.type == MessageRole.USER and not msg.is_meta
+            for msg in self.state.messages
+        )
+        if not has_user_message:
+            logger.debug(f"Skipping session persistence - no user messages")
+            return
+
         try:
             from claude_code.core.session_store import (
                 derive_session_title,

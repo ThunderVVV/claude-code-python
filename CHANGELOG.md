@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2025-01-14
+
+#### Session Persistence
+- Fixed session persistence to skip saving empty sessions (no user messages)
+- Added validation to prevent saving sessions without any user-authored messages
+- Sessions with only system messages or no messages at all will not be persisted to disk
+- This prevents cluttering the session list with empty/meaningless sessions
+
 ### Removed - 2025-01-14
 
 #### API Cleanup - Removed Unused Endpoints
