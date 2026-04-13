@@ -88,13 +88,13 @@ class SessionManager:
         model_id: Optional[str] = None,
     ) -> QueryEngine:
         client_config = self._resolve_client_config(session_id, model_id)
-        
+
         # Get custom instructions from settings
         settings = self.get_settings()
         instruction_config = InstructionConfig(
             custom_instructions=settings.instructions,
         )
-        
+
         return await QueryEngine.create_from_session_id(
             session_id=session_id,
             client_config=client_config,
@@ -112,12 +112,12 @@ class SessionManager:
 
     def _resolve_client_config(self, session_id: Optional[str], model_id: Optional[str] = None) -> OpenAIClientConfig:
         settings = self.get_settings()
-        
+
         # If model_id is explicitly provided, use it
         if model_id:
             if model_id in settings.models:
                 return build_client_config(settings, model_id)
-        
+
         # Otherwise fall back to session or default
         if session_id:
             persisted = self._session_store.load_session(session_id)
@@ -190,6 +190,12 @@ class RevertRequest(BaseModel):
 class SwitchModelRequest(BaseModel):
     session_id: str
     model_id: str
+
+
+class CompactRequest(BaseModel):
+    session_id: str
+    working_directory: str = os.getcwd()
+    model: Optional[str] = None
 
 
 def _normalize_api_prefix(api_prefix: str) -> str:
@@ -422,6 +428,40 @@ async def event_stream(chat_request: ChatRequest):
         yield f"data: {json.dumps(error_dict)}\n\n"
 
 
+async def compact_stream(request: CompactRequest):
+    """Generate SSE events for compact session - aligns with opencode principle.
+
+    Streams the summary while preserving all history messages, only adds
+    the summary marked as is_compact_summary.
+    """
+    try:
+        session_id = request.session_id
+        _settings_store, tool_registry = require_global_dependencies()
+        session_manager = get_session_manager()
+
+        engine = await session_manager.get_or_create_engine(
+            session_id,
+            tool_registry,
+            request.working_directory,
+            model_id=request.model,
+        )
+
+        # Use the engine's compact handling directly (streaming)
+        async for event in engine.submit_message("/compact"):
+            event_dict = event_to_dict(
+                event,
+                working_directory=request.working_directory,
+            )
+            yield f"data: {json.dumps(event_dict)}\n\n"
+
+        logger.info(f"Compact streaming completed - session_id={session_id}")
+
+    except Exception as e:
+        logger.exception("compact_stream failed")
+        error_dict = {"type": "error", "error": str(e), "is_fatal": True}
+        yield f"data: {json.dumps(error_dict)}\n\n"
+
+
 @api_router.post("/chat")
 async def chat(request: ChatRequest):
     """Stream chat response via SSE"""
@@ -431,6 +471,26 @@ async def chat(request: ChatRequest):
     )
     return StreamingResponse(
         event_stream(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@api_router.post("/compact")
+async def compact_session(request: CompactRequest):
+    """Compact a session via streaming - aligns with opencode principle.
+
+    This endpoint streams an AI summary of the conversation history,
+    preserves all history messages, and adds the summary marked as
+    is_compact_summary.
+    """
+    logger.info(f"POST /compact - session_id={request.session_id}")
+    return StreamingResponse(
+        compact_stream(request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -519,7 +579,7 @@ async def list_models():
     try:
         session_manager = get_session_manager()
         settings = session_manager.get_settings()
-        
+
         models_list = []
         for model_id, model_settings in settings.models.items():
             models_list.append({
@@ -529,7 +589,7 @@ async def list_models():
                 "api_url": model_settings.api_url,
                 "is_current": model_id == settings.current_model,
             })
-        
+
         return {
             "models": models_list,
             "current_model": settings.current_model,

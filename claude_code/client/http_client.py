@@ -433,3 +433,57 @@ class ClaudeCodeHttpClient:
         except httpx.HTTPError as e:
             logger.error(f"List models request failed: {e}")
             return {"models": [], "current_model": ""}
+
+    async def stream_compact(
+        self,
+        session_id: str,
+        working_directory: str = "",
+        model: Optional[str] = None,
+    ) -> AsyncGenerator[QueryEvent, None]:
+        """Compact a session via streaming API - aligns with opencode principle.
+
+        Streams the summary while preserving all history messages.
+        """
+        logger.debug(f"stream_compact called, URL={self._base_url}/api/compact")
+
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        request_data = {
+            "session_id": session_id,
+            "working_directory": working_directory,
+        }
+
+        if model:
+            request_data["model"] = model
+
+        try:
+            async with self._client.stream(
+                "POST",
+                f"{self._base_url}/api/compact",
+                json=request_data,
+                timeout=None,
+            ) as response:
+                response.raise_for_status()
+
+                buffer = ""
+                async for byte_chunk in response.aiter_bytes():
+                    chunk = byte_chunk.decode("utf-8", errors="replace")
+                    buffer += chunk
+
+                    while "\n\n" in buffer:
+                        event_part, buffer = buffer.split("\n\n", 1)
+                        if event_part.startswith("data: "):
+                            data_str = event_part[6:]
+                            if data_str:
+                                try:
+                                    data = json.loads(data_str)
+                                    event = dict_to_query_event(data)
+                                    yield event
+                                except json.JSONDecodeError as e:
+                                    logger.warning(f"JSON decode error: {e}")
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error: {e}")
+            log_full_exception(logger, "HTTP error in stream_compact", e)
+            yield ErrorEvent(error=str(e), is_fatal=True)

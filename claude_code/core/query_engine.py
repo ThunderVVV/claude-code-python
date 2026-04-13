@@ -363,6 +363,57 @@ class QueryEngine:
             instructions=instructions if instructions else None,
         )
 
+    def _filter_compacted_messages(self) -> List[Message]:
+        """Filter messages to only include those after the last successful compaction summary.
+        
+        This aligns with TypeScript MessageV2.filterCompacted():
+        - Iterates through messages and adds them to result
+        - When a successful summary is found (summary=true, finish set, no error), 
+          marks its parent message ID as "completed"
+        - When encountering a user message that triggered a completed compaction, stops
+        - Returns messages from the compaction boundary onwards
+        
+        Returns:
+            List of messages that should be sent to the model
+        """
+        messages = self.state.messages
+        if not messages:
+            return messages
+        
+        # Find completed compaction boundaries
+        # A successful summary has: is_compact_summary=True, has finish reason, no error
+        completed_parent_ids = set()
+        
+        # First pass: find all completed compaction summaries
+        for msg in messages:
+            if (msg.type == MessageRole.ASSISTANT and 
+                msg.is_compact_summary and 
+                msg.message and 
+                msg.message.get("stop_reason") and
+                not msg.message.get("error")):
+                # This summary completed successfully
+                parent_id = msg.message.get("parent_id")
+                if parent_id:
+                    completed_parent_ids.add(parent_id)
+        
+        if not completed_parent_ids:
+            # No compaction done, return all messages
+            return messages
+        
+        # Second pass: filter messages
+        # Include messages from the last compaction boundary onwards
+        # The summary message itself should be included
+        result = []
+        for msg in messages:
+            # Check if this is a user message that triggered a completed compaction
+            if msg.type == MessageRole.USER and msg.uuid in completed_parent_ids:
+                # Start from the next message (which is the summary)
+                result = []  # Clear previous messages
+                continue
+            result.append(msg)
+        
+        return result
+
     def clear(self) -> None:
         """Clear the query state and reset to a new session.
 
@@ -501,6 +552,13 @@ class QueryEngine:
         try:
             self._raise_if_interrupted()
 
+            # Check for /compact command
+            user_text_lower = user_text.strip().lower()
+            if user_text_lower in ("/compact", "/summarize"):
+                async for event in self._handle_compact():
+                    yield event
+                return
+
             from claude_code.core.file_expansion import has_web_reference
 
             # Expand @file_path references
@@ -575,6 +633,151 @@ class QueryEngine:
             if self._active_task is current_task:
                 self._active_task = None
 
+    async def _handle_compact(self) -> AsyncGenerator[QueryEvent, None]:
+        """Handle /compact command to generate streaming summary of conversation.
+
+        Aligns with opencode principle:
+        1. Build messages for summary generation
+        2. Stream the summary as assistant message
+        3. KEEP ALL HISTORY MESSAGES, just add the summary marked as is_compact_summary
+        """
+        from claude_code.core.compaction import (
+            SessionCompaction,
+            DEFAULT_COMPACTION_PROMPT,
+        )
+
+        if not self._is_initialized or not self._client:
+            raise RuntimeError("QueryEngine not initialized. Call initialize() first.")
+
+        # Get messages to compact BEFORE adding the /compact user message
+        original_messages = list(self.state.messages)
+
+        # Create user message for the compaction request
+        user_message = Message.user_message("/compact")
+        user_message.is_meta = True  # Mark as meta so it doesn't affect compaction
+        self.state.add_message(user_message)
+        yield MessageCompleteEvent(message=user_message)
+
+        # Get messages to compact (from original, not including /compact)
+        compaction = SessionCompaction(
+            messages=original_messages,
+            model_name=self.client_config.model_name,
+            context_window=None,  # Will be fetched from settings if needed
+        )
+
+        # Build messages for summary generation (already in API format)
+        history_messages = compaction.build_messages_for_summary(
+            strip_tool_results=True,
+            max_messages=50,
+        )
+
+        if not history_messages:
+            error_msg = Message.system_message("No messages to compact")
+            yield MessageCompleteEvent(message=error_msg)
+            return
+
+        # Create the summary request
+        prompt = compaction.create_compaction_prompt()
+
+        # Build OpenAI format messages - history_messages are already dicts
+        openai_messages = list(history_messages)
+
+        # Add the summary request
+        openai_messages.append({"role": "user", "content": prompt})
+
+        # Create assistant message for streaming
+        assistant_message = Message.assistant_message(content=[])
+        assistant_message.is_compact_summary = True
+        # Store parent_id for filtering (the user message that triggered compaction)
+        assistant_message.message = assistant_message.message or {}
+        assistant_message.message["parent_id"] = user_message.uuid
+
+        # Stream the summary using raw API call
+        current_text = ""
+        current_usage: Optional[Usage] = None
+
+        try:
+            # Use the raw chat completion method for streaming
+            request_params = {
+                "model": self.client_config.model_name,
+                "messages": openai_messages,
+                "max_tokens": 2000,  # Reasonable limit for summary
+                "temperature": 0.3,  # Lower temperature for more focused summary
+                "stream": True,
+                "stream_options": {"include_usage": True},
+            }
+
+            stream_response = await self._client._client.chat.completions.create(**request_params)
+
+            async for chunk in stream_response:
+                self._raise_if_interrupted()
+
+                chunk_dict = chunk.model_dump()
+
+                # Extract usage if available
+                extract_usage = getattr(self._client, "extract_usage", None)
+                chunk_usage = extract_usage(chunk_dict) if callable(extract_usage) else None
+                if chunk_usage:
+                    current_usage = chunk_usage
+                    self.state.total_usage = chunk_usage
+
+                # Parse streaming chunk
+                text_delta, _, _ = self._client.parse_stream_chunk(chunk_dict)
+
+                if text_delta:
+                    current_text += text_delta
+                    yield TextEvent(text=text_delta)
+
+            # Update the assistant message with the final text
+            assistant_message.content = [TextContent(text=current_text)]
+            # Set stop_reason to mark this as a completed summary (for filtering)
+            assistant_message.message["stop_reason"] = "stop"
+            
+            # Attach usage to the message so UI can refresh context info
+            if current_usage:
+                assistant_message.message["usage"] = {
+                    "input_tokens": current_usage.input_tokens,
+                    "output_tokens": current_usage.output_tokens,
+                }
+
+            # Align with opencode: KEEP ALL HISTORY, just add the summary message
+            # The summary is marked with is_compact_summary = True for filtering
+            self.state.add_message(assistant_message)
+
+            # Calculate tokens saved (for logging only)
+            original_tokens = sum(
+                compaction.estimate_message_tokens(msg)
+                for msg in compaction.get_messages_for_compaction()
+            )
+            summary_tokens = compaction.estimate_tokens(current_text)
+
+            logger.info(
+                f"Compaction complete: summary generated ({summary_tokens} tokens), "
+                f"history preserved ({len(original_messages)} messages)"
+            )
+
+            # Update total usage
+            if current_usage:
+                self.state.total_usage.input_tokens = current_usage.input_tokens
+                self.state.total_usage.output_tokens = current_usage.output_tokens
+
+            yield MessageCompleteEvent(message=assistant_message)
+
+            # Persist the session
+            self._persist_session()
+
+            yield TurnCompleteEvent(
+                turn=self.state.current_turn,
+                has_more_turns=False,
+                stop_reason="stop",
+            )
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log_full_exception(logger, "Error during compaction", e)
+            yield ErrorEvent(error=f"Compaction failed: {str(e)}", is_fatal=True)
+
     async def _query_loop(self) -> AsyncGenerator[QueryEvent, None]:
         """
         Internal query loop - aligned with query() in TypeScript query.ts
@@ -608,8 +811,11 @@ class QueryEngine:
             try:
                 self._raise_if_interrupted()
 
+                # Filter compacted messages - only send messages after the last summary
+                filtered_messages = self._filter_compacted_messages()
+
                 async for chunk in self._client.chat_completion(
-                    self.state.messages,
+                    filtered_messages,  # Use filtered messages, not all messages
                     self.tool_registry,
                     stream=self.config.stream,
                     system_prompt=system_prompt,

@@ -430,6 +430,35 @@ class OpenAIClient:
                 continue
         return partial
 
+    async def _chat_completion_raw(
+        self,
+        messages: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Simple non-streaming chat completion for internal use.
+
+        Args:
+            messages: List of message dicts in OpenAI format
+            model: Model name (uses config default if not provided)
+            max_tokens: Max tokens (uses config default if not provided)
+            temperature: Temperature (uses config default if not provided)
+
+        Returns:
+            Raw response dict
+        """
+        request_params = {
+            "model": model or self.config.model_name,
+            "messages": messages,
+            "max_tokens": max_tokens or self.config.max_tokens,
+            "temperature": temperature if temperature is not None else self.config.temperature,
+            "stream": False,
+        }
+
+        response = await self._client.chat.completions.create(**request_params)
+        return response.model_dump()
+
 
 class APIError(Exception):
     """Base exception for API errors"""
