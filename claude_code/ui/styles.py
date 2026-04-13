@@ -16,6 +16,13 @@ REPLScreen {
 
 ScrollableContainer {
     scrollbar-size: 1 1;
+    scrollbar-background: transparent;
+    scrollbar-background-hover: transparent;
+    scrollbar-background-active: transparent;
+    scrollbar-color: transparent;
+    scrollbar-color-hover: transparent;
+    scrollbar-color-active: transparent;
+    scrollbar-corner-color: transparent;
 }
 
 WelcomeWidget {
@@ -97,7 +104,7 @@ WelcomeWidget:focus {
 #input-area {
     height: auto;
     dock: bottom;
-    padding: 1 2;
+    padding: 1 2 0 2;
     background: $background;
 }
 
@@ -106,14 +113,17 @@ WelcomeWidget:focus {
     height: auto;
     min-height: 1;
     max-height: 10;
-    background: $surface;
+    background: transparent;
     color: $foreground;
-    border: none;
-    padding: 1;
+    border-top: solid $surface;
+    border-bottom: solid $surface;
+    border-left: none;
+    border-right: none;
+    padding: 0 1;
 }
 
 #user-input .text-area--cursor-line {
-    background: $surface;
+    background: transparent;
 }
 
 #context-usage {
@@ -121,13 +131,13 @@ WelcomeWidget:focus {
     height: auto;
     min-height: 1;
     padding: 0 1;
-    margin: 1 0 0 0;
+    margin: 0;
 }
 
 #processing-row {
     width: 100%;
     height: 1;
-    margin: 0 0 1 0;
+    margin: 0 0 0 0;
     display: none;
 }
 
@@ -137,6 +147,7 @@ WelcomeWidget:focus {
     min-width: 3;
     color: $primary;
     margin-right: 1;
+    margin-left: 1;
 }
 
 .message-role {
@@ -158,8 +169,8 @@ WelcomeWidget:focus {
 }
 
 .role-system {
-    color: $warning;
-    background: $warning-muted;
+    color: $success;
+    background: $success-muted;
 }
 
 .role-tool {
@@ -176,18 +187,18 @@ WelcomeWidget:focus {
 }
 
 .user-message-block {
+    padding: 1 1;
     background: $surface;
 }
 
 .assistant-message-block {
-    margin: 0;
+    margin: 0 0 1 0;
     padding: 0;
     background: transparent;
 }
 
 .system-message-block {
-    border-left: solid $warning;
-    background: $warning-muted;
+    background: $surface;
 }
 
 .tool-result-block {
@@ -198,23 +209,35 @@ WelcomeWidget:focus {
 .tool-use-block {
     width: 100%;
     height: auto;
-    margin: 0 0 1 0;
-    padding: 0 1;
+    padding: 0;
     background: transparent;
+}
+
+.message-body {
+    margin-left: 0;
+    padding: 0;
+    width: 100%;
+    height: auto;
 }
 
 .message-content {
     margin-left: 0;
-    margin-bottom: 0;
     padding: 0;
 }
 
 .streaming-content {
     width: 100%;
     margin-left: 0;
-    margin-bottom: 1;
-    padding: 0 1;
+    padding: 0;
     background: transparent;
+}
+
+.transcript-block,
+.thinking-block,
+.tool-use-block,
+.web-enabled-label,
+.file-expansion-collapsible {
+    margin: 0;
 }
 
 .tool-header {
@@ -230,7 +253,7 @@ WelcomeWidget:focus {
 }
 
 .tool-collapsible > Contents {
-    padding: 0 0 0 1;
+    padding: 0;
 }
 
 .tool-collapsible CollapsibleTitle {
@@ -245,7 +268,7 @@ WelcomeWidget:focus {
 .tool-result {
     margin-left: 0;
     margin-bottom: 0;
-    padding: 0 1;
+    padding: 0;
 }
 
 .tool-success {
@@ -259,12 +282,12 @@ WelcomeWidget:focus {
 .tool-output-label {
     color: $foreground;
     text-style: bold;
-    margin-left: 1;
+    margin-left: 0;
 }
 
 .tool-result-preview {
     color: $foreground;
-    margin-left: 2;
+    margin-left: 0;
 }
 
 TextArea:focus {
@@ -284,7 +307,7 @@ ToolUseWidget {
 }
 
 Markdown {
-    padding: 0 1;
+    padding: 0;
     link-style: none;
     link-style-hover: bold;
 }
@@ -305,7 +328,7 @@ Markdown > MarkdownParagraph {
 
 MarkdownBlockQuote {
     margin: 0 0 1 0;
-    padding: 0 1;
+    padding: 0;
 }
 
 MarkdownBlockQuote > BlockQuote {
@@ -318,7 +341,7 @@ MarkdownFence {
 }
 
 MarkdownFence > Label {
-    padding: 0 1;
+    padding: 0;
 }
 
 MarkdownTable {
@@ -338,7 +361,6 @@ MarkdownHorizontalRule {
 .thinking-block {
     width: 100%;
     height: auto;
-    margin: 0 0 1 0;
     padding: 0;
     background: transparent;
 }
@@ -346,7 +368,7 @@ MarkdownHorizontalRule {
 .thinking-collapsible {
     background: transparent;
     border-top: none;
-    border-left: solid $border;
+    border-left: none;
     padding: 0;
     margin: 0;
 }
@@ -357,8 +379,10 @@ MarkdownHorizontalRule {
 
 .thinking-collapsible CollapsibleTitle {
     color: $text-muted;
-    text-style: italic;
+    text-style: none;
     background: transparent;
+    padding: 0;
+    margin: 0;
 }
 
 .thinking-collapsible CollapsibleTitle:hover {
@@ -369,16 +393,17 @@ MarkdownHorizontalRule {
 .thinking-collapsible CollapsibleTitle:focus {
     background: transparent;
     color: $text-muted;
-    text-style: italic;
+    text-style: none;
 }
 
 .thinking-collapsible > Contents {
-    padding: 0 1;
+    padding: 0;
 }
 
 .thinking-content {
-    text-style: italic;
-    padding: 0 1;
+    text-style: none;
+    padding: 0;
+    margin-left: 0;
     margin: 0;
     background: transparent;
 }
@@ -386,7 +411,7 @@ MarkdownHorizontalRule {
 .file-expansion {
     width: 100%;
     margin: 0 0 1 0;
-    padding: 0 1;
+    padding: 0;
     background: $surface;
     border-left: solid $primary;
     color: $text-muted;
@@ -394,31 +419,40 @@ MarkdownHorizontalRule {
 
 .web-enabled-label {
     width: auto;
-    padding: 0 1;
-    margin: 0;
+    padding: 0;
     color: $primary;
-    border: round $primary;
+    background: transparent;
+    border: none;
 }
 
 .file-expansion-collapsible {
     width: 100%;
-    border: round $border;
-    padding: 0 1;
-    margin: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
     height: auto;
 }
 
 .file-expansion-collapsible CollapsibleTitle {
-    padding: 0 1;
+    padding: 0;
     color: $primary;
+    background: transparent;
+}
+
+.file-expansion-collapsible CollapsibleTitle:hover {
+    background: transparent;
+}
+
+.file-expansion-collapsible CollapsibleTitle:focus {
+    background: transparent;
 }
 
 .file-expansion-collapsible > Contents {
-    padding: 0 1;
+    padding: 0;
 }
 
 .file-expansion-content {
     color: $text-muted;
-    padding: 0 1;
+    padding: 0;
 }
 """

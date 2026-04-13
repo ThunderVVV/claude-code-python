@@ -44,7 +44,7 @@ ROLE_CONFIG = {
         "block_class": "assistant-message-block",
     },
     MessageRole.SYSTEM: {
-        "label": "System",
+        "label": "",
         "role_class": "role-system",
         "block_class": "system-message-block",
     },
@@ -404,7 +404,7 @@ class MessageWidget(VerticalGroup):
         role_config = ROLE_CONFIG.get(message.type, ROLE_CONFIG[MessageRole.ASSISTANT])
 
         # Role label
-        if message.type not in {MessageRole.USER, MessageRole.ASSISTANT}:
+        if message.type not in {MessageRole.USER, MessageRole.ASSISTANT} and role_config["label"]:
             yield Label(
                 role_config["label"],
                 classes=f"message-role {role_config['role_class']}",
@@ -443,7 +443,10 @@ class MessageWidget(VerticalGroup):
             elif isinstance(block, TextContent):
                 if block.text.strip():
                     if message.type == MessageRole.ASSISTANT:
-                        self._streaming_widget = StreamingMarkdownWidget(block.text)
+                        self._streaming_widget = StreamingMarkdownWidget(
+                            block.text,
+                            classes="streaming-content transcript-block",
+                        )
                         yield self._streaming_widget
                     else:
                         display_text = (
@@ -453,7 +456,7 @@ class MessageWidget(VerticalGroup):
                         )
                         yield Static(
                             sanitize_terminal_text(display_text),
-                            classes="message-content",
+                            classes="message-content transcript-block",
                             markup=False,
                         )
             elif isinstance(block, ToolUseContent):
@@ -483,13 +486,16 @@ class MessageWidget(VerticalGroup):
 
     def _compose_streaming_message(self) -> ComposeResult:
         """Compose a streaming message container."""
-        with VerticalGroup(classes="message-content") as container:
+        with VerticalGroup(classes="message-body") as container:
             self._content_container = container
             if self._thinking_content:
                 self._thinking_widget = ThinkingBlockWidget(self._thinking_content)
                 yield self._thinking_widget
             if self._text_content:
-                self._streaming_widget = StreamingMarkdownWidget(self._text_content)
+                self._streaming_widget = StreamingMarkdownWidget(
+                    self._text_content,
+                    classes="streaming-content transcript-block",
+                )
                 yield self._streaming_widget
             for tool_use in self._tool_uses:
                 tool_widget = ToolUseWidget(
@@ -541,7 +547,10 @@ class MessageWidget(VerticalGroup):
         if self._streaming_widget:
             await self._streaming_widget.append_text(text)
         elif self._content_container:
-            self._streaming_widget = StreamingMarkdownWidget(self._text_content)
+            self._streaming_widget = StreamingMarkdownWidget(
+                self._text_content,
+                classes="streaming-content transcript-block",
+            )
             await self._content_container.mount(self._streaming_widget)
             self.refresh(layout=True)
 
@@ -552,7 +561,10 @@ class MessageWidget(VerticalGroup):
             await self._streaming_widget.set_markdown_text(text)
             self.refresh(layout=True)
         elif text and self._content_container:
-            self._streaming_widget = StreamingMarkdownWidget(text)
+            self._streaming_widget = StreamingMarkdownWidget(
+                text,
+                classes="streaming-content transcript-block",
+            )
             await self._content_container.mount(self._streaming_widget)
             self.refresh(layout=True)
 

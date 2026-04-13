@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 
 HELP = """\
 # Session Resume
-
-Pick a session to resume.
 """
 
 
@@ -30,10 +28,10 @@ class SessionResumeModal(ModalScreen[Optional[SessionSummary]]):
 
         #container {
             margin: 2 4 1 4;
-            padding: 0 1 0 0;
+            padding: 1;
             max-width: 100;
             height: auto;
-            border: thick $primary 20%;
+            border: none;
             background: $surface;
 
             Markdown {
@@ -44,10 +42,17 @@ class SessionResumeModal(ModalScreen[Optional[SessionSummary]]):
 
             #table-container {
                 height: auto;
-                padding: 0 0 0 1;
+                padding: 0;
                 DataTable {
                     width: 1fr;
                     height: 12;
+                    scrollbar-background: transparent;
+                    scrollbar-background-hover: transparent;
+                    scrollbar-background-active: transparent;
+                    scrollbar-color: transparent;
+                    scrollbar-color-hover: transparent;
+                    scrollbar-color-active: transparent;
+                    scrollbar-corner-color: transparent;
                 }
             }
             #buttons {

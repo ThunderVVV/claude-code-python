@@ -38,6 +38,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added smart scroll adjustment when autocomplete popup expands input area
 - InputTextArea now supports autocomplete mode with special key handling
 
+### Changed - 2026-04-13
+
+#### UI Style Improvements
+- Made all scrollbars transparent for cleaner visual appearance
+- Adjusted padding and margins across message blocks, tool blocks, and widgets
+- Simplified modal styles (removed borders, adjusted padding)
+- Updated system message styling (changed from warning to success color)
+- Improved message layout consistency with transcript-block class
+- Reduced visual clutter by removing unnecessary borders and margins
+
 #### File Rewind/Revert Feature
 - Added `/rewind` command in TUI to revert file changes to a previous conversation point
 - Created `claude_code/core/snapshot.py` - Git-based independent snapshot system for tracking file changes during tool execution

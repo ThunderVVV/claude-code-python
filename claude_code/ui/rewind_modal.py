@@ -19,8 +19,6 @@ tui_log("rewind_modal.py MODULE LOADED")
 
 HELP = """\
 # Rewind
-
-Select a user message to rewind to. This will revert all file changes made after that message.
 """
 
 
@@ -37,10 +35,10 @@ class RewindModal(ModalScreen[Optional[Tuple[str, int]]]):
 
         #container {
             margin: 2 4 1 4;
-            padding: 0 1 0 0;
+            padding: 1;
             max-width: 100;
             height: auto;
-            border: thick $primary 20%;
+            border: none;
             background: $surface;
 
             Markdown {
@@ -51,10 +49,17 @@ class RewindModal(ModalScreen[Optional[Tuple[str, int]]]):
 
             #table-container {
                 height: auto;
-                padding: 0 0 0 1;
+                padding: 0;
                 DataTable {
                     width: 1fr;
                     height: 12;
+                    scrollbar-background: transparent;
+                    scrollbar-background-hover: transparent;
+                    scrollbar-background-active: transparent;
+                    scrollbar-color: transparent;
+                    scrollbar-color-hover: transparent;
+                    scrollbar-color-active: transparent;
+                    scrollbar-corner-color: transparent;
                 }
             }
             #buttons {
