@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-13
+
+#### TUI Markdown Text Selection
+- Fixed `claude_code/ui/patched_markdown.py` so virtualized markdown text can be selected and copied again
+- Added Textual selection offset metadata in `render_line()` via `Strip.apply_offsets(...)` so the compositor can map mouse drags to text coordinates
+- Added markdown-specific `get_selection()` and `selection_updated()` handling for the custom `ScrollView` renderer
+- Added selection highlight rendering for the custom markdown line pipeline so drag selection is visible in the transcript
+- Root cause: the optimized custom markdown widget bypassed Textual's standard `Static`/`Content` selection path but did not re-implement the required Line API selection hooks
+
 ### Changed - 2026-04-13
 
 #### Configuration System Migration

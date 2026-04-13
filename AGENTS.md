@@ -88,6 +88,13 @@ This path previously rendered as a black screen. Tests must cover tool-only and 
 - Sanitize ANSI and control characters before rendering assistant or tool output.
 - Summarize large tool results instead of dumping unbounded raw output into the transcript.
 
+### Custom Line API Widgets
+
+- If a TUI widget uses Textual's `ScrollView` / Line API instead of `Static`, preserve text selection behavior explicitly.
+- Line API widgets that should support copy/selection must keep Textual offset metadata by returning strips with `Strip.apply_offsets(...)`.
+- Custom virtualized text widgets must implement `get_selection()` and `selection_updated()` if they bypass the default `Static` / `Content` rendering path.
+- When replacing an official Textual widget with a custom renderer, verify mouse drag selection and clipboard copy in addition to visual rendering and scroll behavior.
+
 ### Transcript Behavior
 
 - Auto-follow should stay active only while the user is effectively pinned near the bottom.

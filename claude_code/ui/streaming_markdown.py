@@ -6,10 +6,9 @@ from markdown_it import MarkdownIt
 from textual.await_complete import AwaitComplete
 from textual.content import Content
 from textual.highlight import highlight as highlight_code
-from textual.widgets import _markdown as textual_markdown
-from textual.widgets import Markdown
 
 from claude_code.ui.utils import sanitize_terminal_text
+from claude_code.ui.patched_markdown import MarkdownFence, MarkdownStream, Markdown, MarkdownBlock
 
 
 def _create_markdown_parser() -> MarkdownIt:
@@ -17,7 +16,7 @@ def _create_markdown_parser() -> MarkdownIt:
     return MarkdownIt("gfm-like", {"linkify": False}).disable("strikethrough")
 
 
-class TranscriptMarkdownFence(textual_markdown.MarkdownFence):
+class TranscriptMarkdownFence(MarkdownFence):
     """Markdown fence that treats untyped code blocks as plain text."""
 
     @classmethod
@@ -31,22 +30,13 @@ class StreamingMarkdownWidget(Markdown):
     def __init__(self, initial_text: str = "", **kwargs):
         normalized = sanitize_terminal_text(initial_text)
         self._markdown_text = normalized
-        self._stream: textual_markdown.MarkdownStream | None = None
+        self._stream: MarkdownStream | None = None
         super().__init__(
             normalized,
             parser_factory=_create_markdown_parser,
             open_links=False,
             **kwargs,
         )
-
-    def get_block_class(
-        self,
-        block_name: str,
-    ) -> type[textual_markdown.MarkdownBlock]:
-        """Use a plain-text fallback for fenced code blocks without a language."""
-        if block_name in {"fence", "code_block"}:
-            return TranscriptMarkdownFence
-        return super().get_block_class(block_name)
 
     def update(self, markdown: str) -> AwaitComplete:
         """Update markdown content with terminal sanitization."""
@@ -55,7 +45,7 @@ class StreamingMarkdownWidget(Markdown):
         update = super().update(normalized)
         return update
 
-    def _get_stream(self) -> textual_markdown.MarkdownStream:
+    def _get_stream(self) -> MarkdownStream:
         """Lazily create a Textual markdown stream for high-frequency appends."""
         if self._stream is None:
             self._stream = Markdown.get_stream(self)
