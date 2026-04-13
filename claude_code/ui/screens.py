@@ -287,6 +287,10 @@ class REPLScreen(Screen):
         except Exception:
             pass
 
+    def _anchor_transcript_after_refresh(self) -> None:
+        """Anchor transcript after pending mounts/layout have been flushed."""
+        self.call_after_refresh(self._anchor_transcript)
+
     def _schedule_autocomplete_scroll_adjustment(self) -> None:
         """Compensate scroll position after autocomplete expands the input area."""
         try:
@@ -701,6 +705,7 @@ class REPLScreen(Screen):
                         else []
                     )
                     await self._render_messages(message_list, messages_to_render)
+                    self._anchor_transcript_after_refresh()
 
                     last_msg = (
                         session_info.messages[-1] if session_info.messages else None
@@ -777,6 +782,7 @@ class REPLScreen(Screen):
             messages = messages[:-1]
 
         await self._render_messages(message_list, messages)
+        self._anchor_transcript_after_refresh()
 
         self._refresh_context_usage_label()
         await self._refresh_snapshot_status()

@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Reworked TUI transcript auto-follow to use Textual's scroll anchoring on `#content-area` instead of a custom follow-state implementation in `MessageList`
 - Auto-follow now stays active while the transcript is pinned near the bottom and stops when the user scrolls away, matching Textual's intended behavior for scrollable widgets
 - New requests explicitly re-anchor the transcript so fresh streaming output starts from a pinned-to-bottom state
+- Restored bottom anchoring after loading a historical session or rebuilding transcript history during rewind so restored conversations open at the latest message instead of the first page
 
 ### Changed - 2026-04-13
 
