@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import Callable, List, Optional
 from textual.app import ComposeResult
 from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
@@ -346,11 +346,16 @@ class MessageWidget(VerticalGroup):
     """
 
     def __init__(
-        self, message: Optional[Message] = None, streaming: bool = False, **kwargs
+        self,
+        message: Optional[Message] = None,
+        streaming: bool = False,
+        should_stream_live: Callable[[], bool] | None = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self._streaming = streaming
         self._message = message
+        self._should_stream_live = should_stream_live
 
         # Internal state for streaming
         self._thinking_content: str = ""
@@ -445,6 +450,7 @@ class MessageWidget(VerticalGroup):
                     if message.type == MessageRole.ASSISTANT:
                         self._streaming_widget = StreamingMarkdownWidget(
                             block.text,
+                            should_stream_live=self._should_stream_live,
                             classes="streaming-content transcript-block",
                         )
                         yield self._streaming_widget
@@ -494,6 +500,7 @@ class MessageWidget(VerticalGroup):
             if self._text_content:
                 self._streaming_widget = StreamingMarkdownWidget(
                     self._text_content,
+                    should_stream_live=self._should_stream_live,
                     classes="streaming-content transcript-block",
                 )
                 yield self._streaming_widget
@@ -549,6 +556,7 @@ class MessageWidget(VerticalGroup):
         elif self._content_container:
             self._streaming_widget = StreamingMarkdownWidget(
                 self._text_content,
+                should_stream_live=self._should_stream_live,
                 classes="streaming-content transcript-block",
             )
             await self._content_container.mount(self._streaming_widget)
@@ -563,6 +571,7 @@ class MessageWidget(VerticalGroup):
         elif text and self._content_container:
             self._streaming_widget = StreamingMarkdownWidget(
                 text,
+                should_stream_live=self._should_stream_live,
                 classes="streaming-content transcript-block",
             )
             await self._content_container.mount(self._streaming_widget)
@@ -665,9 +674,14 @@ class MessageList(VerticalGroup):
         self,
         message: Optional[Message] = None,
         auto_follow: bool = True,
+        should_stream_live: Callable[[], bool] | None = None,
     ) -> MessageWidget:
         """Create a new streaming message widget for assistant responses"""
-        widget = MessageWidget(message=message, streaming=True)
+        widget = MessageWidget(
+            message=message,
+            streaming=True,
+            should_stream_live=should_stream_live,
+        )
         await self.mount(widget)
         self._message_widgets.append(widget)
         self.schedule_scroll_to_latest(auto_follow)

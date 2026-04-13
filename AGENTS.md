@@ -102,6 +102,7 @@ This path previously rendered as a black screen. Tests must cover tool-only and 
 - For transcript-style views backed by a parent `ScrollableContainer`, prefer Textual's `anchor()` on the scroll container over a custom follow-state machine in child widgets.
 - Re-enable transcript auto-follow by re-anchoring the scroll container when a new user turn begins; do not force-scroll on every streamed update once the user has scrolled away.
 - After rebuilding transcript content from persisted history, session restore, or rewind, re-anchor after refresh so the restored view opens at the latest message.
+- If streaming markdown causes flicker in older visible content, prefer buffering markdown updates while the user is scrolled away from the bottom and flush them on stream completion instead of trying to micro-optimize partial repaints in the renderer.
 - Changes to streaming, scrolling, or collapsible tool blocks should be verified with headless Textual tests.
 - Prefer a single assistant widget that can start with text or with tool blocks; do not assume text arrives first.
 

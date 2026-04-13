@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Auto-follow now stays active while the transcript is pinned near the bottom and stops when the user scrolls away, matching Textual's intended behavior for scrollable widgets
 - New requests explicitly re-anchor the transcript so fresh streaming output starts from a pinned-to-bottom state
 - Restored bottom anchoring after loading a historical session or rebuilding transcript history during rewind so restored conversations open at the latest message instead of the first page
+- Paused live markdown flushes while the user is scrolled away from the bottom, then flushed buffered markdown when the stream finishes, preventing visible table flicker in older transcript content during continued streaming
 
 ### Changed - 2026-04-13
 

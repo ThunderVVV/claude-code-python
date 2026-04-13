@@ -850,7 +850,8 @@ class REPLScreen(Screen):
     ) -> MessageWidget:
         if not self._current_assistant_widget:
             self._current_assistant_widget = await message_list.create_streaming_widget(
-                auto_follow=False
+                auto_follow=False,
+                should_stream_live=self._should_follow_transcript,
             )
         return self._current_assistant_widget
 
@@ -926,6 +927,8 @@ class REPLScreen(Screen):
                     )
 
         elif isinstance(event, TurnCompleteEvent):
+            if self._current_assistant_widget is not None:
+                await self._current_assistant_widget.finish_streaming()
             self._reset_tool_contexts()
             self._current_assistant_widget = None
             asyncio.create_task(self._refresh_snapshot_status())
