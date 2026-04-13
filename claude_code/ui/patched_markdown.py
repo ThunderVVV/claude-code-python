@@ -660,8 +660,12 @@ def _parse_tokens(
 
         elif token_type in ("fence", "code_block"):
             code = token.content.rstrip()
-            language = token.info or ""
-            highlighted = highlight(code, language=language or None)
+            language = token.info.strip() if token.info else ""
+            highlighted = (
+                highlight(code, language=language)
+                if language
+                else Content(code)
+            )
 
             indent = 0
             prefix = ""

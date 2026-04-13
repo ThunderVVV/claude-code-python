@@ -94,6 +94,7 @@ This path previously rendered as a black screen. Tests must cover tool-only and 
 - Line API widgets that should support copy/selection must keep Textual offset metadata by returning strips with `Strip.apply_offsets(...)`.
 - Custom virtualized text widgets must implement `get_selection()` and `selection_updated()` if they bypass the default `Static` / `Content` rendering path.
 - When replacing an official Textual widget with a custom renderer, verify mouse drag selection and clipboard copy in addition to visual rendering and scroll behavior.
+- For markdown code fences, prefer plain-text rendering when no language is specified; untyped blocks should not be sent through syntax highlighting if that can introduce false error highlighting for unusual characters.
 
 ### Transcript Behavior
 

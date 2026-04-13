@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added markdown-specific `get_selection()` and `selection_updated()` handling for the custom `ScrollView` renderer
 - Added selection highlight rendering for the custom markdown line pipeline so drag selection is visible in the transcript
 - Root cause: the optimized custom markdown widget bypassed Textual's standard `Static`/`Content` selection path but did not re-implement the required Line API selection hooks
+- Changed untyped fenced code blocks to render as plain text instead of passing through syntax highlighting, avoiding false red error backgrounds from lexer misclassification of unusual characters
 
 #### Transcript Auto-Follow
 - Reworked TUI transcript auto-follow to use Textual's scroll anchoring on `#content-area` instead of a custom follow-state implementation in `MessageList`
