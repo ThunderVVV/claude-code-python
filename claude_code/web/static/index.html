@@ -629,23 +629,17 @@
         (content.includes('-') && content.includes('+') && content.includes('@@'));
 
     const generateDiff = (oldContent, newContent, filePath) => {
-        let diff = `diff --git a/${filePath} b/${filePath}\n`;
-        diff += `--- a/${filePath}\n`;
-        diff += `+++ b/${filePath}\n`;
-
-        const diffResult = Diff.diffLines(oldContent, newContent);
-
-        for (const part of diffResult) {
-            const lines = part.value.split('\n');
-            if (lines[lines.length - 1] === '') lines.pop();
-
-            for (const line of lines) {
-                if (part.added) diff += `+${line}\n`;
-                else if (part.removed) diff += `-${line}\n`;
-                else diff += ` ${line}\n`;
-            }
-        }
-        return diff;
+        const normalizedPath = filePath || 'file';
+        const patch = Diff.createTwoFilesPatch(
+            `a/${normalizedPath}`,
+            `b/${normalizedPath}`,
+            oldContent,
+            newContent,
+            '',
+            '',
+            { context: Number.MAX_SAFE_INTEGER }
+        );
+        return `diff --git a/${normalizedPath} b/${normalizedPath}\n${patch}`;
     };
 
     // Main App

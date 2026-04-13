@@ -50,3 +50,8 @@ def test_web_frontend_uses_atom_one_dark_theme_tokens():
     assert "langPrefix: 'hljs language-'" in WEB_FRONTEND_SOURCE
     assert "class=\"app-mark" in WEB_FRONTEND_SOURCE
     assert "class=\"composer-input" in WEB_FRONTEND_SOURCE
+
+
+def test_web_frontend_generates_complete_unified_diffs_for_diff2html():
+    assert "Diff.createTwoFilesPatch(" in WEB_FRONTEND_SOURCE
+    assert "context: Number.MAX_SAFE_INTEGER" in WEB_FRONTEND_SOURCE
