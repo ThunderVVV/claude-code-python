@@ -8,7 +8,6 @@ import sys
 from typing import Optional
 
 import click
-from dotenv import load_dotenv
 
 from claude_code.utils.logging_config import setup_client_logging
 
@@ -51,18 +50,12 @@ def check_server_available(host: str, port: int, timeout: float = 1.0) -> bool:
     default=None,
     help="Path to write debug log file",
 )
-@click.option(
-    "--env-file",
-    type=click.Path(exists=True),
-    help="Path to .env file",
-)
 @click.version_option(version="0.2.0", prog_name="claude-code-python")
 def main(
     api_host: str,
     api_port: int,
     debug: bool,
     log_file: Optional[str],
-    env_file: Optional[str],
 ) -> None:
     """Claude Code Python - AI programming assistant TUI (HTTP client)
 
@@ -73,11 +66,6 @@ def main(
 
     if debug:
         click.echo(click.style("Debug logging enabled", fg="yellow"))
-
-    if env_file:
-        load_dotenv(env_file)
-    else:
-        load_dotenv()
 
     if not check_server_available(api_host, api_port):
         click.echo(

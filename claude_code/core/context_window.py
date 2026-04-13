@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import os
-from typing import Mapping, Optional
+from typing import Optional
 
 from claude_code.core.messages import Usage
-
-CONTEXT_WINDOW_TOKENS_ENV_VAR = "CLAUDE_CODE_MAX_CONTEXT_TOKENS"
 
 
 def parse_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
@@ -30,12 +27,9 @@ def parse_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
     return context_window_tokens
 
 
-def get_configured_context_window_tokens(
-    env: Optional[Mapping[str, str]] = None,
-) -> Optional[int]:
-    """Read the configured context window size from the environment."""
-    source = env if env is not None else os.environ
-    return parse_context_window_tokens(source.get(CONTEXT_WINDOW_TOKENS_ENV_VAR))
+def get_configured_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
+    """Read the configured context window size from the persistent settings."""
+    return parse_context_window_tokens(raw_value)
 
 
 def get_used_context_tokens(usage: Optional[Usage]) -> int:

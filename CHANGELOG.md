@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-13
+
+#### Configuration System Migration
+- Migrated from `.env` file to unified `~/.claude-code-python/settings.json` for all configuration
+- Created `claude_code/core/settings.py` - Centralized settings management with model profiles
+- Settings now support multiple model configurations with unique IDs
+- Added automatic migration from legacy `.env` to `settings.json` on first run
+- Removed environment variable dependencies (`CLAUDE_CODE_API_URL`, `CLAUDE_CODE_API_KEY`, `CLAUDE_CODE_MODEL`, `CLAUDE_CODE_THEME`)
+- Updated `cc-api` CLI to use `SettingsStore` instead of environment variables
+- Updated TUI app to read theme from settings instead of environment
+- Context window tokens now read from model settings instead of environment variable
+
 ### Added - 2026-04-13
 
 #### File Rewind/Revert Feature

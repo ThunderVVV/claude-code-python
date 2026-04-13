@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 from typing import Optional
 
 import click
-from dotenv import load_dotenv
 
+from claude_code.core.settings import SettingsStore
 from claude_code.core.tools import ToolRegistry
-from claude_code.services.openai_client import OpenAIClientConfig
 from claude_code.tools import (
     ReadTool,
     WriteTool,
@@ -36,18 +34,6 @@ def create_tool_registry() -> ToolRegistry:
 
 @click.command()
 @click.option(
-    "--api-url",
-    help="OpenAI compatible API URL",
-)
-@click.option(
-    "--api-key",
-    help="API key for authentication",
-)
-@click.option(
-    "--model",
-    help="Model name to use",
-)
-@click.option(
     "--host",
     default="0.0.0.0",
     help="Host to bind the server to",
@@ -59,22 +45,13 @@ def create_tool_registry() -> ToolRegistry:
     help="Port to bind the server to",
 )
 @click.option(
-    "--env-file",
-    type=click.Path(exists=True),
-    help="Path to .env file",
-)
-@click.option(
     "--debug",
     is_flag=True,
     help="Enable debug logging",
 )
 def main(
-    api_url: Optional[str],
-    api_key: Optional[str],
-    model: Optional[str],
     host: str,
     port: int,
-    env_file: Optional[str],
     debug: bool,
 ) -> None:
     """Start the Claude Code FastAPI server and browser UI"""
@@ -82,38 +59,23 @@ def main(
     if debug:
         click.echo(click.style("Debug logging enabled", fg="yellow"))
 
-    if env_file:
-        load_dotenv(env_file)
-    else:
-        load_dotenv()
+    settings_store = SettingsStore()
+    settings = settings_store.ensure_settings()
 
-    api_url = api_url or os.environ.get("CLAUDE_CODE_API_URL")
-    api_key = api_key or os.environ.get("CLAUDE_CODE_API_KEY")
-    model = model or os.environ.get("CLAUDE_CODE_MODEL")
-
-    if not api_url or not api_key or not model:
+    if not settings.models or not settings.current_model:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
-            + "API URL, API key, and model must be provided.",
+            + "No model settings found in ~/.claude-code-python/settings.json.",
             err=True,
         )
         sys.exit(1)
-
-    if api_url.endswith("/v1/chat/completions"):
-        api_url = api_url.removesuffix("/chat/completions")
-
-    client_config = OpenAIClientConfig(
-        api_url=api_url,
-        api_key=api_key,
-        model_name=model,
-    )
 
     tool_registry = create_tool_registry()
 
     from claude_code.api.server import set_global_dependencies, app
     import uvicorn
 
-    set_global_dependencies(client_config, tool_registry)
+    set_global_dependencies(settings_store, tool_registry)
 
     click.echo(
         click.style(f"Starting Claude Code FastAPI server on {host}:{port}", fg="green")

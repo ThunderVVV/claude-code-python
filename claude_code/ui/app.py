@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import TYPE_CHECKING, Any, Mapping
 
 from textual.app import App
 from textual.binding import Binding
 from textual.widget import Widget
 
+from claude_code.core.settings import SettingsStore
 from claude_code.ui.styles import TUI_CSS
 from claude_code.ui.screens import REPLScreen
 
@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-THEME_ENV_VAR = "CLAUDE_CODE_THEME"
 DEFAULT_THEME_NAME = "tokyo-night"
 
 
@@ -37,9 +36,8 @@ def _resolve_theme_name(
 
     if theme_name not in available_themes:
         logger.warning(
-            "Ignoring unsupported theme %r from %s; falling back to %s",
+            "Ignoring unsupported theme %r from settings.json; falling back to %s",
             theme_name,
-            THEME_ENV_VAR,
             DEFAULT_THEME_NAME,
         )
         return DEFAULT_THEME_NAME
@@ -70,9 +68,11 @@ class ClaudeCodeApp(App):
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
+        self.settings_store = SettingsStore()
+        self.settings = self.settings_store.ensure_settings()
         self.theme = _resolve_theme_name(
             self.available_themes,
-            os.environ.get(THEME_ENV_VAR),
+            self.settings.theme,
         )
         self.client = client
         self.working_directory = working_directory
