@@ -30,6 +30,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - TUI context bar now displays current model name
 - Welcome widget updates model name when model is switched
 
+#### Command Autocomplete
+- Created `claude_code/ui/autocomplete.py` - Autocomplete system for TUI input
+- Added autocomplete popup for slash commands (`/help`, `/model`, `/rewind`, `/sessions`, `/clear`, `/exit`)
+- Added autocomplete popup for `@` references (`@web` and file paths)
+- Implemented keyboard navigation (↑/↓/Enter/Tab/Esc) in autocomplete popup
+- Added smart scroll adjustment when autocomplete popup expands input area
+- InputTextArea now supports autocomplete mode with special key handling
+
 #### File Rewind/Revert Feature
 - Added `/rewind` command in TUI to revert file changes to a previous conversation point
 - Created `claude_code/core/snapshot.py` - Git-based independent snapshot system for tracking file changes during tool execution
