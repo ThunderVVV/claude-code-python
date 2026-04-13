@@ -146,6 +146,18 @@ class CommandRegistry:
                 title="/model",
                 description="Show or switch the active model",
             ),
+            Command(
+                id="compact",
+                trigger="compact",
+                title="/compact",
+                description="Compress conversation history to save context",
+            ),
+            Command(
+                id="summarize",
+                trigger="summarize",
+                title="/summarize",
+                description="Alias for /compact - compress conversation history",
+            ),
         ]
         for cmd in default_commands:
             self._commands[cmd.id] = cmd
