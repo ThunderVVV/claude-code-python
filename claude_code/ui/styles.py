@@ -19,9 +19,9 @@ ScrollableContainer {
     scrollbar-background: transparent;
     scrollbar-background-hover: transparent;
     scrollbar-background-active: transparent;
-    scrollbar-color: transparent;
-    scrollbar-color-hover: transparent;
-    scrollbar-color-active: transparent;
+    scrollbar-color: $surface;
+    scrollbar-color-hover: $surface;
+    scrollbar-color-active: $surface;
     scrollbar-corner-color: transparent;
 }
 
