@@ -233,8 +233,7 @@ Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 
 ## TODO
 
-- 输入自动补全
-- Web界面风格优化
+- 添加 /compact 命令
 
 ## 许可证
 
