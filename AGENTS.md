@@ -42,6 +42,18 @@ REPLScreen -> ClaudeCodeClient --gRPC--> ChatServiceServicer -> QueryEngine -> O
 
 ## TUI Development
 
+### TUI Logging
+
+**IMPORTANT:** All TUI debug logs must use `tui_log()` function from `claude_code.utils.logging_config`, not `print()` or standard `logging`.
+
+```python
+from claude_code.utils.logging_config import tui_log
+
+tui_log(f"Debug message: {variable}")
+```
+
+Regular `print()` statements are not captured in TUI log files, making debugging impossible when issues occur in the Textual event loop.
+
 ### Layout Debugging
 
 If the transcript area looks blank while scrollbars still move, inspect layout and widget sizing before assuming a color or markup issue.

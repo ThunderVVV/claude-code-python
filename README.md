@@ -97,19 +97,33 @@ pip install -e .
 
 ## 配置
 
-创建 `.env`，或直接复制 `.env.example` 后修改：
+配置统一保存在 `~/.claude-code-python/settings.json`。
 
-```env
-CLAUDE_CODE_API_URL=https://api.openai.com/v1
-CLAUDE_CODE_API_KEY=your-api-key
-CLAUDE_CODE_MODEL=gpt-4.1
-CLAUDE_CODE_MAX_CONTEXT_TOKENS=128000
-# 可选：cc-py 的 TUI 主题，默认是 tokyo-night
-CLAUDE_CODE_THEME=atom-one-dark
+示例：
+
+```json
+{
+  "current_model": "gpt-4-1",
+  "theme": "atom-one-dark",
+  "models": {
+    "gpt-4-1": {
+      "api_key": "your-api-key",
+      "api_url": "https://api.openai.com/v1",
+      "model_name": "gpt-4.1",
+      "context": 128000
+    }
+  }
+}
 ```
 
-> 注：`CLAUDE_CODE_API_URL`、`CLAUDE_CODE_API_KEY` 和 `CLAUDE_CODE_MODEL` 同时供 `cc-api` 和 `cc-py` 使用。
-> `CLAUDE_CODE_THEME` 仅影响 `cc-py` 的 TUI 主题，默认值是 `tokyo-night`。
+说明：
+- `current_model`：当前默认模型配置 ID
+- `theme`：`cc-py` 的 TUI 主题，默认 `tokyo-night`
+- `models.<id>`：每个模型固定包含 `api_key`、`api_url`、`model_name`、`context`
+
+兼容迁移：
+- 首次启动时，如果 `settings.json` 不存在，程序会尝试从项目根目录旧 `.env` 自动迁移
+- 注释掉的历史模型配置也会一并迁入 `models`
 
 ## 运行
 
@@ -125,6 +139,11 @@ cc-py
 ```
 
 > 注意：必须先启动 API 服务器，再启动客户端。如果后端未运行，客户端会提示错误并退出。
+
+### TUI 命令
+
+- `/model`：显示当前模型和可用模型 ID
+- `/model <model_id>`：实时切换当前 session 的模型，并同步更新 `settings.json`
 
 ### 浏览器界面模式（可选，实验特性）
 
@@ -212,7 +231,6 @@ Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 ## TODO
 
 - 输入自动补全
-- model实时切换
 - Web界面风格优化
 
 ## 许可证

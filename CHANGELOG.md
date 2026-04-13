@@ -48,6 +48,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Improved message layout consistency with transcript-block class
 - Reduced visual clutter by removing unnecessary borders and margins
 
+### Changed - 2026-04-13
+
+#### Documentation Updates
+- Updated `README.md` with new settings.json configuration format and examples
+- Added documentation for `/model` command in TUI
+- Added TUI logging guidelines in `AGENTS.md` - all TUI debug logs must use `tui_log()` function
+- Removed completed TODO item for model real-time switching
+
+#### Test Updates
+- Added `tests/test_settings.py` - Unit tests for settings management
+- Added `tests/test_ui_autocomplete.py` - Unit tests for autocomplete functionality
+- Removed obsolete `tests/test_ui_app.py` - Tests for deprecated environment variable theme configuration
+
 #### File Rewind/Revert Feature
 - Added `/rewind` command in TUI to revert file changes to a previous conversation point
 - Created `claude_code/core/snapshot.py` - Git-based independent snapshot system for tracking file changes during tool execution
