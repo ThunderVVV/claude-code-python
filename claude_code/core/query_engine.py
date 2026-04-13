@@ -792,9 +792,6 @@ class QueryEngine:
             raise RuntimeError("QueryEngine not initialized. Call initialize() first.")
 
         system_prompt = await self._build_system_prompt()
-        
-        # Log the final system prompt sent to the model
-        logger.debug(f"Final system prompt sent to model ({len(system_prompt)} chars):\n{'-'*40}\n{system_prompt}\n{'-'*40}")
 
         while self.state.current_turn < self.config.max_turns:
             self.state.is_streaming = True
