@@ -227,6 +227,7 @@ WelcomeWidget:focus {
 
 .streaming-content {
     width: 100%;
+    height: auto;
     margin-left: 0;
     padding: 0;
     background: transparent;

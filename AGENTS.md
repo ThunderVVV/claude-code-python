@@ -60,6 +60,7 @@ If the transcript area looks blank while scrollbars still move, inspect layout a
 
 - Use `VerticalGroup` for dynamic content that should fit its content.
 - Use `Container` or `Vertical` only when expanding behavior is intentional.
+- Transcript markdown widgets that inherit from `ScrollView` must explicitly use `height: auto`; otherwise Textual may size them to the viewport, producing blank transcript regions while the outer scrollbar still moves.
 - Avoid mounting empty streaming placeholders because they create false blank rows.
 - Keep spacing ownership simple: assistant text owns the gap before the first tool block, and each tool block owns its own trailing spacing.
 
