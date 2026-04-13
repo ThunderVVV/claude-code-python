@@ -246,9 +246,9 @@ class OpenAIClient:
                     tool_calls[idx].id = tc["id"]
                 if "function" in tc:
                     func = tc["function"]
-                    if "name" in func:
+                    if "name" in func and func["name"] is not None:
                         tool_calls[idx].name = func["name"]
-                    if "arguments" in func:
+                    if "arguments" in func and func["arguments"] is not None:
                         tool_calls[idx].arguments += func["arguments"]
 
         return text, thinking, tool_calls

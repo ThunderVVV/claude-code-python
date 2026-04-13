@@ -294,7 +294,16 @@ class SnapshotManager:
 
         changed_files = self._get_changed_files()
         changed_files = self._filter_ignored_files(changed_files)
-        large_files = [f for f in changed_files if os.path.getsize(f) > MAX_FILE_SIZE]
+
+        # Safely find large files (skip deleted files)
+        large_files = []
+        for f in changed_files:
+            try:
+                if os.path.getsize(f) > MAX_FILE_SIZE:
+                    large_files.append(f)
+            except OSError:
+                pass
+
         changed_files = self._filter_large_files(changed_files)
 
         if large_files:
