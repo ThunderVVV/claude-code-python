@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from claude_code.core.tools import (
     BaseTool,
@@ -12,6 +14,8 @@ from claude_code.core.tools import (
     ValidationResult,
 )
 from claude_code.tools.file_utils import expand_path, format_file_result
+
+logger = logging.getLogger(__name__)
 
 
 class ReadTool(BaseTool):
@@ -135,9 +139,37 @@ Usage:
 
             actual_end_line = min(offset + limit - 1, total_lines)
 
-            return format_file_result(
+            result = format_file_result(
                 full_path, content, offset, actual_end_line, total_lines
             )
+
+            # Load nearby instructions if context provides the necessary info
+            nearby_instructions: List[str] = []
+            if context.instruction_service and context.message_id and context.messages:
+                try:
+                    from claude_code.core.instruction import LoadedInstruction
+                    
+                    instructions = await context.instruction_service.resolve_nearby_instructions(
+                        messages=context.messages,
+                        filepath=full_path,
+                        message_id=context.message_id,
+                        project_root=context.project_root,
+                    )
+                    if instructions:
+                        nearby_instructions = [inst.path for inst in instructions]
+                        # Append nearby instructions to the result
+                        for inst in instructions:
+                            result += f"\n\n---\n{inst.format()}"
+                        logger.debug(f"Appended {len(instructions)} nearby instructions to Read result")
+                except Exception as e:
+                    logger.warning(f"Failed to load nearby instructions: {e}")
+
+            # Add metadata about loaded instructions (for deduplication tracking)
+            if nearby_instructions:
+                # Add a metadata marker that can be extracted later
+                result += f"\n\n<!-- loaded: {json.dumps(nearby_instructions)} -->"
+
+            return result
 
         except PermissionError:
             return f"Error: Permission denied reading file: {full_path}"

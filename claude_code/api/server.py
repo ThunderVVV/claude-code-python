@@ -40,6 +40,7 @@ from claude_code.core.settings import (
     build_client_config,
     find_model_id_by_model_name,
 )
+from claude_code.core.instruction import InstructionConfig
 from claude_code.services.openai_client import OpenAIClientConfig
 from claude_code.core.file_expansion import (
     FileExpansion,
@@ -87,12 +88,20 @@ class SessionManager:
         model_id: Optional[str] = None,
     ) -> QueryEngine:
         client_config = self._resolve_client_config(session_id, model_id)
+        
+        # Get custom instructions from settings
+        settings = self.get_settings()
+        instruction_config = InstructionConfig(
+            custom_instructions=settings.instructions,
+        )
+        
         return await QueryEngine.create_from_session_id(
             session_id=session_id,
             client_config=client_config,
             tool_registry=tool_registry,
             session_store=self._session_store,
             working_directory=working_directory,
+            instruction_config=instruction_config,
         )
 
     def get_engine(self, session_id: str) -> Optional[QueryEngine]:

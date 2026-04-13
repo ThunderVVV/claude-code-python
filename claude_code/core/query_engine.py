@@ -30,6 +30,7 @@ from claude_code.core.messages import (
 )
 from claude_code.core.tools import ToolContext, ToolRegistry
 from claude_code.core.prompts import create_default_system_prompt
+from claude_code.core.instruction import InstructionConfig, InstructionService
 from claude_code.core.file_expansion import expand_file_references
 from claude_code.core.snapshot import SnapshotManager, DiffSummary
 from claude_code.core.revert import RevertState, SessionRevertService
@@ -120,6 +121,11 @@ class QueryEngine:
         self._revert_service: Optional[SessionRevertService] = None
         self._total_diff: Optional[DiffSummary] = None
 
+        # Instruction service for loading CLAUDE.md, AGENTS.md, etc.
+        self._instruction_service: Optional[InstructionService] = None
+        self._cached_instructions: Optional[List[str]] = None
+        self._instruction_config: Optional[InstructionConfig] = None
+
     @classmethod
     async def create_from_session_id(
         cls,
@@ -128,8 +134,18 @@ class QueryEngine:
         tool_registry: ToolRegistry,
         session_store: Any,
         working_directory: str = "",
+        instruction_config: Optional[InstructionConfig] = None,
     ) -> "QueryEngine":
-        """Create a QueryEngine from a session ID, loading persisted state if exists."""
+        """Create a QueryEngine from a session ID, loading persisted state if exists.
+        
+        Args:
+            session_id: Optional session ID to restore
+            client_config: OpenAI client configuration
+            tool_registry: Tool registry for tool execution
+            session_store: Session persistence store
+            working_directory: Working directory for the session
+            instruction_config: Optional instruction configuration for CLAUDE.md/AGENTS.md loading
+        """
         from claude_code.core.session_store import PersistedSession
 
         persisted: Optional[PersistedSession] = None
@@ -154,6 +170,10 @@ class QueryEngine:
             session_title=persisted.title if persisted else None,
             session_created_at=persisted.created_at if persisted else None,
         )
+        
+        # Set instruction config if provided
+        if instruction_config:
+            engine._instruction_config = instruction_config
 
         if persisted and persisted.revert_state:
             engine._initial_revert_state = RevertState(
@@ -180,11 +200,12 @@ class QueryEngine:
         return engine
 
     async def initialize(self) -> None:
-        """Initialize the engine (create HTTP client)"""
+        """Initialize the engine (create HTTP client and instruction service)"""
         if not self._is_initialized:
             self._client = OpenAIClient(self.client_config)
             self._snapshot_manager = SnapshotManager(self._cwd)
             self._revert_service = SessionRevertService(self._snapshot_manager)
+            self._instruction_service = InstructionService(self._instruction_config)
             if hasattr(self, "_initial_revert_state"):
                 self._revert_state = self._initial_revert_state
                 delattr(self, "_initial_revert_state")
@@ -195,6 +216,9 @@ class QueryEngine:
         if self._client:
             await self._client.close()
             self._client = None
+        if self._instruction_service:
+            await self._instruction_service.close()
+            self._instruction_service = None
         self._is_initialized = False
 
     async def switch_model(self, client_config: OpenAIClientConfig) -> None:
@@ -295,32 +319,49 @@ class QueryEngine:
             file_paths=all_file_paths,
         )
 
-    def _get_tool_context(self) -> ToolContext:
+    def _get_tool_context(self, message_id: Optional[str] = None) -> ToolContext:
         """Get tool execution context"""
         return ToolContext(
             working_directory=self._cwd,
             project_root=self._cwd,
             session_id=self._session_id,
             cancel_event=self._cancel_event,
+            instruction_service=self._instruction_service,
+            message_id=message_id,
+            messages=self.state.messages,
         )
 
-    def _build_system_prompt(self) -> str:
-        """Build the system prompt"""
-        parts = []
-
-        # Default system prompt with cwd and model name
-        parts.append(
-            create_default_system_prompt(
-                cwd=self._cwd,
-                model_name=self.client_config.model_name,
+    async def _load_instructions(self) -> List[str]:
+        """Load instructions from CLAUDE.md, AGENTS.md, etc.
+        
+        Instructions are cached after first load to avoid repeated file I/O.
+        """
+        if self._cached_instructions is not None:
+            return self._cached_instructions
+        
+        if self._instruction_service is None:
+            return []
+        
+        try:
+            self._cached_instructions = await self._instruction_service.get_system_instructions(
+                self._cwd
             )
+            return self._cached_instructions
+        except Exception as e:
+            logger.warning(f"Failed to load instructions: {e}")
+            return []
+
+    async def _build_system_prompt(self) -> str:
+        """Build the system prompt with instructions from CLAUDE.md, AGENTS.md, etc."""
+        # Load instructions from CLAUDE.md, AGENTS.md, etc.
+        instructions = await self._load_instructions()
+        
+        # Build system prompt with instructions
+        return create_default_system_prompt(
+            cwd=self._cwd,
+            model_name=self.client_config.model_name,
+            instructions=instructions if instructions else None,
         )
-
-        # Custom system prompt if provided
-        if self.config.system_prompt:
-            parts.append(self.config.system_prompt)
-
-        return "\n\n".join(parts)
 
     def clear(self) -> None:
         """Clear the query state and reset to a new session.
@@ -547,7 +588,10 @@ class QueryEngine:
         if not self._is_initialized or not self._client:
             raise RuntimeError("QueryEngine not initialized. Call initialize() first.")
 
-        system_prompt = self._build_system_prompt()
+        system_prompt = await self._build_system_prompt()
+        
+        # Log the final system prompt sent to the model
+        logger.debug(f"Final system prompt sent to model ({len(system_prompt)} chars):\n{'-'*40}\n{system_prompt}\n{'-'*40}")
 
         while self.state.current_turn < self.config.max_turns:
             self.state.is_streaming = True
@@ -711,7 +755,7 @@ class QueryEngine:
                 logger.info(
                     f"Executing {len(tool_use_blocks)} tool calls: {tool_calls_info}"
                 )
-                tool_results: List[tuple] = []
+                tool_results: List[tuple] = []  # (tool_use_id, result, is_error, metadata)
 
                 # Track snapshots for file-modifying tools
                 step_snapshot: Optional[str] = None
@@ -726,6 +770,9 @@ class QueryEngine:
                         logger.debug(f"Created step snapshot: {step_snapshot[:8]}")
                     except Exception as e:
                         logger.warning(f"Failed to create step snapshot: {e}")
+
+                # Get assistant message ID for nearby instruction loading
+                assistant_message_id = assistant_message.uuid
 
                 for tool_use in tool_use_blocks:
                     self._raise_if_interrupted()
@@ -748,21 +795,37 @@ class QueryEngine:
                             result=error_msg,
                             is_error=True,
                         )
-                        tool_results.append((tool_use.id, error_msg, True))
+                        tool_results.append((tool_use.id, error_msg, True, None))
                         continue
 
                     try:
-                        # Execute tool
+                        # Execute tool with message ID for nearby instruction loading
                         result = await tool.call(
-                            tool_use.input, self._get_tool_context()
+                            tool_use.input, self._get_tool_context(assistant_message_id)
                         )
                         is_error = tool.is_error_result(result, tool_use.input)
+                        
+                        # Extract loaded instruction metadata from Read tool results
+                        metadata = None
+                        if tool_use.name == "Read" and "<!-- loaded:" in result:
+                            import re
+                            match = re.search(r'<!-- loaded: (\[.*?\]) -->', result)
+                            if match:
+                                try:
+                                    import json
+                                    loaded_paths = json.loads(match.group(1))
+                                    metadata = {"loaded": loaded_paths}
+                                    # Remove the metadata comment from result
+                                    result = re.sub(r'\n\n<!-- loaded: \[.*?\] -->', '', result)
+                                except (json.JSONDecodeError, ValueError):
+                                    pass
+                        
                         yield ToolResultEvent(
                             tool_use_id=tool_use.id,
                             result=result,
                             is_error=is_error,
                         )
-                        tool_results.append((tool_use.id, result, is_error))
+                        tool_results.append((tool_use.id, result, is_error, metadata))
                     except Exception as e:
                         error_msg = f"Tool execution failed: {str(e)}"
                         yield ToolResultEvent(
@@ -770,7 +833,7 @@ class QueryEngine:
                             result=error_msg,
                             is_error=True,
                         )
-                        tool_results.append((tool_use.id, error_msg, True))
+                        tool_results.append((tool_use.id, error_msg, True, None))
 
                 # Create patch after tool execution if we had a snapshot
                 if step_snapshot and self._snapshot_manager:
@@ -806,9 +869,9 @@ class QueryEngine:
 
                 # Add tool result messages
                 self._raise_if_interrupted()
-                for tool_use_id, result, is_error in tool_results:
+                for tool_use_id, result, is_error, metadata in tool_results:
                     tool_msg = Message.tool_result_message(
-                        tool_use_id, result, is_error
+                        tool_use_id, result, is_error, metadata
                     )
                     self.state.add_message(tool_msg)
                     yield MessageCompleteEvent(message=tool_msg)

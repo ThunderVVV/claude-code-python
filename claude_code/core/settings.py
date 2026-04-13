@@ -32,6 +32,7 @@ class AppSettings:
     current_model: str = ""
     theme: str = DEFAULT_THEME_NAME
     models: dict[str, ModelSettings] = field(default_factory=dict)
+    instructions: list[str] = field(default_factory=list)  # Custom instruction files/URLs
 
     def get_current_model(self) -> Optional[ModelSettings]:
         if not self.current_model:
@@ -85,7 +86,21 @@ class SettingsStore:
             current_model = next(iter(models))
 
         theme = str(payload.get("theme", DEFAULT_THEME_NAME)).strip() or DEFAULT_THEME_NAME
-        return AppSettings(current_model=current_model, theme=theme, models=models)
+        
+        # Load custom instructions list
+        instructions = []
+        raw_instructions = payload.get("instructions", [])
+        if isinstance(raw_instructions, list):
+            for item in raw_instructions:
+                if isinstance(item, str) and item.strip():
+                    instructions.append(item.strip())
+        
+        return AppSettings(
+            current_model=current_model,
+            theme=theme,
+            models=models,
+            instructions=instructions,
+        )
 
     def save(self, settings: AppSettings) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -96,6 +111,7 @@ class SettingsStore:
                 model_id: asdict(model_settings)
                 for model_id, model_settings in settings.models.items()
             },
+            "instructions": settings.instructions,
         }
         self.path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),

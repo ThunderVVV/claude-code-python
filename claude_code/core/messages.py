@@ -71,14 +71,18 @@ class ToolResultContent:
     tool_use_id: str = ""
     content: str = ""
     is_error: bool = False
+    metadata: Optional[Dict[str, Any]] = None  # For tracking loaded instruction files
 
     def to_api_format(self) -> Dict[str, Any]:
-        return {
+        result = {
             "type": "tool_result",
             "tool_use_id": self.tool_use_id,
             "content": self.content,
             "is_error": self.is_error,
         }
+        if self.metadata:
+            result["metadata"] = self.metadata
+        return result
 
 
 @dataclass
@@ -217,6 +221,7 @@ class Message:
         tool_use_id: str,
         content: str,
         is_error: bool = False,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> "Message":
         """Create a tool result message"""
         return cls(
@@ -226,6 +231,7 @@ class Message:
                     tool_use_id=tool_use_id,
                     content=content,
                     is_error=is_error,
+                    metadata=metadata,
                 )
             ],
             message={

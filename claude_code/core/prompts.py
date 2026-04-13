@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import platform
 import sys
 from typing import List, Optional
+
+from claude_code.core.instruction import (
+    InstructionConfig,
+    InstructionService,
+    load_system_instructions,
+)
 
 
 def prepend_bullets(items: List[str | List[str]]) -> List[str]:
@@ -169,9 +176,17 @@ def compute_env_info(cwd: str, model_name: str) -> str:
 
 
 def create_default_system_prompt(
-    cwd: Optional[str] = None, model_name: str = "claude-sonnet-4-6"
+    cwd: Optional[str] = None,
+    model_name: str = "claude-sonnet-4-6",
+    instructions: Optional[List[str]] = None,
 ) -> str:
-    """Create the default system prompt for the assistant - aligned with TypeScript getSystemPrompt()"""
+    """Create the default system prompt for the assistant - aligned with TypeScript getSystemPrompt()
+    
+    Args:
+        cwd: Current working directory
+        model_name: Name of the model being used
+        instructions: List of instruction strings to append (from CLAUDE.md, AGENTS.md, etc.)
+    """
     if cwd is None:
         cwd = os.getcwd()
 
@@ -186,7 +201,35 @@ def create_default_system_prompt(
         "\n".join(compute_env_info(cwd, model_name)),
     ]
 
+    # Append instruction files (CLAUDE.md, AGENTS.md, etc.)
+    if instructions:
+        sections.extend(instructions)
+
     return "\n\n".join(sections)
+
+
+async def create_system_prompt_with_instructions(
+    cwd: Optional[str] = None,
+    model_name: str = "claude-sonnet-4-6",
+    instruction_config: Optional[InstructionConfig] = None,
+) -> str:
+    """Create system prompt with automatically loaded instructions.
+    
+    This is an async version that automatically loads CLAUDE.md, AGENTS.md, etc.
+    from the project and global directories.
+    
+    Args:
+        cwd: Current working directory
+        model_name: Name of the model being used
+        instruction_config: Optional custom instruction configuration
+    """
+    if cwd is None:
+        cwd = os.getcwd()
+    
+    # Load instructions from CLAUDE.md, AGENTS.md, etc.
+    instructions = await load_system_instructions(cwd, instruction_config)
+    
+    return create_default_system_prompt(cwd, model_name, instructions)
 
 
 def build_context_message(cwd: str) -> str:

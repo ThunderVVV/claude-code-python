@@ -51,6 +51,10 @@ class ToolContext:
     session_id: str
     permissions: Dict[str, bool] = field(default_factory=dict)
     cancel_event: Optional[asyncio.Event] = None
+    # For nearby instruction loading
+    instruction_service: Optional[Any] = None  # InstructionService type (avoid circular import)
+    message_id: Optional[str] = None  # Current assistant message ID
+    messages: Optional[List[Any]] = None  # Current conversation messages
 
     def get_cwd(self) -> str:
         """Get current working directory"""

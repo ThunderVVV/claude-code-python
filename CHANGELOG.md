@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-14
+
+#### Instruction Loading (CLAUDE.md, AGENTS.md)
+- Added `claude_code/core/instruction.py` - Instruction loading service for CLAUDE.md, AGENTS.md, and custom instruction files
+- Added automatic discovery and loading of project-level instruction files (searching upward from cwd)
+- Added global-level instruction loading from `~/.config/opencode/` and `~/.claude/`
+- Added support for custom instruction files/URLs via settings.json
+- Added nearby instruction loading when reading files (walks upward from the file being read)
+- Added per-message deduplication tracking to avoid loading the same instruction multiple times
+- Added concurrent file/URL reading for improved performance
+- Added `docs/INSTRUCTION_LOADING.md` - Design documentation for the instruction loading feature
+- Added `tests/test_instruction.py` - Unit tests for instruction loading functionality
+- Updated `QueryEngine` to support async system prompt building with instructions
+- Updated `Read` tool to append nearby instructions when reading files
+- Updated `ToolResultContent` to support metadata tracking for loaded instruction files
+- Updated `ToolContext` to pass instruction service and message context
+- Updated settings system to support custom instructions list
+
 ### Fixed - 2026-04-13
 
 #### TUI Session Restore Auto-Follow
