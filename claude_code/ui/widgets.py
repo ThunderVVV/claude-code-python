@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import inspect
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalGroup
@@ -24,7 +25,12 @@ class InputTextArea(TextArea):
     """
 
     def __init__(self, **kwargs):
+        # Older Textual versions accepted cursor_blink; newer ones removed it.
+        if "cursor_blink" in inspect.signature(TextArea.__init__).parameters:
+            kwargs.setdefault("cursor_blink", False)
         super().__init__(**kwargs)
+        if hasattr(self, "cursor_blink"):
+            self.cursor_blink = False
         self._on_submit = None
         self._autocomplete_active = False
 

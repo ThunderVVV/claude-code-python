@@ -318,7 +318,7 @@ class ToolUseWidget(VerticalGroup):
         """Return the current single-line title for the tool call."""
         if self._result is None:
             return Content.from_text(
-                sanitize_terminal_text(
+                "● " + sanitize_terminal_text(
                     summarize_tool_use(self.tool_name, self.tool_input)
                 ),
                 markup=False,

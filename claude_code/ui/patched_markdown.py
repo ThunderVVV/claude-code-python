@@ -1178,7 +1178,7 @@ class Markdown(ScrollView, can_focus=True):
             current_line += total_height
             last_bottom_margin = block.bottom_margin
 
-        self._total_lines = current_line + 1  # +1 for bottom spacing
+        self._total_lines = current_line
         self.virtual_size = Size(width, self._total_lines)
 
     def _find_block_at_line(self, line: int) -> tuple[int, _BlockLineInfo] | None:
