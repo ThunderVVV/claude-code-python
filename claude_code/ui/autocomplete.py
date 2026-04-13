@@ -21,6 +21,8 @@ from textual.widgets import Label
 from claude_code.utils.logging_config import tui_log
 
 
+
+
 class AutocompleteMode(Enum):
     """Autocomplete mode."""
 
@@ -267,21 +269,15 @@ class AutocompletePopup(VerticalGroup):
         )
         self._update_display()
         self.add_class("visible")
-        tui_log(
-            f"show_slash_commands: visible={self.has_class('visible')}, display={self.display}"
-        )
 
     def show_at_options(self, query: str = "") -> None:
         """Show @ mention autocomplete."""
-        tui_log(f"show_at_options: query={query!r}")
         self.mode = AutocompleteMode.AT
         self.query = query.lstrip("@")
         self.selected_index = 0
         self._filtered_options = self._get_at_options()
-        tui_log(f"show_at_options: filtered {len(self._filtered_options)} options")
         self._update_display()
         self.add_class("visible")
-        tui_log(f"show_at_options: visible={self.has_class('visible')}")
 
     def hide(self) -> None:
         """Hide the popup."""

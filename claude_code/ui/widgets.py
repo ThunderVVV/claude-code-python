@@ -15,6 +15,7 @@ from claude_code.ui.autocomplete import AutocompleteMode
 from claude_code.utils.logging_config import tui_log
 
 
+
 class InputTextArea(TextArea):
     """Custom TextArea that handles Enter key for sending messages.
 
@@ -29,9 +30,6 @@ class InputTextArea(TextArea):
 
     async def _on_key(self, event: events.Key) -> None:
         """Handle key events."""
-        tui_log(
-            f"InputTextArea._on_key: key={event.key!r}, text={self.text!r}, autocomplete_active={self._autocomplete_active}"
-        )
 
         if self._autocomplete_active:
             if event.key in ("up", "ctrl+p"):
@@ -61,9 +59,7 @@ class InputTextArea(TextArea):
         if event.key == "enter":
             event.stop()
             event.prevent_default()
-            tui_log(
-                f"Enter pressed, text={self.text!r}, callback={self._on_submit is not None}"
-            )
+            tui_log(f"Enter pressed, text={self.text!r}, callback={self._on_submit is not None}")
             if self._on_submit:
                 self._on_submit(self.text)
             return

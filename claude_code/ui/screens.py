@@ -211,13 +211,10 @@ class REPLScreen(Screen):
         line_text = input_widget.document.get_line(input_widget.cursor_location[0])
         text_before_cursor = line_text[:cursor_pos]
 
-        tui_log(f"on_user_input_changed: text_before_cursor={text_before_cursor!r}")
-
         autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
 
         slash_match = re.match(r"^/(\S*)$", text_before_cursor)
         if slash_match:
-            tui_log(f"Slash match: {slash_match.group(1)}")
             autocomplete_popup.show_slash_commands(slash_match.group(1))
             input_widget.set_autocomplete_active(True)
             self._schedule_autocomplete_scroll_adjustment()
@@ -225,27 +222,23 @@ class REPLScreen(Screen):
 
         at_match = re.search(r"@(\S*)$", text_before_cursor)
         if at_match:
-            tui_log(f"At match: {at_match.group(1)}")
             autocomplete_popup.show_at_options(at_match.group(1))
             input_widget.set_autocomplete_active(True)
             self._schedule_autocomplete_scroll_adjustment()
             return
 
         if autocomplete_popup.is_visible():
-            tui_log("Closing autocomplete")
             autocomplete_popup.hide()
             input_widget.set_autocomplete_active(False)
 
     def on_autocomplete_popup_selected(self, event: AutocompletePopup.Selected) -> None:
         """Handle selection from autocomplete popup."""
-        tui_log(f"on_autocomplete_popup_selected: item={event.item}")
         self._handle_autocomplete_selection(event.item, event.mode)
         autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
         autocomplete_popup.hide()
 
     def _navigate_autocomplete_popup(self, direction: int) -> None:
         """Navigate autocomplete popup from InputTextArea."""
-        tui_log(f"_navigate_autocomplete_popup: direction={direction}")
         autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
         if direction < 0:
             autocomplete_popup.navigate_up()
@@ -254,7 +247,6 @@ class REPLScreen(Screen):
 
     def _select_autocomplete_popup(self) -> None:
         """Select autocomplete item from InputTextArea."""
-        tui_log("_select_autocomplete_popup")
         autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
         selected = autocomplete_popup.select_current()
         if selected:
@@ -265,7 +257,6 @@ class REPLScreen(Screen):
         self, item: Command | AtOption, mode: AutocompleteMode
     ) -> None:
         """Handle autocomplete item selection."""
-        tui_log(f"_handle_autocomplete_selection: item={item}, mode={mode}")
         input_widget = self.query_one("#user-input", InputTextArea)
 
         if isinstance(item, Command):
@@ -469,7 +460,7 @@ class REPLScreen(Screen):
             self._snapshot_status = status
             self._refresh_context_usage_label()
         except Exception as e:
-            tui_log(f"Failed to refresh snapshot status: {e}")
+            pass
 
     def _reset_streaming_state(self) -> None:
         self._current_assistant_widget = None
@@ -492,31 +483,37 @@ class REPLScreen(Screen):
         user_text_lower = user_text.lower()
 
         if user_text_lower == "/exit":
+            tui_log("Executing command: /exit")
             self.app.exit()
             return
 
         if user_text_lower in ("/clear", "/new"):
+            tui_log(f"Executing command: {user_text_lower}")
             asyncio.create_task(self._start_new_session())
             return
 
         if user_text_lower == "/sessions":
+            tui_log("Executing command: /sessions")
             self._show_sessions_modal()
             return
 
         if user_text_lower == "/rewind":
-            tui_log("REWIND COMMAND DETECTED!")
+            tui_log("Executing command: /rewind")
             asyncio.create_task(self._show_rewind_modal())
             return
 
         if user_text_lower == "/help":
+            tui_log("Executing command: /help")
             self._show_help()
             return
 
         if user_text_lower == "/model":
+            tui_log("Executing command: /model")
             self._show_model_modal()
             return
 
         if user_text_lower.startswith("/model "):
+            tui_log(f"Executing command: {user_text}")
             asyncio.create_task(self._handle_model_command(user_text))
             return
 
@@ -939,6 +936,7 @@ class REPLScreen(Screen):
             message_list.schedule_scroll_to_latest(auto_follow)
 
         elif isinstance(event, ToolUseEvent):
+            tui_log(f"Received ToolUseEvent: tool_name={event.tool_name}, tool_use_id={event.tool_use_id}")
             auto_follow = self._should_follow_transcript()
             tool_use = ToolUseContent(
                 id=event.tool_use_id,
@@ -955,6 +953,7 @@ class REPLScreen(Screen):
             message_list.schedule_scroll_to_latest(auto_follow)
 
         elif isinstance(event, ToolResultEvent):
+            tui_log(f"Received ToolResultEvent: tool_use_id={event.tool_use_id}, is_error={event.is_error}")
             auto_follow = self._should_follow_transcript()
             tool_widget = self._tool_widget_context.get(event.tool_use_id)
             if tool_widget:
@@ -963,6 +962,7 @@ class REPLScreen(Screen):
 
         elif isinstance(event, MessageCompleteEvent):
             if event.message:
+                tui_log(f"Received MessageCompleteEvent: message_type={event.message.type}, message_id={event.message.uuid}")
                 auto_follow = self._should_follow_transcript()
                 if event.message.type == MessageRole.USER:
                     # Handle user message from server (align with Web UI behavior)
@@ -987,6 +987,7 @@ class REPLScreen(Screen):
                     )
 
         elif isinstance(event, TurnCompleteEvent):
+            tui_log("Received TurnCompleteEvent")
             if self._current_assistant_widget is not None:
                 await self._current_assistant_widget.finish_streaming()
             self._reset_tool_contexts()
