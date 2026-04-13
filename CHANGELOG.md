@@ -6,7 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-14
+
+#### TUI Bug Fixes and Improvements
+- Fixed `InputTextArea` cursor_blink compatibility with different Textual versions
+- Fixed tool title prefix to show "● " before tool summary
+- Fixed `Markdown._total_lines` calculation (removed +1 bottom spacing)
+- Updated `tests/test_ui_streaming_markdown_layout.py` test assertion
+
 ### Added - 2026-04-14
+
+#### Session Compaction (/compact command)
+- Added `/compact` and `/summarize` commands to compress conversation history
+- Implemented compaction logic in `claude_code/core/compaction.py` with message summarization
+- Added `_filter_compacted_messages()` and `_handle_compact()` methods in `QueryEngine`
+- Added `CompactRequest` and `compact_stream()` in server API
+- Added `stream_compact()` method in HTTP client
+- Added `_chat_completion_raw()` in OpenAI client for internal API calls
+- Compaction preserves ALL history messages, adds summary marked as `is_compact_summary`
+- Added `tests/test_compaction.py` - Unit tests for compaction functionality
 
 #### TUI Theme Support and UI Layout Improvements
 - Added `FlushCollapsible` and `FlushCollapsibleTitle` widgets for cleaner collapsible UI without leading spacing
