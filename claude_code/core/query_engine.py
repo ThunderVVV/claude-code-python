@@ -156,8 +156,6 @@ class QueryEngine:
         )
 
         if persisted and persisted.revert_state:
-            from claude_code.core.snapshot import DiffSummary
-
             engine._initial_revert_state = RevertState(
                 message_id=persisted.revert_state.message_id,
                 part_id=persisted.revert_state.part_id,
