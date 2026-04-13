@@ -552,6 +552,16 @@ class REPLScreen(Screen):
             asyncio.create_task(self._handle_model_command(user_text))
             return
 
+        if user_text_lower == "/compact":
+            tui_log("Executing command: /compact")
+            asyncio.create_task(self._handle_compact_command())
+            return
+
+        if user_text_lower == "/summarize":
+            tui_log("Executing command: /summarize (alias for /compact)")
+            asyncio.create_task(self._handle_compact_command())
+            return
+
         self._hide_welcome_widget()
         self._add_to_history(submitted_value)
 
@@ -680,6 +690,64 @@ class REPLScreen(Screen):
             welcome_widget.set_model_name(self._current_model_name)
         except Exception:
             pass
+
+    async def _handle_compact_command(self) -> None:
+        """Handle /compact command to compress conversation history.
+
+        This implementation aligns with opencode principle:
+        1. Calls the dedicated /compact API endpoint with streaming
+        2. Streams the summary text like a normal assistant message
+        3. Preserves ALL HISTORY messages, only adds the summary marked as is_compact_summary
+        """
+        if self._is_processing:
+            return
+
+        message_list = self.query_one("#message-list", MessageList)
+        input_widget = self.query_one("#user-input", InputTextArea)
+
+        # Hide welcome widget if visible
+        self._hide_welcome_widget()
+
+        # Clear input and anchor transcript
+        input_widget.load_text("")
+        self._reset_streaming_state()
+        self._reset_tool_contexts()
+        self._anchor_transcript()
+
+        # Set processing state
+        self._set_processing_state(True)
+        self.refresh()
+
+        try:
+            # Use the dedicated /compact streaming API endpoint
+            async for event in self.client.stream_compact(
+                self.session_id,
+                self.working_directory,
+                model=self._current_model_id if self._current_model_id else None,
+            ):
+                if not self._is_processing:
+                    break
+                await self._handle_query_event(event, message_list)
+                await asyncio.sleep(0)
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            log_full_exception(logger, "Compact command error", e)
+            if self._is_processing:
+                error_msg = Message.system_message(f"Compaction error: {str(e)}")
+                await message_list.add_message(error_msg)
+
+        finally:
+            self._set_processing_state(False)
+            self._reset_streaming_state()
+            self._reset_tool_contexts()
+
+            # Refresh context usage after compaction
+            self._refresh_context_usage_label()
+            await self._refresh_snapshot_status()
+
+            input_widget.focus()
 
     async def _start_new_session(self) -> None:
         """Create a new session on server and reset UI."""
