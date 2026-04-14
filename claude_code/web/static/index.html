@@ -31,9 +31,29 @@
             --color-yellow: #eab308;
             --font-size-code: 13px;
             --font-size-base: 14px;
+            --app-height: 100dvh;
         }
 
-        html { font-size: var(--font-size-base); }
+        html {
+            font-size: var(--font-size-base);
+            width: 100%;
+            min-height: 100%;
+            overflow-x: hidden;
+            background: var(--color-bg-secondary);
+            color-scheme: dark;
+        }
+        body {
+            margin: 0;
+            width: 100%;
+            min-height: var(--app-height);
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
+        }
+        #app {
+            width: 100%;
+            min-height: var(--app-height);
+            overflow-x: hidden;
+        }
         * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
         code, pre, .mono, .markdown-body pre, .markdown-body code, pre code {
             font-family: 'JetBrains Mono', monospace;
@@ -83,7 +103,11 @@
         .collapse-icon { transition: transform 0.2s ease; }
         .collapse-icon.rotated { transform: rotate(90deg); }
 
-        .assistant-content { overflow-x: auto; }
+        .assistant-content {
+            overflow-x: hidden;
+            min-width: 0;
+            max-width: 100%;
+        }
         .assistant-content pre { max-width: 100%; overflow-x: auto; }
 
         .input-glow:focus { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
@@ -148,7 +172,21 @@
 
         .markdown-body a { color: #60a5fa; text-decoration: underline; }
 
-        .markdown-body table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+        .markdown-table-wrapper {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            margin: 0.5em 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .markdown-body table {
+            border-collapse: collapse;
+            width: max-content;
+            min-width: 100%;
+            margin: 0;
+        }
         .markdown-body th, .markdown-body td { border: 1px solid #334155; padding: 0.5em; }
         .markdown-body th { background: rgba(30, 41, 59, 0.8) !important; }
 
@@ -236,12 +274,6 @@
             --color-purple: #c678dd;
             --color-orange: #d19a66;
             --color-cyan: #56b6c2;
-        }
-
-        html {
-            background: var(--color-bg-secondary);
-            color: var(--color-text-primary);
-            color-scheme: dark;
         }
 
         body.gradient-bg {
@@ -343,17 +375,40 @@
         .collapsible-header:hover { background: rgba(97, 175, 239, 0.06) !important; }
         .tool-summary { letter-spacing: 0.01em; }
 
+        .app-shell {
+            width: min(100%, 96rem);
+            min-height: var(--app-height);
+            overflow: hidden;
+        }
+
+        .editor-frame,
+        .editor-scroll {
+            min-width: 0;
+            min-height: 0;
+        }
+
         .assistant-content {
-            overflow-x: auto;
+            overflow-x: hidden;
             color: var(--color-text-primary);
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .assistant-content > * {
+            min-width: 0;
+            max-width: 100%;
         }
 
         .assistant-content pre,
         .tool-block pre,
         .tool-result-area pre,
-        .markdown-body pre {
+        .markdown-body pre,
+        .file-expansion pre,
+        .diff-container,
+        .markdown-table-wrapper {
             max-width: 100%;
             overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .composer-shell {
@@ -365,6 +420,8 @@
             background: rgba(25, 29, 35, 0.96) !important;
             border-color: rgba(92, 99, 112, 0.65) !important;
             color: var(--color-text-primary) !important;
+            font-size: 16px !important;
+            line-height: 1.5;
         }
 
         .composer-input::placeholder { color: var(--color-text-secondary) !important; }
@@ -378,6 +435,8 @@
         .markdown-body {
             color: var(--color-text-primary);
             line-height: 1.65;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .markdown-body h1,
@@ -394,6 +453,24 @@
         .markdown-body h3 { font-size: 1.1em; }
         .markdown-body p { margin: 0.5em 0; }
 
+        .text-container,
+        .message-user p,
+        .thinking-block,
+        .tool-summary,
+        .tool-result-area,
+        .markdown-body p,
+        .markdown-body li,
+        .markdown-body blockquote,
+        .markdown-body h1,
+        .markdown-body h2,
+        .markdown-body h3,
+        .markdown-body h4,
+        .markdown-body h5,
+        .markdown-body h6 {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
         .markdown-body code {
             background: rgba(33, 37, 43, 0.98) !important;
             color: #e5c07b;
@@ -401,6 +478,13 @@
             border-radius: 4px;
             border: 1px solid rgba(97, 175, 239, 0.12);
             font-size: 0.9em;
+        }
+
+        .markdown-body :not(pre) > code,
+        .tool-result-area code {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            white-space: break-spaces;
         }
 
         .markdown-body pre {
@@ -441,10 +525,21 @@
             text-decoration-color: rgba(97, 175, 239, 0.35);
         }
 
+        .markdown-table-wrapper {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            margin: 0.5em 0;
+            border-radius: 8px;
+            -webkit-overflow-scrolling: touch;
+        }
+
         .markdown-body table {
             border-collapse: collapse;
-            width: 100%;
-            margin: 0.5em 0;
+            width: max-content;
+            min-width: 100%;
+            margin: 0;
         }
 
         .markdown-body th,
@@ -482,7 +577,8 @@
             border-radius: 6px;
             border: 1px solid rgba(97, 175, 239, 0.12);
             max-width: 100%;
-            overflow: hidden;
+            overflow-x: auto;
+            overflow-y: hidden;
         }
 
         .d2h-wrapper {
@@ -581,6 +677,81 @@
         }
 
         ::-webkit-scrollbar-thumb:hover { background: rgba(97, 175, 239, 0.9); }
+
+        @media (max-width: 767px) {
+            body {
+                min-height: var(--app-height);
+            }
+
+            #app,
+            .app-shell {
+                min-height: var(--app-height);
+            }
+
+            .message-assistant,
+            .message-user,
+            .tool-block,
+            .file-expansion {
+                max-width: 100%;
+            }
+
+            .assistant-content,
+            .tool-block,
+            .tool-result-area,
+            .text-container {
+                min-width: 0;
+                max-width: 100%;
+            }
+
+            .markdown-body pre,
+            .tool-result-area pre,
+            .file-expansion pre {
+                padding: 0.75rem;
+                font-size: 12px;
+            }
+
+            .markdown-body ul,
+            .markdown-body ol {
+                padding-left: 1.25rem;
+            }
+
+            .composer-input {
+                font-size: 16px !important;
+            }
+
+            .d2h-file-header {
+                padding: 0.5rem 0.75rem !important;
+            }
+
+            .diff-container .d2h-tag,
+            .diff-container .d2h-changed-tag {
+                display: none !important;
+            }
+
+            .diff-container .d2h-code-linenumber,
+            .diff-container .d2h-code-side-linenumber {
+                display: none !important;
+                width: 0 !important;
+                min-width: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                overflow: hidden !important;
+            }
+
+            .diff-container .d2h-code-line,
+            .diff-container .d2h-code-side-line {
+                width: 100% !important;
+                padding: 0 !important;
+            }
+
+            .diff-container .d2h-diff-table td,
+            .diff-container .d2h-diff-table th,
+            .diff-container .d2h-code-line-ctn,
+            .diff-container .d2h-code-line-prefix {
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+        }
     </style>
 </head>
 <body class="gradient-bg min-h-screen text-slate-100">
@@ -617,11 +788,31 @@
         }
     };
 
-    const renderMarkdown = (text) =>
-        marked.parse(text || '', {
+    const renderMarkdown = (text) => {
+        const rendered = marked.parse(text || '', {
             langPrefix: 'hljs language-',
             highlight: highlightCode,
         });
+
+        const container = document.createElement('div');
+        container.innerHTML = rendered;
+
+        for (const table of container.querySelectorAll('table')) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'markdown-table-wrapper';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        }
+
+        return container.innerHTML;
+    };
+
+    const prefersCompactDiff = () => window.matchMedia('(max-width: 767px)').matches;
+
+    const updateAppViewportHeight = () => {
+        const viewportHeight = window.visualViewport?.height || window.innerHeight;
+        document.documentElement.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
+    };
 
     const isDiffContent = (content) =>
         content.includes('---') && content.includes('+++') ||
@@ -645,22 +836,22 @@
     // Main App
     const App = {
         template: `
-            <div class="app-shell flex flex-col h-screen mx-auto p-4 md:p-6">
+            <div class="app-shell mx-auto flex min-h-[100dvh] flex-col p-3 sm:p-4 md:p-6">
                 <!-- Header -->
-                <header class="flex items-center justify-between mb-4 fade-in">
-                    <div class="flex items-center gap-3">
+                <header class="mb-4 flex min-w-0 flex-col gap-3 fade-in sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex min-w-0 items-center gap-3">
                         <div class="app-mark w-10 h-10 rounded-xl flex items-center justify-center shadow-lg">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
                             </svg>
                         </div>
-                        <div>
-                            <h1 class="app-title text-xl font-semibold">Claude Code Python</h1>
+                        <div class="min-w-0">
+                            <h1 class="app-title truncate text-xl font-semibold">Claude Code Python</h1>
                             <p class="app-subtitle text-xs">AI Programming Assistant</p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <span v-if="tokenUsed > 0" class="status-chip text-xs">
+                    <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                        <span v-if="tokenUsed > 0" class="status-chip hidden text-xs sm:inline-flex">
                             <span class="text-slate-500">Tokens:</span>
                             <span class="text-blue-400">{{ tokenUsed.toLocaleString() }}</span>
                             <span class="text-slate-600">/</span>
@@ -684,9 +875,9 @@
                 </header>
 
                 <!-- Chat Container -->
-                <div class="editor-frame flex-1 overflow-hidden flex flex-col glass rounded-2xl shadow-2xl">
+                <div class="editor-frame glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl shadow-2xl">
                     <!-- Messages Area -->
-                    <div ref="messagesContainer" class="editor-scroll flex-1 overflow-y-auto p-4 md:p-6 space-y-4" @scroll="handleMessagesScroll">
+                    <div ref="messagesContainer" class="editor-scroll flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain p-3 sm:p-4 md:p-6 space-y-4" @scroll="handleMessagesScroll">
                         <!-- Welcome Message -->
                         <div v-if="messages.length === 0" class="text-center py-12">
                             <div class="app-mark w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center">
@@ -728,20 +919,20 @@
                     </div>
 
                     <!-- Input Area -->
-                    <div class="composer-shell p-4 md:p-6 border-t border-slate-700/50 bg-slate-900/50">
+                    <div class="composer-shell border-t border-slate-700/50 bg-slate-900/50 p-3 sm:p-4 md:p-6">
                         <div v-if="currentInputHasWeb" class="mb-3 flex items-center gap-2 text-xs">
                             <span class="inline-flex items-center rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-1 font-medium text-blue-300">
                                 @web 已启用
                             </span>
                             <span class="text-slate-400">本次请求将启用 Web 能力</span>
                         </div>
-                        <form @submit.prevent="sendMessage" class="flex gap-3">
-                            <div class="flex-1 relative">
+                        <form @submit.prevent="sendMessage" class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
+                            <div class="relative min-w-0 flex-1">
                                 <textarea
                                     ref="messageInput"
                                     v-model="inputText"
                                     rows="1"
-                                    placeholder="输入消息... (Shift+Enter 换行, ↑↓ 历史)"
+                                    :placeholder="inputPlaceholder"
                                     class="composer-input w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 input-glow resize-none transition-all duration-200"
                                     style="max-height: 200px;"
                                     @input="autoResize"
@@ -753,7 +944,7 @@
                                 v-if="!isStreaming"
                                 type="submit"
                                 :disabled="isLoading || !inputText.trim()"
-                                class="action-button primary-action px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-medium rounded-xl shadow-lg shadow-blue-500/30 transition-all duration-200 hover:shadow-blue-500/50 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                                class="action-button primary-action flex w-full shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 text-white font-medium shadow-lg shadow-blue-500/30 transition-all duration-200 hover:from-blue-600 hover:to-indigo-700 hover:scale-[1.02] hover:shadow-blue-500/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 sm:w-auto"
                             >
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
@@ -763,7 +954,7 @@
                                 v-else
                                 type="button"
                                 @click="sendInterrupt"
-                                class="action-button danger-action px-6 py-3 bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700 text-white font-medium rounded-xl shadow-lg shadow-red-500/30 transition-all duration-200 hover:shadow-red-500/50 hover:scale-[1.02] active:scale-[0.98]"
+                                class="action-button danger-action flex w-full shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-red-500 to-orange-600 px-6 py-3 text-white font-medium shadow-lg shadow-red-500/30 transition-all duration-200 hover:from-red-600 hover:to-orange-700 hover:scale-[1.02] hover:shadow-red-500/50 active:scale-[0.98] sm:w-auto"
                             >
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -775,9 +966,9 @@
                 </div>
 
                 <!-- Sessions Modal -->
-                <div v-if="showSessionsModal" class="fixed inset-0 flex items-center justify-center z-50">
+                <div v-if="showSessionsModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
                     <div class="modal-overlay absolute inset-0" @click="showSessionsModal = false"></div>
-                    <div class="relative glass rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden">
+                    <div class="relative w-full max-w-md overflow-hidden rounded-2xl glass shadow-2xl max-h-[80vh]">
                         <div class="flex items-center justify-between p-4 border-b border-slate-700/50">
                             <h2 class="text-lg font-semibold text-white">会话列表</h2>
                             <button @click="showSessionsModal = false" class="p-1 rounded-lg hover:bg-slate-700/50">
@@ -829,6 +1020,7 @@
             const sessions = ref([]);
             const sessionsLoading = ref(false);
             const autoFollowOutput = ref(true);
+            const isCompactViewport = ref(prefersCompactDiff());
 
             // Input history
             const inputHistory = ref(JSON.parse(localStorage.getItem('inputHistory') || '[]'));
@@ -851,6 +1043,9 @@
             // Computed
             const statusColorClass = computed(() => `bg-${statusColor.value}-500`);
             const currentInputHasWeb = computed(() => hasWebReference(inputText.value));
+            const inputPlaceholder = computed(() =>
+                isCompactViewport.value ? '输入消息...' : '输入消息... (Shift+Enter 换行, ↑↓ 历史)'
+            );
 
             // Methods
             const isNearBottom = () => {
@@ -879,6 +1074,11 @@
             const autoResize = (e) => {
                 e.target.style.height = 'auto';
                 e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+            };
+
+            const syncViewportMetrics = () => {
+                updateAppViewportHeight();
+                isCompactViewport.value = prefersCompactDiff();
             };
 
             const resetHistoryNavigation = () => {
@@ -1529,11 +1729,18 @@
 
             // Keyboard shortcuts
             onMounted(() => {
+                syncViewportMetrics();
                 document.addEventListener('keydown', handleGlobalKeydown);
+                window.addEventListener('resize', syncViewportMetrics);
+                window.visualViewport?.addEventListener('resize', syncViewportMetrics);
+                window.visualViewport?.addEventListener('scroll', syncViewportMetrics);
             });
 
             onBeforeUnmount(() => {
                 document.removeEventListener('keydown', handleGlobalKeydown);
+                window.removeEventListener('resize', syncViewportMetrics);
+                window.visualViewport?.removeEventListener('resize', syncViewportMetrics);
+                window.visualViewport?.removeEventListener('scroll', syncViewportMetrics);
             });
 
             return {
@@ -1550,6 +1757,7 @@
                 sessions,
                 sessionsLoading,
                 currentInputHasWeb,
+                inputPlaceholder,
                 messagesContainer,
                 messageInput,
                 autoResize,
@@ -1572,7 +1780,7 @@
         emits: ['toggle-collapse'],
         template: `
             <div v-if="message.type === 'user'" class="flex justify-end fade-in">
-                <div class="max-w-[90%]">
+                <div class="max-w-full min-w-0 sm:max-w-[90%]">
                     <div v-if="message.webEnabled" class="mb-2 flex justify-end">
                         <span class="inline-flex items-center rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-300">
                             @web 已启用
@@ -1582,28 +1790,28 @@
                         <div class="text-sm text-blue-300 font-medium mb-1">@{{ exp.display_path || exp.file_path }}</div>
                         <pre class="mono text-xs text-slate-400 bg-slate-900/50 rounded p-2 overflow-x-auto max-h-32 overflow-y-auto">{{ exp.content.substring(0, 500) }}{{ exp.content.length > 500 ? '\\n... (more lines)' : '' }}</pre>
                     </div>
-                    <div class="message-user rounded-2xl rounded-tr-md px-4 py-3 shadow-lg">
+                    <div class="message-user max-w-full rounded-2xl rounded-tr-md px-4 py-3 shadow-lg">
                         <p class="text-white whitespace-pre-wrap">{{ message.text }}</p>
                     </div>
                 </div>
             </div>
 
             <div v-else-if="message.type === 'assistant'" class="flex justify-start fade-in">
-                <div class="w-full">
-                    <div class="flex items-start gap-3">
-                        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center flex-shrink-0">
+                <div class="w-full min-w-0">
+                    <div class="flex min-w-0 items-start gap-2 sm:gap-3">
+                        <div class="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 sm:flex">
                             <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
                             </svg>
                         </div>
-                        <div class="flex-1 message-assistant rounded-2xl rounded-tl-md px-4 py-3 min-w-0">
-                            <div class="assistant-content markdown-body">
+                        <div class="message-assistant min-w-0 flex-1 rounded-2xl rounded-tl-md px-3 py-3 sm:px-4">
+                            <div class="assistant-content markdown-body min-w-0 break-words">
                                 <template v-for="(block, idx) in message.content" :key="idx">
-                                    <div v-if="block.type === 'text'" class="text-container" v-html="renderMarkdown(block.text)"></div>
+                                    <div v-if="block.type === 'text'" class="text-container min-w-0 break-words" v-html="renderMarkdown(block.text)"></div>
                                     <span v-else-if="block.type === 'thinking'" class="text-slate-500 italic thinking-block">{{ block.thinking }}</span>
-                                    <div v-else-if="block.type === 'tool_block'" class="tool-block rounded-lg p-3 my-2 border-l-4" :class="block.isError ? 'border-red-500' : (block.result ? 'border-emerald-500' : 'border-blue-500')">
+                                    <div v-else-if="block.type === 'tool_block'" class="tool-block my-2 max-w-full rounded-lg border-l-4 p-3" :class="block.isError ? 'border-red-500' : (block.result ? 'border-emerald-500' : 'border-blue-500')">
                                         <div class="collapsible-header flex items-center justify-between rounded -m-3 p-3" @click="$emit('toggle-collapse', block.collapseId)">
-                                            <div class="text-sm font-medium tool-summary" :class="block.isError ? 'text-red-400' : (block.result ? 'text-emerald-400' : 'text-blue-400')">
+                                            <div class="min-w-0 pr-3 text-sm font-medium tool-summary" :class="block.isError ? 'text-red-400' : (block.result ? 'text-emerald-400' : 'text-blue-400')">
                                                 {{ block.result ? (block.isError ? '✗ ' : '● ') + block.summary : block.summary }}
                                             </div>
                                             <svg class="w-4 h-4 text-slate-400 collapse-icon" :class="{ rotated: block.expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1615,7 +1823,7 @@
                                                 <div v-html="block.inputDetails"></div>
                                                 <div v-if="block.result" class="tool-result-area mt-2">
                                                     <div v-if="block.diffData" :id="'diff-' + block.collapseId" class="diff-container"></div>
-                                                    <pre v-else class="mono text-xs text-slate-300 bg-slate-900/50 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ resultPreview(block.result) }}</pre>
+                                                    <pre v-else class="mono overflow-x-auto whitespace-pre-wrap rounded bg-slate-900/50 p-2 text-xs text-slate-300">{{ resultPreview(block.result) }}</pre>
                                                 </div>
                                             </div>
                                         </div>
@@ -1646,12 +1854,13 @@
                                 const container = document.getElementById('diff-' + block.collapseId);
                                 if (container && !container.hasChildNodes()) {
                                     try {
+                                        const compactDiff = prefersCompactDiff();
                                         const diff2htmlUi = new Diff2HtmlUI(container, block.diffData, {
                                             drawFileList: false,
                                             matching: 'lines',
-                                            outputFormat: 'side-by-side',
+                                            outputFormat: compactDiff ? 'line-by-line' : 'side-by-side',
                                             highlight: true,
-                                            synchronisedScroll: true,
+                                            synchronisedScroll: !compactDiff,
                                             colorScheme: 'dark'
                                         });
                                         diff2htmlUi.draw();

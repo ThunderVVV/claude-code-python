@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-14
+
+#### Web Frontend Mobile Responsive Improvements
+- Added mobile viewport height handling with --app-height CSS variable using 100dvh
+- Added dynamic viewport height update for iOS keyboard visibility changes via visualViewport events
+- Added mobile-first responsive layout with Tailwind sm: breakpoints
+- Added markdown table horizontal scrolling wrapper (.markdown-table-wrapper)
+- Added responsive diff view: side-by-side on desktop, line-by-line on mobile (< 768px)
+- Added compact diff view on mobile: hide line numbers, file tags, and other UI elements
+- Added iOS input zoom prevention: set composer input font-size: 16px !important
+- Added word-break and overflow-wrap guards for long text/content
+- Added @media (max-width: 767px) CSS section with mobile-specific styles
+- Added responsive padding: p-3 on mobile, p-4 sm:p-6 md:p-6 on larger screens
+- Updated renderMarkdown() to automatically wrap tables in scrollable container
+- Added prefersCompactDiff() helper to detect mobile viewport
+- Added syncViewportMetrics() to handle resize and visualViewport events
+- Added 8 new tests in test_web_frontend_source.py for mobile features
+
 ### Fixed - 2026-04-14
 
 #### TUI Markdown First Block Top Margin
