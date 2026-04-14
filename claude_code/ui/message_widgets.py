@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Callable, List, Optional
 from textual.app import ComposeResult
 from textual.content import Content, Span
@@ -213,7 +214,7 @@ class ThinkingBlockWidget(VerticalGroup):
 class ToolResultBlockWidget(Static):
     """Plain static tool-result block that expands in place when clicked."""
 
-    VISIBLE_LINE_LIMIT = 10
+    VISIBLE_LINE_LIMIT = 5
 
     def __init__(self, output_lines: List[str], **kwargs):
         super().__init__("", markup=False, **kwargs)
@@ -339,7 +340,20 @@ class ToolUseWidget(VerticalGroup):
         summary, is_error = self._result
         summary = sanitize_terminal_text(summary)
         status_style = "$error" if is_error else "$success"
-        return Content(f"● {summary}", spans=[Span(0, 1, status_style)])
+        title_text = f"● {summary}"
+        spans = [Span(0, 1, status_style)]
+        action_span = self._leading_action_span(summary, offset=2)
+        if action_span is not None:
+            spans.append(action_span)
+        return Content(title_text, spans=spans)
+
+    @staticmethod
+    def _leading_action_span(summary: str, *, offset: int = 0) -> Span | None:
+        """Highlight the leading action token in tool result summaries."""
+        match = re.match(r"[A-Za-z]+", summary)
+        if not match:
+            return None
+        return Span(offset + match.start(), offset + match.end(), "$text-primary")
 
     def _should_auto_expand(self) -> bool:
         """Return True when this tool block should start expanded."""

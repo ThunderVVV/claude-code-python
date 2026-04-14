@@ -12,6 +12,14 @@ REPLScreen {
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0 0;
+    scrollbar-size: 1 1;
+    scrollbar-background: $surface;
+    scrollbar-background-hover: $surface;
+    scrollbar-background-active: $surface;
+    scrollbar-color: $primary-muted;
+    scrollbar-color-hover: $primary;
+    scrollbar-color-active: $primary;
+    scrollbar-corner-color: $surface;
 }
 
 ScrollableContainer {
@@ -212,7 +220,7 @@ WelcomeWidget:focus {
     height: auto;
     padding: 0;
     background: transparent;
-    color: $text-muted;
+    color: $foreground 55%;
 }
 
 .tool-use-block {
@@ -281,6 +289,10 @@ WelcomeWidget:focus {
     color: $foreground;
 }
 
+.tool-param {
+    color: $foreground 55%;
+}
+
 .tool-result {
     margin-left: 0;
     margin-bottom: 0;
@@ -296,7 +308,7 @@ WelcomeWidget:focus {
 }
 
 .tool-result-preview {
-    color: $foreground;
+    color: $foreground 55%;
     margin-left: 0;
 }
 
@@ -318,7 +330,7 @@ WelcomeWidget:focus {
 }
 
 .tool-result-content {
-    color: $text-muted;
+    color: $foreground 55%;
     margin: 0;
     padding: 0;
 }
@@ -340,6 +352,7 @@ ToolUseWidget {
 }
 
 Markdown {
+    color: $foreground;
     padding: 0;
     link-style: none;
     link-style-hover: bold;

@@ -34,7 +34,7 @@ def test_flush_collapsible_title_allows_selection():
 def test_tool_result_block_defaults():
     widget = ToolResultBlockWidget([f"line {i}" for i in range(3)])
 
-    assert widget.VISIBLE_LINE_LIMIT == 10
+    assert widget.VISIBLE_LINE_LIMIT == 5
     assert "tool-result-block" in widget.classes
     assert "tool-result-static" in widget.classes
 
@@ -48,8 +48,8 @@ async def _run_tool_result_block_starts_with_preview_for_long_output() -> None:
 
         assert str(block.content) == (
             "Output:\n"
-            "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\n"
-            "... 2 lines (Click to expand)"
+            "line 0\nline 1\nline 2\nline 3\nline 4\n"
+            "... 7 lines (Click to expand)"
         )
 
 
@@ -76,8 +76,8 @@ async def _run_tool_result_block_click_toggles_expand_and_collapse() -> None:
 
         assert str(block.content) == (
             "Output:\n"
-            "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\n"
-            "... 2 lines (Click to expand)"
+            "line 0\nline 1\nline 2\nline 3\nline 4\n"
+            "... 7 lines (Click to expand)"
         )
 
 
@@ -108,6 +108,19 @@ def test_tool_use_widget_compose_output_branch_structure():
     assert isinstance(parts[0], ToolResultBlockWidget)
 
 
+def test_tool_use_widget_title_highlights_leading_action_word():
+    widget = ToolUseWidget(tool_name="Bash", tool_input={}, tool_use_id="tool-1")
+    widget._result = ("Ran: git status", False)
+
+    title = widget._build_title()
+    title_text = str(title)
+
+    assert any(
+        span.style == "$text-primary" and title_text[span.start:span.end] == "Ran"
+        for span in title.spans
+    )
+
+
 async def _run_tool_use_widget_renders_static_result_preview() -> None:
     async with ToolUseResultTestApp().run_test(size=(80, 24)) as pilot:
         await pilot.pause()
@@ -115,8 +128,8 @@ async def _run_tool_use_widget_renders_static_result_preview() -> None:
         block = pilot.app.query_one(ToolResultBlockWidget)
         assert str(block.content) == (
             "Output:\n"
-            "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\n"
-            "... 2 lines (Click to expand)"
+            "line 0\nline 1\nline 2\nline 3\nline 4\n"
+            "... 7 lines (Click to expand)"
         )
 
 

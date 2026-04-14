@@ -893,7 +893,7 @@ class Markdown(ScrollView, can_focus=True):
         & > .markdown--table {
         }
         &:light > .markdown--table {
-            background: white 30%;
+            background: $foreground 30%;
         }
         & > .markdown--table-header {
             color: $primary;
@@ -1452,7 +1452,7 @@ class Markdown(ScrollView, can_focus=True):
         if base_bg is None:
             return base_style
 
-        # Contrast color: white on dark themes, black on light themes
+        # Contrast color: app foreground on dark themes, black on light themes
         contrast = base_bg.get_contrast_text(1.0)
         # Compound boost: each depth level blends 4% of contrast into bg
         blended = base_bg

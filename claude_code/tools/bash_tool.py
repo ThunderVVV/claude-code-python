@@ -415,7 +415,7 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
 
             # Add stderr if present
             if stderr_str.strip():
-                result_parts.append(f"\n[stderr]\n{stderr_str.strip()}")
+                result_parts.append(f"\n{stderr_str.strip()}")
 
             # If no output and successful
             if not result_parts:
