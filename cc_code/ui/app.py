@@ -19,6 +19,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+try:
+    import pyperclip
+except ImportError:
+    pyperclip = None
+
 DEFAULT_THEME_NAME = "atom-one-dark"
 
 
@@ -92,7 +97,15 @@ class CCCodeApp(App):
         selection = self._get_selected_text()
         if not selection:
             return
-        self.copy_to_clipboard(selection)
+
+        if pyperclip is not None:
+            try:
+                pyperclip.copy(selection)
+            except Exception:
+                self.copy_to_clipboard(selection)
+        else:
+            self.copy_to_clipboard(selection)
+
         self.notify(
             "Copied to clipboard",
             title="Clipboard",
