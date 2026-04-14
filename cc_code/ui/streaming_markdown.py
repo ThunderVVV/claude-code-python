@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Callable
-
 from markdown_it import MarkdownIt
 from textual.await_complete import AwaitComplete
 from textual.content import Content
@@ -34,15 +32,12 @@ class StreamingMarkdownWidget(Markdown):
     def __init__(
         self,
         initial_text: str = "",
-        *,
-        should_stream_live: Callable[[], bool] | None = None,
         **kwargs,
     ):
         normalized = sanitize_terminal_text(initial_text)
         self._markdown_text = normalized
         self._rendered_markdown_text = normalized
         self._stream: MarkdownStream | None = None
-        self._should_stream_live_callback = should_stream_live
         super().__init__(
             normalized,
             parser_factory=_create_markdown_parser,
@@ -57,14 +52,6 @@ class StreamingMarkdownWidget(Markdown):
         self._rendered_markdown_text = normalized
         update = super().update(normalized)
         return update
-
-    def _should_stream_live(self) -> bool:
-        """Return True when transcript output should update live."""
-        if not self.is_mounted:
-            return False
-        if self._should_stream_live_callback is not None:
-            return self._should_stream_live_callback()
-        return True
 
     async def _flush_pending_markdown(self) -> None:
         """Flush any buffered markdown content to the widget."""
@@ -95,6 +82,10 @@ class StreamingMarkdownWidget(Markdown):
         self._stream = None
         await stream.stop()
 
+    async def flush_pending_markdown(self) -> None:
+        """Render any buffered markdown without stopping future streaming."""
+        await self._flush_pending_markdown()
+
     async def append_text(self, markdown: str) -> None:
         """Append a markdown fragment using Textual's streaming helper."""
         normalized = sanitize_terminal_text(markdown)
@@ -103,8 +94,6 @@ class StreamingMarkdownWidget(Markdown):
         self._markdown_text += normalized
         if not self.is_mounted:
             self._initial_markdown = self._markdown_text
-            return
-        if not self._should_stream_live():
             return
         await self._flush_pending_markdown()
 

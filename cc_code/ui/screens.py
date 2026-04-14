@@ -1192,7 +1192,6 @@ class REPLScreen(Screen):
         if not self._current_assistant_widget:
             self._current_assistant_widget = await message_list.create_streaming_widget(
                 auto_follow=False,
-                should_stream_live=self._should_follow_transcript,
             )
         return self._current_assistant_widget
 
@@ -1231,6 +1230,7 @@ class REPLScreen(Screen):
             assistant_widget = await self._ensure_assistant_widget(
                 message_list, auto_follow=False
             )
+            await assistant_widget.flush_streaming_text()
             tool_widget = await assistant_widget.add_tool_use(tool_use)
             if tool_widget:
                 self._tool_widget_context[event.tool_use_id] = tool_widget

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Callable, List, Optional
+from typing import List, Optional
 from textual.app import ComposeResult
 from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
@@ -533,14 +533,12 @@ class MessageWidget(VerticalGroup):
         self,
         message: Optional[Message] = None,
         streaming: bool = False,
-        should_stream_live: Callable[[], bool] | None = None,
         tool_streaming_context: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self._streaming = streaming
         self._message = message
-        self._should_stream_live = should_stream_live
         self._tool_streaming_context = tool_streaming_context
 
         # Internal state for streaming
@@ -597,7 +595,6 @@ class MessageWidget(VerticalGroup):
             self._streaming_host = host
             self._streaming_widget = StreamingMarkdownWidget(
                 text,
-                should_stream_live=self._should_stream_live,
                 classes="streaming-content",
             )
             yield self._streaming_widget
@@ -744,7 +741,6 @@ class MessageWidget(VerticalGroup):
             self._streaming_host = Container(classes="markdown-host transcript-block")
             self._streaming_widget = StreamingMarkdownWidget(
                 self._text_content,
-                should_stream_live=self._should_stream_live,
                 classes="streaming-content",
             )
             await self._content_container.mount(self._streaming_host)
@@ -761,7 +757,6 @@ class MessageWidget(VerticalGroup):
             self._streaming_host = Container(classes="markdown-host transcript-block")
             self._streaming_widget = StreamingMarkdownWidget(
                 text,
-                should_stream_live=self._should_stream_live,
                 classes="streaming-content",
             )
             await self._content_container.mount(self._streaming_host)
@@ -807,12 +802,16 @@ class MessageWidget(VerticalGroup):
         """Expose rendered tool widgets by tool-use id."""
         return dict(self._tool_widgets_by_id)
 
+    async def flush_streaming_text(self) -> None:
+        """Drain the markdown stream so prior assistant text is visible immediately."""
+        if self._streaming_widget:
+            await self._streaming_widget.finish_streaming()
+
     async def finish_streaming(self) -> None:
         """Flush and stop any active markdown streams."""
         if self._thinking_widget:
             await self._thinking_widget.finish_streaming()
-        if self._streaming_widget:
-            await self._streaming_widget.finish_streaming()
+        await self.flush_streaming_text()
 
 
 class MessageList(VerticalGroup):
@@ -894,7 +893,6 @@ class MessageList(VerticalGroup):
         self,
         message: Optional[Message] = None,
         auto_follow: bool = True,
-        should_stream_live: Callable[[], bool] | None = None,
         tool_streaming_context: bool = True,
         before_widget: Optional[MessageWidget] = None,
     ) -> MessageWidget:
@@ -902,7 +900,6 @@ class MessageList(VerticalGroup):
         widget = MessageWidget(
             message=message,
             streaming=True,
-            should_stream_live=should_stream_live,
             tool_streaming_context=tool_streaming_context,
         )
         await self._mount_message_widget(
