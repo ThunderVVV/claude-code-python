@@ -215,6 +215,39 @@ ContentBlock = Union[
 ]
 
 
+def content_block_from_dict(data: dict[str, Any]) -> ContentBlock:
+    """Reconstruct ContentBlock from dict for session persistence."""
+    block_type = data.get("type", "")
+    if block_type == "text":
+        return TextContent(text=str(data.get("text", "")))
+    if block_type == "thinking":
+        return ThinkingContent(
+            thinking=str(data.get("thinking", "")),
+            signature=str(data.get("signature", "")),
+        )
+    if block_type == "tool_use":
+        return ToolUseContent(
+            id=str(data.get("tool_use_id", data.get("id", ""))),
+            name=str(data.get("tool_name", data.get("name", ""))),
+            input=data.get("input", {}) if isinstance(data.get("input"), dict) else {},
+        )
+    if block_type == "tool_result":
+        return ToolResultContent(
+            tool_use_id=str(data.get("tool_use_id", "")),
+            content=str(data.get("result", data.get("content", ""))),
+            is_error=bool(data.get("is_error", False)),
+            metadata=data.get("metadata"),
+        )
+    if block_type == "patch":
+        files = data.get("files", [])
+        return PatchContent(
+            prev_hash=str(data.get("prev_hash", "")),
+            hash=str(data.get("hash", "")),
+            files=files if isinstance(files, list) else [],
+        )
+    raise ValueError(f"Unknown content block type: {block_type!r}")
+
+
 def generate_uuid() -> str:
     """Generate a UUID string"""
     return str(uuid.uuid4())
@@ -374,7 +407,9 @@ class Message:
                     }
         return {"role": "user", "content": ""}
 
-    def to_dict(self, use_content_key: bool = False, include_persistence_fields: bool = False) -> Dict[str, Any]:
+    def to_dict(
+        self, use_content_key: bool = False, include_persistence_fields: bool = False
+    ) -> Dict[str, Any]:
         """Convert to dictionary for serialization.
 
         This is the unified serialization method for all purposes.
@@ -408,7 +443,9 @@ class Message:
             message_dict["timestamp"] = self.timestamp.isoformat()
             message_dict["is_meta"] = self.is_meta
             message_dict["is_compact_summary"] = self.is_compact_summary
-            message_dict["is_visible_in_transcript_only"] = self.is_visible_in_transcript_only
+            message_dict["is_visible_in_transcript_only"] = (
+                self.is_visible_in_transcript_only
+            )
 
             if self.parent_id:
                 message_dict["parent_id"] = self.parent_id
@@ -430,23 +467,10 @@ class Message:
 
 
 @dataclass
-class ToolCallState:
-    """State for a tool call"""
-
-    tool_use_id: str
-    tool_name: str
-    input: Dict[str, Any]
-    status: str = "pending"
-    result: Optional[str] = None
-    error: Optional[str] = None
-
-
-@dataclass
 class QueryState:
     """State for a query session"""
 
     messages: List[Message] = field(default_factory=list)
-    tool_calls: List[ToolCallState] = field(default_factory=list)
     current_turn: int = 0
     is_streaming: bool = False
     current_streaming_text: str = ""
@@ -457,10 +481,6 @@ class QueryState:
         """Add a message to the state"""
         self.messages.append(message)
 
-    def add_tool_call(self, tool_call: ToolCallState) -> None:
-        """Add a tool call to the state"""
-        self.tool_calls.append(tool_call)
-
     def get_last_message(self) -> Optional[Message]:
         """Get the last message"""
         return self.messages[-1] if self.messages else None
@@ -468,7 +488,6 @@ class QueryState:
     def clear(self) -> None:
         """Clear the state"""
         self.messages = []
-        self.tool_calls = []
         self.current_turn = 0
         self.is_streaming = False
         self.current_streaming_text = ""

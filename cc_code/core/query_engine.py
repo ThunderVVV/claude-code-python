@@ -7,7 +7,17 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, List, Optional
+
+if TYPE_CHECKING:
+    from cc_code.core.instruction import InstructionConfig, InstructionService
+    from cc_code.core.snapshot import (
+        DiffSummary,
+        Patch,
+        RevertResult,
+        RevertState,
+        SnapshotManager,
+    )
 
 from cc_code.core.messages import (
     ContentBlock,
@@ -30,9 +40,6 @@ from cc_code.core.messages import (
 )
 from cc_code.core.tools import ToolContext, ToolRegistry
 from cc_code.core.prompts import create_default_system_prompt
-from cc_code.core.instruction import InstructionConfig, InstructionService
-from cc_code.core.file_expansion import expand_file_references
-from cc_code.core.snapshot import SnapshotManager, DiffSummary, Patch, RevertState, RevertResult
 from cc_code.services.openai_client import (
     OpenAIClient,
     OpenAIClientConfig,
@@ -114,15 +121,15 @@ class QueryEngine:
         self._session_created_at = session_created_at
 
         # Snapshot system for file revert
-        self._snapshot_manager: Optional[SnapshotManager] = None
+        self._snapshot_manager: Optional["SnapshotManager"] = None
         self._current_snapshot: Optional[str] = None
-        self._revert_state: Optional[RevertState] = None
-        self._total_diff: Optional[DiffSummary] = None
+        self._revert_state: Optional["RevertState"] = None
+        self._total_diff: Optional["DiffSummary"] = None
 
         # Instruction service for loading CLAUDE.md, AGENTS.md, etc.
-        self._instruction_service: Optional[InstructionService] = None
+        self._instruction_service: Optional["InstructionService"] = None
         self._cached_instructions: Optional[List[str]] = None
-        self._instruction_config: Optional[InstructionConfig] = None
+        self._instruction_config: Optional["InstructionConfig"] = None
 
     @classmethod
     async def create_from_session_id(
@@ -132,10 +139,10 @@ class QueryEngine:
         tool_registry: ToolRegistry,
         session_store: Any,
         working_directory: str = "",
-        instruction_config: Optional[InstructionConfig] = None,
+        instruction_config: Optional["InstructionConfig"] = None,
     ) -> "QueryEngine":
         """Create a QueryEngine from a session ID, loading persisted state if exists.
-        
+
         Args:
             session_id: Optional session ID to restore
             client_config: OpenAI client configuration
@@ -145,6 +152,7 @@ class QueryEngine:
             instruction_config: Optional instruction configuration for CLAUDE.md/AGENTS.md loading
         """
         from cc_code.core.session_store import PersistedSession
+        from cc_code.core.snapshot import DiffSummary, RevertState
 
         persisted: Optional[PersistedSession] = None
         if session_id:
@@ -168,7 +176,7 @@ class QueryEngine:
             session_title=persisted.title if persisted else None,
             session_created_at=persisted.created_at if persisted else None,
         )
-        
+
         # Set instruction config if provided
         if instruction_config:
             engine._instruction_config = instruction_config
@@ -200,6 +208,9 @@ class QueryEngine:
     async def initialize(self) -> None:
         """Initialize the engine (create HTTP client and instruction service)"""
         if not self._is_initialized:
+            from cc_code.core.snapshot import SnapshotManager
+            from cc_code.core.instruction import InstructionService
+
             self._client = OpenAIClient(self.client_config)
             self._snapshot_manager = SnapshotManager(self._cwd)
             self._instruction_service = InstructionService(self._instruction_config)
@@ -289,8 +300,10 @@ class QueryEngine:
         messages: List[Message],
         start_message_id: str,
         start_part_id: Optional[str] = None,
-    ) -> List[Patch]:
+    ) -> List["Patch"]:
         """Collect all patches from messages after the revert point."""
+        from cc_code.core.snapshot import Patch
+
         patches: List[Patch] = []
         found_start = False
 
@@ -322,8 +335,10 @@ class QueryEngine:
         messages: List[Message],
         target_message_id: Optional[str] = None,
         target_part_id: Optional[str] = None,
-    ) -> Optional[RevertState]:
+    ) -> Optional["RevertState"]:
         """Find the revert point in message history."""
+        from cc_code.core.snapshot import RevertState
+
         if not messages:
             return None
 
@@ -351,8 +366,10 @@ class QueryEngine:
         self,
         target_message_id: Optional[str] = None,
         target_part_id: Optional[str] = None,
-    ) -> RevertResult:
+    ) -> "RevertResult":
         """Revert file changes from the target point to the current state."""
+        from cc_code.core.snapshot import DiffSummary, RevertResult
+
         if not self._snapshot_manager:
             return RevertResult(
                 success=False,
@@ -411,6 +428,8 @@ class QueryEngine:
 
     def recalculate_total_diff(self) -> None:
         """Recalculate total_diff from all PatchContent in messages."""
+        from cc_code.core.snapshot import DiffSummary
+
         if not self._snapshot_manager:
             return
         additions = 0
@@ -447,18 +466,18 @@ class QueryEngine:
 
     async def _load_instructions(self) -> List[str]:
         """Load instructions from CLAUDE.md, AGENTS.md, etc.
-        
+
         Instructions are cached after first load to avoid repeated file I/O.
         """
         if self._cached_instructions is not None:
             return self._cached_instructions
-        
+
         if self._instruction_service is None:
             return []
-        
+
         try:
-            self._cached_instructions = await self._instruction_service.get_system_instructions(
-                self._cwd
+            self._cached_instructions = (
+                await self._instruction_service.get_system_instructions(self._cwd)
             )
             return self._cached_instructions
         except Exception as e:
@@ -469,7 +488,7 @@ class QueryEngine:
         """Build the system prompt with instructions from CLAUDE.md, AGENTS.md, etc."""
         # Load instructions from CLAUDE.md, AGENTS.md, etc.
         instructions = await self._load_instructions()
-        
+
         # Build system prompt with instructions
         return create_default_system_prompt(
             cwd=self._cwd,
@@ -479,39 +498,41 @@ class QueryEngine:
 
     def _filter_compacted_messages(self) -> List[Message]:
         """Filter messages to only include those after the last successful compaction summary.
-        
+
         This aligns with TypeScript MessageV2.filterCompacted():
         - Iterates through messages and adds them to result
-        - When a successful summary is found (summary=true, finish set, no error), 
+        - When a successful summary is found (summary=true, finish set, no error),
           marks its parent message ID as "completed"
         - When encountering a user message that triggered a completed compaction, stops
         - Returns messages from the compaction boundary onwards
-        
+
         Returns:
             List of messages that should be sent to the model
         """
         messages = self.state.messages
         if not messages:
             return messages
-        
+
         # Find completed compaction boundaries
         # A successful summary has: is_compact_summary=True, has finish reason, no error
         completed_parent_ids = set()
-        
+
         # First pass: find all completed compaction summaries
         for msg in messages:
-            if (msg.type == MessageRole.ASSISTANT and 
-                msg.is_compact_summary and 
-                msg.stop_reason and
-                not msg.stop_reason.startswith("error")):
+            if (
+                msg.type == MessageRole.ASSISTANT
+                and msg.is_compact_summary
+                and msg.stop_reason
+                and not msg.stop_reason.startswith("error")
+            ):
                 # This summary completed successfully
                 if msg.parent_id:
                     completed_parent_ids.add(msg.parent_id)
-        
+
         if not completed_parent_ids:
             # No compaction done, return all messages
             return messages
-        
+
         # Second pass: filter messages
         # Include messages from the last compaction boundary onwards
         # The summary message itself should be included
@@ -523,7 +544,7 @@ class QueryEngine:
                 result = []  # Clear previous messages
                 continue
             result.append(msg)
-        
+
         return result
 
     def clear(self) -> None:
@@ -671,7 +692,10 @@ class QueryEngine:
                     yield event
                 return
 
-            from cc_code.core.file_expansion import has_web_reference
+            from cc_code.core.file_expansion import (
+                expand_file_references,
+                has_web_reference,
+            )
 
             # Expand @file_path references
             expanded_text, file_expansions = expand_file_references(
@@ -817,7 +841,9 @@ class QueryEngine:
                 "stream_options": {"include_usage": True},
             }
 
-            stream_response = await self._client._client.chat.completions.create(**request_params)
+            stream_response = await self._client._client.chat.completions.create(
+                **request_params
+            )
 
             async for chunk in stream_response:
                 self._raise_if_interrupted()
@@ -826,7 +852,9 @@ class QueryEngine:
 
                 # Extract usage if available
                 extract_usage = getattr(self._client, "extract_usage", None)
-                chunk_usage = extract_usage(chunk_dict) if callable(extract_usage) else None
+                chunk_usage = (
+                    extract_usage(chunk_dict) if callable(extract_usage) else None
+                )
                 if chunk_usage:
                     current_usage = chunk_usage
                     self.state.total_usage = chunk_usage
@@ -842,7 +870,7 @@ class QueryEngine:
             assistant_message.content = [TextContent(text=current_text)]
             # Set stop_reason to mark this as a completed summary (for filtering)
             assistant_message.stop_reason = "stop"
-            
+
             # Attach usage to the message so UI can refresh context info
             if current_usage:
                 assistant_message.usage = current_usage
@@ -1061,7 +1089,9 @@ class QueryEngine:
                 logger.info(
                     f"Executing {len(tool_use_blocks)} tool calls: {tool_calls_info}"
                 )
-                tool_results: List[tuple] = []  # (tool_use_id, result, is_error, metadata)
+                tool_results: List[
+                    tuple
+                ] = []  # (tool_use_id, result, is_error, metadata)
 
                 # Track snapshots for file-modifying tools
                 step_snapshot: Optional[str] = None
@@ -1110,21 +1140,26 @@ class QueryEngine:
                             tool_use.input, self._get_tool_context(assistant_message_id)
                         )
                         is_error = tool.is_error_result(result, tool_use.input)
-                        
+
                         # Extract loaded instruction metadata from Read tool results
                         metadata = None
                         if tool_use.name == "Read" and "<!-- loaded:" in result:
                             import re
-                            match = re.search(r'<!-- loaded: (\[.*?\]) -->', result)
+
+                            match = re.search(r"<!-- loaded: (\[.*?\]) -->", result)
                             if match:
                                 try:
-                                    loaded_paths = __import__('json').loads(match.group(1))
+                                    loaded_paths = __import__("json").loads(
+                                        match.group(1)
+                                    )
                                     metadata = {"loaded": loaded_paths}
                                     # Remove the metadata comment from result
-                                    result = re.sub(r'\n\n<!-- loaded: \[.*?\] -->', '', result)
-                                except (__import__('json').JSONDecodeError, ValueError):
+                                    result = re.sub(
+                                        r"\n\n<!-- loaded: \[.*?\] -->", "", result
+                                    )
+                                except (__import__("json").JSONDecodeError, ValueError):
                                     pass
-                        
+
                         yield ToolResultEvent(
                             tool_use_id=tool_use.id,
                             result=result,
@@ -1142,6 +1177,8 @@ class QueryEngine:
 
                 # Create patch after tool execution if we had a snapshot
                 if step_snapshot and self._snapshot_manager:
+                    from cc_code.core.snapshot import DiffSummary
+
                     try:
                         patch = self._snapshot_manager.patch(step_snapshot)
                         if patch.files:

@@ -103,50 +103,6 @@ class BaseTool(ABC):
         """Check if this tool use is read-only"""
         return False
 
-    def is_concurrency_safe(self, input: Dict[str, Any]) -> bool:
-        """Check if this tool can run concurrently with other tools"""
-        return False
-
-    def is_destructive(self, input: Dict[str, Any]) -> bool:
-        """Check if this tool performs irreversible operations"""
-        return False
-
-    async def check_permissions(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> PermissionResult:
-        """Check if this tool use is allowed"""
-        return PermissionResult(behavior="allow", updated_input=input)
-
-    async def validate_input(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> ValidationResult:
-        """Validate tool input"""
-        return ValidationResult(result=True)
-
-    def get_path(self, input: Dict[str, Any]) -> Optional[str]:
-        """Get file path if this tool operates on a file"""
-        return None
-
-    def user_facing_name(self, input: Optional[Dict[str, Any]] = None) -> str:
-        """Get human-readable name for the tool"""
-        return self.name
-
-    def get_tool_use_summary(
-        self, input: Optional[Dict[str, Any]] = None
-    ) -> Optional[str]:
-        """Get a short summary of this tool use for display"""
-        return None
-
-    def get_activity_description(
-        self, input: Optional[Dict[str, Any]] = None
-    ) -> Optional[str]:
-        """Get present-tense activity description for spinner"""
-        return None
-
     def is_error_result(
         self,
         result: str,

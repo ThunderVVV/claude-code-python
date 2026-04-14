@@ -12,13 +12,10 @@ from typing import Any, Optional
 from cc_code.core.messages import (
     Message,
     MessageRole,
-    TextContent,
-    ThinkingContent,
     ToolResultContent,
-    ToolUseContent,
-    PatchContent,
     Usage,
     generate_uuid,
+    content_block_from_dict,
 )
 
 
@@ -312,37 +309,6 @@ def _revert_state_from_dict(data: Any) -> Optional[RevertStateData]:
     )
 
 
-def _content_block_from_dict(data: dict[str, Any]) -> Any:
-    block_type = data.get("type")
-    if block_type == "text":
-        return TextContent(text=str(data.get("text", "")))
-    if block_type == "thinking":
-        return ThinkingContent(
-            thinking=str(data.get("thinking", "")),
-            signature=str(data.get("signature", "")),
-        )
-    if block_type == "tool_use":
-        return ToolUseContent(
-            id=str(data.get("id", "")),
-            name=str(data.get("name", "")),
-            input=data.get("input", {}) if isinstance(data.get("input"), dict) else {},
-        )
-    if block_type == "tool_result":
-        return ToolResultContent(
-            tool_use_id=str(data.get("tool_use_id", "")),
-            content=str(data.get("content", "")),
-            is_error=bool(data.get("is_error", False)),
-        )
-    if block_type == "patch":
-        files = data.get("files", [])
-        return PatchContent(
-            prev_hash=str(data.get("prev_hash", "")),
-            hash=str(data.get("hash", "")),
-            files=files if isinstance(files, list) else [],
-        )
-    raise ValueError(f"Unknown content block type: {block_type!r}")
-
-
 def _message_to_dict(message: Message) -> dict[str, Any]:
     """Convert message to dict for persistence using unified Message.to_dict()"""
     return message.to_dict(use_content_key=True, include_persistence_fields=True)
@@ -376,12 +342,11 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
 
     original_text = str(data.get("original_text", ""))
     content = [
-        _content_block_from_dict(block_data)
+        content_block_from_dict(block_data)
         for block_data in data.get("content", [])
         if isinstance(block_data, dict)
     ]
 
-    # Extract usage
     usage = None
     usage_data = data.get("usage")
     if isinstance(usage_data, dict):
