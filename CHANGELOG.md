@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-14
+
+#### README Cleanup
+- Remove duplicate Japanese title from README.md
+
 ### Added - 2026-04-14
 
 #### Web Frontend Mobile Responsive Improvements

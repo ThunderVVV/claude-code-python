@@ -1,8 +1,6 @@
 
 # Claude Code Python
 
-# クロード・コード・パイソン
-
 > Code Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 
 > WARNING: 本项目绝大部分为AI生成代码
