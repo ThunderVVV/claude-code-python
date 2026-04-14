@@ -7,7 +7,6 @@ from cc_code.services.openai_client import (
 )
 from cc_code.core.prompts import (
     create_default_system_prompt,
-    build_context_message,
 )
 
 __all__ = [
@@ -15,5 +14,4 @@ __all__ = [
     "OpenAIClientConfig",
     "ToolCallDelta",
     "create_default_system_prompt",
-    "build_context_message",
 ]

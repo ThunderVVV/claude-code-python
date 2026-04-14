@@ -230,9 +230,3 @@ async def create_system_prompt_with_instructions(
     instructions = await load_system_instructions(cwd, instruction_config)
 
     return create_default_system_prompt(cwd, model_name, instructions)
-
-
-def build_context_message(cwd: str) -> str:
-    """Build context message with current working directory info"""
-    # This is now integrated into the main system prompt
-    return ""
