@@ -264,25 +264,41 @@ def build_visible_file_expansions(
 
 
 # Content block converters
+def _text_block_to_dict(block, block_type: str) -> dict:
+    return {"type": block_type, "text": block.text}
+
+
+def _thinking_block_to_dict(block, block_type: str) -> dict:
+    return {"type": block_type, "thinking": block.thinking}
+
+
+def _tool_use_block_to_dict(block, block_type: str) -> dict:
+    return {
+        "type": block_type,
+        "tool_use_id": block.id,
+        "tool_name": block.name,
+        "input": block.input,
+    }
+
+
+def _tool_result_block_to_dict(block, block_type: str) -> dict:
+    return {
+        "type": block_type,
+        "tool_use_id": block.tool_use_id,
+        "result": block.content,
+        "is_error": block.is_error,
+    }
+
+
 def content_block_to_dict(block) -> dict:
     if isinstance(block, TextContent):
-        return {"type": "text", "text": block.text}
+        return _text_block_to_dict(block, "text")
     elif isinstance(block, ThinkingContent):
-        return {"type": "thinking", "thinking": block.thinking}
+        return _thinking_block_to_dict(block, "thinking")
     elif isinstance(block, ToolUseContent):
-        return {
-            "type": "tool_use",
-            "tool_use_id": block.id,
-            "tool_name": block.name,
-            "input": block.input,
-        }
+        return _tool_use_block_to_dict(block, "tool_use")
     elif isinstance(block, ToolResultContent):
-        return {
-            "type": "tool_result",
-            "tool_use_id": block.tool_use_id,
-            "result": block.content,
-            "is_error": block.is_error,
-        }
+        return _tool_result_block_to_dict(block, "tool_result")
     return {"type": "unknown"}
 
 
@@ -325,25 +341,44 @@ def message_to_dict(message, working_directory: str = "") -> dict:
     return message_dict
 
 
+class _TextEventProxy:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _ThinkingEventProxy:
+    def __init__(self, thinking: str):
+        self.thinking = thinking
+
+
+class _ToolUseEventProxy:
+    def __init__(self, tool_use_id: str, tool_name: str, input: dict):
+        self.id = tool_use_id
+        self.name = tool_name
+        self.input = input
+
+
+class _ToolResultEventProxy:
+    def __init__(self, tool_use_id: str, result: str, is_error: bool):
+        self.tool_use_id = tool_use_id
+        self.content = result
+        self.is_error = is_error
+
+
 def event_to_dict(event, working_directory: str = "") -> dict:
     if isinstance(event, CoreTextEvent):
-        return {"type": "text", "text": event.text}
+        return _text_block_to_dict(_TextEventProxy(event.text), "text")
     elif isinstance(event, CoreThinkingEvent):
-        return {"type": "thinking", "thinking": event.thinking}
+        return _thinking_block_to_dict(_ThinkingEventProxy(event.thinking), "thinking")
     elif isinstance(event, CoreToolUseEvent):
-        return {
-            "type": "tool_use",
-            "tool_use_id": event.tool_use_id,
-            "tool_name": event.tool_name,
-            "input": event.input,
-        }
+        return _tool_use_block_to_dict(
+            _ToolUseEventProxy(event.tool_use_id, event.tool_name, event.input), "tool_use"
+        )
     elif isinstance(event, CoreToolResultEvent):
-        return {
-            "type": "tool_result",
-            "tool_use_id": event.tool_use_id,
-            "result": event.result,
-            "is_error": event.is_error,
-        }
+        return _tool_result_block_to_dict(
+            _ToolResultEventProxy(event.tool_use_id, event.result, event.is_error),
+            "tool_result",
+        )
     elif isinstance(event, CoreMessageCompleteEvent):
         event_dict: dict[str, object] = {"type": "message_complete"}
         if event.message:
