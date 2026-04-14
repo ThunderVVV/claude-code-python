@@ -544,12 +544,7 @@ async def revert(request: RevertRequest):
         if not engine:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        revert_service = engine.get_revert_service()
-        if not revert_service:
-            raise HTTPException(status_code=500, detail="Revert service not available")
-
-        result = await revert_service.revert(
-            engine,
+        result = await engine.revert(
             target_message_id=target_message_id,
             target_part_id=target_part_id,
         )

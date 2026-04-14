@@ -18,7 +18,7 @@ from textual.screen import Screen
 from textual import events
 from textual.worker import Worker
 
-from cc_code.core.context_window import (
+from cc_code.core.messages import (
     format_token_count,
     get_used_context_percentage,
     get_used_context_tokens,

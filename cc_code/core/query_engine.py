@@ -32,8 +32,8 @@ from cc_code.core.tools import ToolContext, ToolRegistry
 from cc_code.core.prompts import create_default_system_prompt
 from cc_code.core.instruction import InstructionConfig, InstructionService
 from cc_code.core.file_expansion import expand_file_references
-from cc_code.core.snapshot import SnapshotManager, DiffSummary
-from cc_code.core.revert import RevertState, SessionRevertService
+from cc_code.core.snapshot import SnapshotManager, DiffSummary, Patch
+from cc_code.core.revert import RevertState, RevertResult
 from cc_code.services.openai_client import (
     OpenAIClient,
     OpenAIClientConfig,
@@ -118,7 +118,6 @@ class QueryEngine:
         self._snapshot_manager: Optional[SnapshotManager] = None
         self._current_snapshot: Optional[str] = None
         self._revert_state: Optional[RevertState] = None
-        self._revert_service: Optional[SessionRevertService] = None
         self._total_diff: Optional[DiffSummary] = None
 
         # Instruction service for loading CLAUDE.md, AGENTS.md, etc.
@@ -204,7 +203,6 @@ class QueryEngine:
         if not self._is_initialized:
             self._client = OpenAIClient(self.client_config)
             self._snapshot_manager = SnapshotManager(self._cwd)
-            self._revert_service = SessionRevertService(self._snapshot_manager)
             self._instruction_service = InstructionService(self._instruction_config)
             if hasattr(self, "_initial_revert_state"):
                 self._revert_state = self._initial_revert_state
@@ -287,9 +285,126 @@ class QueryEngine:
         """Get the snapshot manager"""
         return self._snapshot_manager
 
-    def get_revert_service(self) -> Optional[SessionRevertService]:
-        """Get the revert service"""
-        return self._revert_service
+    def _collect_patches(
+        self,
+        messages: List[Message],
+        start_message_id: str,
+        start_part_id: Optional[str] = None,
+    ) -> List[Patch]:
+        """Collect all patches from messages after the revert point."""
+        patches: List[Patch] = []
+        found_start = False
+
+        for message in messages:
+            if message.uuid == start_message_id:
+                found_start = True
+                if start_part_id:
+                    continue
+                else:
+                    patches = []
+                    continue
+
+            if not found_start:
+                continue
+
+            for content in message.content:
+                if isinstance(content, PatchContent):
+                    patches.append(
+                        Patch(
+                            hash=content.hash,
+                            prev_hash=content.prev_hash,
+                            files=content.files,
+                        )
+                    )
+        return patches
+
+    def _find_revert_point(
+        self,
+        messages: List[Message],
+        target_message_id: Optional[str] = None,
+        target_part_id: Optional[str] = None,
+    ) -> Optional[RevertState]:
+        """Find the revert point in message history."""
+        if not messages:
+            return None
+
+        if target_message_id:
+            for message in messages:
+                if message.uuid == target_message_id:
+                    return RevertState(
+                        message_id=target_message_id,
+                        part_id=target_part_id,
+                    )
+            return None
+
+        last_user_message_id: Optional[str] = None
+        for message in reversed(messages):
+            if message.type == MessageRole.USER:
+                last_user_message_id = message.uuid
+                break
+
+        if last_user_message_id:
+            return RevertState(message_id=last_user_message_id)
+
+        return None
+
+    async def revert(
+        self,
+        target_message_id: Optional[str] = None,
+        target_part_id: Optional[str] = None,
+    ) -> RevertResult:
+        """Revert file changes from the target point to the current state."""
+        if not self._snapshot_manager:
+            return RevertResult(
+                success=False,
+                message="Snapshot manager not available",
+            )
+
+        messages = self.get_messages()
+
+        revert_point = self._find_revert_point(
+            messages, target_message_id, target_part_id
+        )
+        if not revert_point:
+            return RevertResult(
+                success=False,
+                message="Could not find revert point",
+            )
+
+        existing_revert = self.get_revert_state()
+        if existing_revert:
+            if existing_revert.snapshot:
+                self._snapshot_manager.restore(existing_revert.snapshot)
+
+        current_snapshot = self._snapshot_manager.track()
+        revert_point.snapshot = current_snapshot
+
+        patches = self._collect_patches(
+            messages,
+            revert_point.message_id,
+            revert_point.part_id,
+        )
+
+        earliest_prev_hash = ""
+        if patches:
+            earliest_prev_hash = patches[0].prev_hash
+            diff = self._snapshot_manager.diff(earliest_prev_hash, current_snapshot)
+            revert_point.diff = diff
+            self._snapshot_manager.restore(earliest_prev_hash)
+        else:
+            revert_point.diff = DiffSummary()
+
+        removed_count = self.truncate_messages_to(revert_point.message_id)
+        self.recalculate_total_diff()
+        self.set_revert_state(revert_point)
+        self.persist_session()
+
+        return RevertResult(
+            success=True,
+            message=f"Reverted changes from {len(patches)} tool operations, removed {removed_count} messages",
+            revert_state=revert_point,
+            summary=revert_point.diff,
+        )
 
     def get_total_diff(self) -> Optional[DiffSummary]:
         """Get the total diff accumulated from all AI tool operations"""
