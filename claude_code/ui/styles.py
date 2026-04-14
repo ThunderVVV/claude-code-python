@@ -187,7 +187,7 @@ WelcomeWidget:focus {
 }
 
 .user-message-block {
-    padding: 0 1;
+    padding: 1 2;
     background: $surface;
 }
 
@@ -202,8 +202,17 @@ WelcomeWidget:focus {
 }
 
 .tool-result-block {
-    border-left: solid $secondary;
-    background: $secondary-muted;
+    border-top: solid $surface;
+    border-bottom: solid $surface;
+    padding: 0 0;
+}
+
+.tool-result-static {
+    width: 100%;
+    height: auto;
+    padding: 0;
+    background: transparent;
+    color: $text-muted;
 }
 
 .tool-use-block {
@@ -254,7 +263,7 @@ WelcomeWidget:focus {
 
 .tool-collapsible {
     background: transparent;
-    border-top: none;
+    border: none;
     padding: 0;
     margin: 0;
 }
@@ -291,26 +300,27 @@ WelcomeWidget:focus {
     margin-left: 0;
 }
 
-.tool-output-branch {
-    color: $text-muted;
+.tool-result-collapsible {
+    background: transparent;
+    border: none;
     margin: 0;
     padding: 0;
 }
 
-.tool-output-branch-line,
-.tool-output-branch-end {
-    width: auto;
-    margin-left: 0;
-    height: 1;
+.tool-result-collapsible > Contents {
+    padding: 0;
 }
 
-.tool-output-tail {
+.tool-result-collapsible CollapsibleTitle {
     color: $text-muted;
-    margin-top: 0;
+    background: transparent;
+    padding: 0;
 }
 
-.tool-result-log-tree {
-    padding-left: 0;
+.tool-result-content {
+    color: $text-muted;
+    margin: 0;
+    padding: 0;
 }
 
 TextArea:focus {
@@ -384,7 +394,7 @@ MarkdownHorizontalRule {
 .thinking-block {
     width: 100%;
     height: auto;
-    padding: 0;
+    padding: 0 0 1 0;
     background: transparent;
 }
 

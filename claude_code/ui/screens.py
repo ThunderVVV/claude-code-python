@@ -44,7 +44,6 @@ from claude_code.ui.message_widgets import (
     MessageList,
     MessageWidget,
     ThinkingBlockWidget,
-    ToolResultLogWidget,
     ToolUseWidget,
 )
 from claude_code.ui.session_resume_modal import SessionResumeModal
@@ -70,29 +69,6 @@ class TranscriptContainer(ScrollableContainer):
     """Scrollable transcript wrapper that shouldn't steal focus on click."""
 
     FOCUS_ON_CLICK = False
-
-    @property
-    def allow_vertical_scroll(self) -> bool:
-        """Disable transcript scrolling while a tool result owns the wheel."""
-        if self._tool_result_scroll_locked():
-            return False
-        return super().allow_vertical_scroll
-
-    def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
-        """Swallow transcript wheel events while tool-result scroll lock is active."""
-        if self._tool_result_scroll_locked():
-            event.stop()
-
-    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
-        """Swallow transcript wheel events while tool-result scroll lock is active."""
-        if self._tool_result_scroll_locked():
-            event.stop()
-
-    def _tool_result_scroll_locked(self) -> bool:
-        """Return True when any tool result is still in explicit scroll-lock mode."""
-        return any(
-            widget.pointer_scroll_enabled for widget in self.screen.query(ToolResultLogWidget)
-        )
 
 
 class REPLScreen(Screen):
@@ -229,30 +205,6 @@ class REPLScreen(Screen):
         if event.widget.__class__.__name__.endswith("CollapsibleTitle"):
             self._schedule_input_focus()
 
-    def on_click(self, event: events.Click) -> None:
-        """Deactivate tool-result inner scrolling when the click lands elsewhere."""
-        if any(
-            isinstance(node, ToolResultLogWidget)
-            for node in event.widget.ancestors_with_self
-        ):
-            return
-
-        self._deactivate_all_tool_result_scroll_locks()
-
-    def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
-        """Keep transcript scrolling locked while a tool result owns the wheel."""
-        if self._has_active_tool_result_scroll_lock():
-            event.stop()
-
-    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
-        """Keep transcript scrolling locked while a tool result owns the wheel."""
-        if self._has_active_tool_result_scroll_lock():
-            event.stop()
-
-    def _has_active_tool_result_scroll_lock(self) -> bool:
-        """Return True when any tool result is still in explicit scroll-lock mode."""
-        return any(widget.pointer_scroll_enabled for widget in self.query(ToolResultLogWidget))
-
     async def _fetch_model_info_from_server(self) -> None:
         """Fetch model information from server."""
         try:
@@ -357,12 +309,6 @@ class REPLScreen(Screen):
         event.stop()
         self._schedule_input_focus()
 
-    def _deactivate_all_tool_result_scroll_locks(self) -> None:
-        """Release every active tool-result wheel lock in the transcript."""
-        for widget in self.query(ToolResultLogWidget):
-            if widget.pointer_scroll_enabled:
-                widget.deactivate_pointer_scroll()
-
     def _scroll_content_area_to_bottom(self) -> None:
         """Pin the transcript to the bottom when autocomplete expands the input area."""
         try:
@@ -441,11 +387,6 @@ class REPLScreen(Screen):
             pass
 
     async def on_key(self, event: events.Key) -> None:
-        if event.key == "ctrl+e" and self._has_active_tool_result_scroll_lock():
-            event.stop()
-            self._deactivate_all_tool_result_scroll_locks()
-            return
-
         if event.key == "ctrl+o":
             event.stop()
             await self._toggle_transcript_collapsibles_with_modal()
