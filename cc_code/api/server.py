@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from cc_code.core.messages import (
-    MessageCompleteEvent as CoreMessageCompleteEvent,
+    MessageCompleteEvent,
     generate_uuid,
 )
 from cc_code.core.query_engine import QueryEngine
@@ -227,21 +227,16 @@ def message_to_dict(message, working_directory: str = "") -> dict:
 
 def event_to_dict(event, working_directory: str = "") -> dict:
     """Convert event to dictionary for SSE streaming using unified to_dict methods."""
-    # Use the event's own to_dict method if available
-    if hasattr(event, 'to_dict'):
-        event_dict = event.to_dict(working_directory=working_directory)
-        
-        # Special handling for MessageCompleteEvent to add file expansions
-        if isinstance(event, CoreMessageCompleteEvent) and event.message:
-            event_dict["message"] = message_to_dict(
-                event.message,
-                working_directory=working_directory,
-            )
-        
-        return event_dict
+    event_dict = event.to_dict(working_directory=working_directory)
     
-    # Fallback for backward compatibility
-    return {"type": "unknown"}
+    # Special handling for MessageCompleteEvent to add file expansions
+    if isinstance(event, MessageCompleteEvent) and event.message:
+        event_dict["message"] = message_to_dict(
+            event.message,
+            working_directory=working_directory,
+        )
+    
+    return event_dict
 
 
 api_router = APIRouter()

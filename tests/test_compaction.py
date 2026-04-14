@@ -10,22 +10,12 @@ from cc_code.core.messages import (
 from cc_code.core.compaction import (
     SessionCompaction,
     CompactionResult,
-    CompactionConfig,
     DEFAULT_COMPACTION_PROMPT,
     PRUNE_MINIMUM,
     PRUNE_PROTECT,
     prune_tool_results,
     is_context_overflow,
 )
-
-
-def test_compaction_config_defaults():
-    """Test that CompactionConfig has correct defaults."""
-    config = CompactionConfig()
-    assert config.auto is False
-    assert config.overflow is False
-    assert config.prompt is None
-    assert config.prune_enabled is True
 
 
 def test_compaction_result():

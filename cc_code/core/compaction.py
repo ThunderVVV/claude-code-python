@@ -72,16 +72,6 @@ class CompactionResult:
     messages_compacted: int = 0
 
 
-@dataclass
-class CompactionConfig:
-    """Configuration for compaction."""
-
-    auto: bool = False
-    overflow: bool = False
-    prompt: Optional[str] = None
-    prune_enabled: bool = True
-
-
 class SessionCompaction:
     """Handles session compaction to compress conversation history.
 
@@ -150,6 +140,7 @@ class SessionCompaction:
             elif isinstance(block, ToolUseContent):
                 # Tool use input can be large
                 import json
+
                 total += self.estimate_tokens(json.dumps(block.input))
         return total
 
@@ -265,7 +256,7 @@ class SessionCompaction:
                 for block in msg.content:
                     if isinstance(block, TextContent):
                         text_parts.append(block.text)
-                
+
                 text = "\n".join(text_parts) if text_parts else ""
                 if text:
                     result.append({"role": "assistant", "content": text})
@@ -337,107 +328,6 @@ class SessionCompaction:
             result.append(msg)
 
         return result
-
-
-async def compact_session(
-    messages: List[Message],
-    client,  # OpenAIClient
-    model_name: str = "",
-    context_window: Optional[int] = None,
-    custom_prompt: Optional[str] = None,
-) -> CompactionResult:
-    """Compact a session by generating an AI summary.
-
-    This is the main entry point for session compaction.
-
-    Args:
-        messages: List of messages to compact
-        client: OpenAI client to use for generating summary
-        model_name: Name of the model being used
-        context_window: Context window size for the model
-        custom_prompt: Optional custom prompt for summary generation
-
-    Returns:
-        CompactionResult with summary and metadata
-    """
-    if not messages:
-        return CompactionResult(
-            success=False,
-            error="No messages to compact",
-        )
-
-    compaction = SessionCompaction(
-        messages=messages,
-        model_name=model_name,
-        context_window=context_window,
-    )
-
-    # Build messages for summary generation
-    history_messages = compaction.build_messages_for_summary(
-        strip_tool_results=True,
-        max_messages=50,  # Limit to avoid context overflow
-    )
-
-    if not history_messages:
-        return CompactionResult(
-            success=False,
-            error="No eligible messages for compaction",
-        )
-
-    # Create the summary request
-    prompt = compaction.create_compaction_prompt(custom_prompt)
-
-    # Add the summary request as a user message
-    summary_request = {"role": "user", "content": prompt}
-
-    try:
-        # Call the AI to generate summary
-        # Note: This uses a simplified approach - in production you'd want
-        # to use the streaming API and handle errors properly
-        response = await client._chat_completion_raw(
-            messages=history_messages + [summary_request],
-            model=model_name,
-            max_tokens=2000,
-            temperature=0.3,
-        )
-
-        # Extract summary text
-        choices = response.get("choices", [])
-        if not choices:
-            return CompactionResult(
-                success=False,
-                error="No response from AI",
-            )
-
-        summary_text = choices[0].get("message", {}).get("content", "")
-
-        if not summary_text:
-            return CompactionResult(
-                success=False,
-                error="Empty summary generated",
-            )
-
-        # Calculate tokens saved
-        original_tokens = sum(
-            compaction.estimate_message_tokens(msg)
-            for msg in compaction.get_messages_for_compaction()
-        )
-        summary_tokens = compaction.estimate_tokens(summary_text)
-        tokens_saved = max(0, original_tokens - summary_tokens)
-
-        return CompactionResult(
-            success=True,
-            summary=summary_text,
-            tokens_saved=tokens_saved,
-            messages_compacted=len(history_messages),
-        )
-
-    except Exception as e:
-        logger.exception("Failed to generate compaction summary")
-        return CompactionResult(
-            success=False,
-            error=str(e),
-        )
 
 
 def prune_tool_results(messages: List[Message]) -> tuple[List[Message], int]:
