@@ -11,7 +11,6 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import List, Optional, Set
 from urllib.parse import urlparse
 

@@ -365,8 +365,6 @@ def _parse_tokens(
     # For tracking list nesting
     list_stack: list[dict] = []
 
-    heading_slugs = TrackedSlugs()
-
     for token in tokens:
         token_type = token.type
         source_range = (

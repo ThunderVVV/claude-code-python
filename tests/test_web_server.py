@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from cc_code.core.messages import Message, MessageCompleteEvent
+from cc_code.core.file_expansion import build_visible_file_expansions
 from cc_code.api.server import (
-    build_visible_file_expansions,
     create_app as create_api_app,
     event_to_dict,
     message_to_dict,

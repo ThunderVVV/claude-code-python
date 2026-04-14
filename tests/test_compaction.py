@@ -1,11 +1,9 @@
 """Tests for session compaction functionality."""
 
-import pytest
 from cc_code.core.messages import (
     Message,
     MessageRole,
     TextContent,
-    ToolResultContent,
     ToolUseContent,
     Usage,
 )

@@ -147,7 +147,6 @@ Usage:
             nearby_instructions: List[str] = []
             if context.instruction_service and context.message_id and context.messages:
                 try:
-                    from cc_code.core.instruction import LoadedInstruction
                     
                     instructions = await context.instruction_service.resolve_nearby_instructions(
                         messages=context.messages,

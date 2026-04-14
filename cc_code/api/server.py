@@ -16,17 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from cc_code.core.messages import (
-    TextContent,
-    ThinkingContent,
-    ToolUseContent,
-    ToolResultContent,
-    TextEvent as CoreTextEvent,
-    ThinkingEvent as CoreThinkingEvent,
-    ToolUseEvent as CoreToolUseEvent,
-    ToolResultEvent as CoreToolResultEvent,
     MessageCompleteEvent as CoreMessageCompleteEvent,
-    TurnCompleteEvent as CoreTurnCompleteEvent,
-    ErrorEvent as CoreErrorEvent,
     generate_uuid,
 )
 from cc_code.core.query_engine import QueryEngine
@@ -42,13 +32,6 @@ from cc_code.core.settings import (
 )
 from cc_code.core.instruction import InstructionConfig
 from cc_code.services.openai_client import OpenAIClientConfig
-from cc_code.core.file_expansion import (
-    FileExpansion,
-    parse_file_references,
-    read_file_content,
-    resolve_file_path,
-    has_web_reference,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -208,97 +191,18 @@ def _normalize_api_prefix(api_prefix: str) -> str:
     return f"/{prefix}" if prefix else ""
 
 
-def serialize_file_expansions(file_expansions: list[FileExpansion]) -> list[dict]:
-    """Convert file-expansion objects into JSON-friendly dictionaries."""
-    return [
-        {
-            "file_path": exp.file_path,
-            "content": exp.content,
-            "display_path": exp.display_path,
-        }
-        for exp in file_expansions
-    ]
-
-
-def build_visible_file_expansions(
-    user_text: str,
-    working_directory: str,
-) -> list[FileExpansion]:
-    """Reconstruct visible @file_path expansions for the web frontend."""
-    if not user_text:
-        return []
-
-    expansions: list[FileExpansion] = []
-    seen_paths: set[str] = set()
-    web_requested = has_web_reference(user_text)
-
-    for file_path, _start_pos, _end_pos in parse_file_references(user_text):
-        if file_path == "web" and web_requested:
-            continue
-        if file_path in seen_paths:
-            continue
-
-        full_path = resolve_file_path(file_path, working_directory)
-        if full_path is None:
-            continue
-
-        content = read_file_content(full_path)
-        if content is None:
-            continue
-
-        seen_paths.add(file_path)
-        expansions.append(
-            FileExpansion(
-                file_path=full_path,
-                content=content,
-                display_path=file_path,
-            )
-        )
-
-    return expansions
-
-
-def content_block_to_dict(block) -> dict:
-    """Convert content block to dictionary for JSON serialization."""
-    if isinstance(block, TextContent):
-        return {"type": "text", "text": block.text}
-    elif isinstance(block, ThinkingContent):
-        return {"type": "thinking", "thinking": block.thinking}
-    elif isinstance(block, ToolUseContent):
-        return {
-            "type": "tool_use",
-            "tool_use_id": block.id,
-            "tool_name": block.name,
-            "input": block.input,
-        }
-    elif isinstance(block, ToolResultContent):
-        return {
-            "type": "tool_result",
-            "tool_use_id": block.tool_use_id,
-            "result": block.content,
-            "is_error": block.is_error,
-        }
-    return {"type": "unknown"}
-
-
 def message_to_dict(message, working_directory: str = "") -> dict:
-    """Serialize a message for web transport."""
-    message_dict = {
-        "uuid": message.uuid,
-        "role": message.type.value
-        if hasattr(message.type, "value")
-        else str(message.type),
-        "content_blocks": [content_block_to_dict(block) for block in message.content],
-    }
+    """Serialize a message for web transport with file expansion support."""
+    from cc_code.core.file_expansion import (
+        build_visible_file_expansions,
+        serialize_file_expansions,
+        has_web_reference,
+    )
 
-    if message.original_text:
-        message_dict["original_text"] = message.original_text
+    # Get basic message dict from the message's own method
+    message_dict = message.to_dict()
 
-    if message.message:
-        usage = message.message.get("usage")
-        if usage:
-            message_dict["usage"] = usage
-
+    # Add file expansions if needed
     if getattr(message, "file_expansions", None):
         message_dict["file_expansions"] = serialize_file_expansions(
             message.file_expansions
@@ -311,6 +215,7 @@ def message_to_dict(message, working_directory: str = "") -> dict:
         if file_expansions:
             message_dict["file_expansions"] = serialize_file_expansions(file_expansions)
 
+    # Add web enabled flag
     if message_dict["role"] == "user":
         message_dict["web_enabled"] = bool(
             getattr(message, "web_enabled", False)
@@ -321,41 +226,21 @@ def message_to_dict(message, working_directory: str = "") -> dict:
 
 
 def event_to_dict(event, working_directory: str = "") -> dict:
-    """Convert event to dictionary for SSE streaming."""
-    if isinstance(event, CoreTextEvent):
-        return {"type": "text", "text": event.text}
-    elif isinstance(event, CoreThinkingEvent):
-        return {"type": "thinking", "thinking": event.thinking}
-    elif isinstance(event, CoreToolUseEvent):
-        return {
-            "type": "tool_use",
-            "tool_use_id": event.tool_use_id,
-            "tool_name": event.tool_name,
-            "input": event.input,
-        }
-    elif isinstance(event, CoreToolResultEvent):
-        return {
-            "type": "tool_result",
-            "tool_use_id": event.tool_use_id,
-            "result": event.result,
-            "is_error": event.is_error,
-        }
-    elif isinstance(event, CoreMessageCompleteEvent):
-        event_dict: dict[str, object] = {"type": "message_complete"}
-        if event.message:
+    """Convert event to dictionary for SSE streaming using unified to_dict methods."""
+    # Use the event's own to_dict method if available
+    if hasattr(event, 'to_dict'):
+        event_dict = event.to_dict(working_directory=working_directory)
+        
+        # Special handling for MessageCompleteEvent to add file expansions
+        if isinstance(event, CoreMessageCompleteEvent) and event.message:
             event_dict["message"] = message_to_dict(
                 event.message,
                 working_directory=working_directory,
             )
+        
         return event_dict
-    elif isinstance(event, CoreTurnCompleteEvent):
-        return {
-            "type": "turn_complete",
-            "turn": event.turn,
-            "has_more_turns": event.has_more_turns,
-        }
-    elif isinstance(event, CoreErrorEvent):
-        return {"type": "error", "error": event.error, "is_fatal": event.is_fatal}
+    
+    # Fallback for backward compatibility
     return {"type": "unknown"}
 
 

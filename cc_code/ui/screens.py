@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import logging
 from contextlib import nullcontext
@@ -632,7 +631,7 @@ class REPLScreen(Screen):
             status = await self.client.get_snapshot_status(self.session_id)
             self._snapshot_status = status
             self._refresh_context_usage_label()
-        except Exception as e:
+        except Exception:
             pass
 
     def _reset_streaming_state(self) -> None:

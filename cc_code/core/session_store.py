@@ -311,44 +311,6 @@ def _revert_state_from_dict(data: Any) -> Optional[RevertStateData]:
     )
 
 
-def _content_block_to_dict(block: Any) -> dict[str, Any]:
-    if isinstance(block, TextContent):
-        return {"type": "text", "text": block.text}
-    if isinstance(block, ThinkingContent):
-        return {
-            "type": "thinking",
-            "thinking": block.thinking,
-            "signature": block.signature,
-        }
-    if isinstance(block, ToolUseContent):
-        return {
-            "type": "tool_use",
-            "id": block.id,
-            "name": block.name,
-            "input": block.input,
-        }
-    if isinstance(block, ToolResultContent):
-        return {
-            "type": "tool_result",
-            "tool_use_id": block.tool_use_id,
-            "content": block.content,
-            "is_error": block.is_error,
-        }
-    if isinstance(block, PatchContent):
-        return {
-            "type": "patch",
-            "prev_hash": block.prev_hash,
-            "hash": block.hash,
-            "files": block.files,
-        }
-    if isinstance(block, StepStartContent):
-        return {
-            "type": "step_start",
-            "snapshot": block.snapshot,
-        }
-    raise TypeError(f"Unsupported content block: {type(block)!r}")
-
-
 def _content_block_from_dict(data: dict[str, Any]) -> Any:
     block_type = data.get("type")
     if block_type == "text":
@@ -385,15 +347,18 @@ def _content_block_from_dict(data: dict[str, Any]) -> Any:
 
 
 def _message_to_dict(message: Message) -> dict[str, Any]:
-    result = {
-        "type": message.type.value,
-        "content": [_content_block_to_dict(block) for block in message.content],
-        "uuid": message.uuid,
-        "timestamp": message.timestamp.isoformat(),
-        "is_meta": message.is_meta,
-        "is_compact_summary": message.is_compact_summary,
-        "is_visible_in_transcript_only": message.is_visible_in_transcript_only,
-    }
+    """Convert message to dict using the unified to_dict method, adding persistence-specific fields."""
+    # Get basic dict from message's own to_dict with content key
+    result = message.to_dict(use_content_key=True)
+    
+    # Add persistence-specific fields
+    result["type"] = message.type.value
+    result["timestamp"] = message.timestamp.isoformat()
+    result["is_meta"] = message.is_meta
+    result["is_compact_summary"] = message.is_compact_summary
+    result["is_visible_in_transcript_only"] = message.is_visible_in_transcript_only
+    
+    # Add file expansions if they exist
     if message.file_expansions:
         result["file_expansions"] = [
             {
@@ -403,8 +368,7 @@ def _message_to_dict(message: Message) -> dict[str, Any]:
             }
             for exp in message.file_expansions
         ]
-    if message.original_text:
-        result["original_text"] = message.original_text
+    
     return result
 
 

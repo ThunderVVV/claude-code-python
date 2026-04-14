@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import platform
 import sys
@@ -10,7 +9,6 @@ from typing import List, Optional
 
 from cc_code.core.instruction import (
     InstructionConfig,
-    InstructionService,
     load_system_instructions,
 )
 

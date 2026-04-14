@@ -570,7 +570,7 @@ class QueryEngine:
 
         # Don't save empty sessions (no user messages)
         if not self.state.messages:
-            logger.debug(f"Skipping session persistence - no messages")
+            logger.debug("Skipping session persistence - no messages")
             return
 
         # Check if there's at least one user message
@@ -579,7 +579,7 @@ class QueryEngine:
             for msg in self.state.messages
         )
         if not has_user_message:
-            logger.debug(f"Skipping session persistence - no user messages")
+            logger.debug("Skipping session persistence - no user messages")
             return
 
         try:
@@ -758,7 +758,6 @@ class QueryEngine:
         """
         from cc_code.core.compaction import (
             SessionCompaction,
-            DEFAULT_COMPACTION_PROMPT,
         )
 
         if not self._is_initialized or not self._client:
@@ -860,10 +859,6 @@ class QueryEngine:
             self.state.add_message(assistant_message)
 
             # Calculate tokens saved (for logging only)
-            original_tokens = sum(
-                compaction.estimate_message_tokens(msg)
-                for msg in compaction.get_messages_for_compaction()
-            )
             summary_tokens = compaction.estimate_tokens(current_text)
 
             logger.info(
@@ -1130,12 +1125,11 @@ class QueryEngine:
                             match = re.search(r'<!-- loaded: (\[.*?\]) -->', result)
                             if match:
                                 try:
-                                    import json
-                                    loaded_paths = json.loads(match.group(1))
+                                    loaded_paths = __import__('json').loads(match.group(1))
                                     metadata = {"loaded": loaded_paths}
                                     # Remove the metadata comment from result
                                     result = re.sub(r'\n\n<!-- loaded: \[.*?\] -->', '', result)
-                                except (json.JSONDecodeError, ValueError):
+                                except (__import__('json').JSONDecodeError, ValueError):
                                     pass
                         
                         yield ToolResultEvent(

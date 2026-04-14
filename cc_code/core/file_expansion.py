@@ -224,3 +224,53 @@ def format_expansions_for_display(
         parts.append(format_expansion_for_display(expansion, max_lines))
 
     return "\n\n".join(parts)
+
+
+def serialize_file_expansions(file_expansions: list[FileExpansion]) -> list[dict]:
+    """Convert file-expansion objects into JSON-friendly dictionaries."""
+    return [
+        {
+            "file_path": exp.file_path,
+            "content": exp.content,
+            "display_path": exp.display_path,
+        }
+        for exp in file_expansions
+    ]
+
+
+def build_visible_file_expansions(
+    user_text: str,
+    working_directory: str,
+) -> list[FileExpansion]:
+    """Reconstruct visible @file_path expansions for the web frontend."""
+    if not user_text:
+        return []
+
+    expansions: list[FileExpansion] = []
+    seen_paths: set[str] = set()
+    web_requested = has_web_reference(user_text)
+
+    for file_path, _start_pos, _end_pos in parse_file_references(user_text):
+        if file_path == "web" and web_requested:
+            continue
+        if file_path in seen_paths:
+            continue
+
+        full_path = resolve_file_path(file_path, working_directory)
+        if full_path is None:
+            continue
+
+        content = read_file_content(full_path)
+        if content is None:
+            continue
+
+        seen_paths.add(file_path)
+        expansions.append(
+            FileExpansion(
+                file_path=full_path,
+                content=content,
+                display_path=file_path,
+            )
+        )
+
+    return expansions

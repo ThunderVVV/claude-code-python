@@ -88,6 +88,10 @@ class TextContent:
 
     def to_api_format(self) -> Dict[str, Any]:
         return {"type": "text", "text": self.text}
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return {"type": "text", "text": self.text}
 
 
 @dataclass
@@ -99,6 +103,14 @@ class ThinkingContent:
     signature: str = ""
 
     def to_api_format(self) -> Dict[str, Any]:
+        return {
+            "type": "thinking",
+            "thinking": self.thinking,
+            "signature": self.signature,
+        }
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
         return {
             "type": "thinking",
             "thinking": self.thinking,
@@ -120,6 +132,15 @@ class ToolUseContent:
             "type": "tool_use",
             "id": self.id,
             "name": self.name,
+            "input": self.input,
+        }
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return {
+            "type": "tool_use",
+            "tool_use_id": self.id,
+            "tool_name": self.name,
             "input": self.input,
         }
 
@@ -144,6 +165,18 @@ class ToolResultContent:
         if self.metadata:
             result["metadata"] = self.metadata
         return result
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        result = {
+            "type": "tool_result",
+            "tool_use_id": self.tool_use_id,
+            "result": self.content,
+            "is_error": self.is_error,
+        }
+        if self.metadata:
+            result["metadata"] = self.metadata
+        return result
 
 
 @dataclass
@@ -162,6 +195,15 @@ class PatchContent:
             "hash": self.hash,
             "files": self.files,
         }
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return {
+            "type": "patch",
+            "prev_hash": self.prev_hash,
+            "hash": self.hash,
+            "files": self.files,
+        }
 
 
 @dataclass
@@ -172,6 +214,13 @@ class StepStartContent:
     snapshot: str = ""  # Git tree hash before tool execution
 
     def to_api_format(self) -> Dict[str, Any]:
+        return {
+            "type": "step_start",
+            "snapshot": self.snapshot,
+        }
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
         return {
             "type": "step_start",
             "snapshot": self.snapshot,
@@ -367,6 +416,29 @@ class Message:
                     }
         return {"role": "user", "content": ""}
 
+    def to_dict(self, use_content_key: bool = False) -> Dict[str, Any]:
+        """Convert to dictionary for serialization (basic version)
+        
+        Args:
+            use_content_key: If True, use "content" key instead of "content_blocks"
+        """
+        content_key = "content" if use_content_key else "content_blocks"
+        message_dict = {
+            "uuid": self.uuid,
+            "role": self.type.value if hasattr(self.type, "value") else str(self.type),
+            content_key: [block.to_dict() for block in self.content],
+        }
+
+        if self.original_text:
+            message_dict["original_text"] = self.original_text
+
+        if self.message:
+            usage = self.message.get("usage")
+            if usage:
+                message_dict["usage"] = usage
+
+        return message_dict
+
 
 @dataclass
 class ToolCallState:
@@ -427,6 +499,9 @@ class TextEvent(QueryEvent):
     """Event for streaming text content"""
 
     text: str = ""
+    
+    def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
+        return {"type": "text", "text": self.text}
 
 
 @dataclass
@@ -434,6 +509,9 @@ class ThinkingEvent(QueryEvent):
     """Event for streaming thinking/reasoning content"""
 
     thinking: str = ""
+    
+    def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
+        return {"type": "thinking", "thinking": self.thinking}
 
 
 @dataclass
@@ -443,6 +521,14 @@ class ToolUseEvent(QueryEvent):
     tool_use_id: str = ""
     tool_name: str = ""
     input: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
+        return {
+            "type": "tool_use",
+            "tool_use_id": self.tool_use_id,
+            "tool_name": self.tool_name,
+            "input": self.input,
+        }
 
 
 @dataclass
@@ -452,6 +538,14 @@ class ToolResultEvent(QueryEvent):
     tool_use_id: str = ""
     result: str = ""
     is_error: bool = False
+    
+    def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
+        return {
+            "type": "tool_result",
+            "tool_use_id": self.tool_use_id,
+            "result": self.result,
+            "is_error": self.is_error,
+        }
 
 
 @dataclass
@@ -459,6 +553,13 @@ class MessageCompleteEvent(QueryEvent):
     """Event when a message is complete"""
 
     message: Optional[Message] = None
+    
+    def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
+        event_dict: dict[str, object] = {"type": "message_complete"}
+        if self.message:
+            # Basic message dict - server.py's message_to_dict will add file expansions
+            event_dict["message"] = self.message.to_dict()
+        return event_dict
 
 
 @dataclass
@@ -468,6 +569,13 @@ class TurnCompleteEvent(QueryEvent):
     turn: int = 0
     has_more_turns: bool = False
     stop_reason: Optional[str] = None
+    
+    def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
+        return {
+            "type": "turn_complete",
+            "turn": self.turn,
+            "has_more_turns": self.has_more_turns,
+        }
 
 
 @dataclass
@@ -476,3 +584,6 @@ class ErrorEvent(QueryEvent):
 
     error: str = ""
     is_fatal: bool = False
+    
+    def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
+        return {"type": "error", "error": self.error, "is_fatal": self.is_fatal}

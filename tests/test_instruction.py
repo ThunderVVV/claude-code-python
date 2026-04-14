@@ -449,7 +449,7 @@ async def test_nearby_instruction_from_previous_messages():
         service = InstructionService()
         
         # Simulate a previous message that loaded the instruction
-        from cc_code.core.messages import Message, ToolResultContent
+        from cc_code.core.messages import Message
         prev_msg = Message.tool_result_message(
             tool_use_id="prev-tool",
             content="file content",

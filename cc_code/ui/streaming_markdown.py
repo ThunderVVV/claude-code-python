@@ -10,7 +10,7 @@ from textual.content import Content
 from textual.highlight import highlight as highlight_code
 
 from cc_code.ui.utils import sanitize_terminal_text
-from cc_code.ui.patched_markdown import MarkdownFence, MarkdownStream, Markdown, MarkdownBlock
+from cc_code.ui.patched_markdown import MarkdownFence, MarkdownStream, Markdown
 
 
 def _create_markdown_parser() -> MarkdownIt:
