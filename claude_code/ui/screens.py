@@ -43,11 +43,14 @@ from claude_code.ui.widgets import WelcomeWidget, InputTextArea
 from claude_code.ui.message_widgets import (
     MessageList,
     MessageWidget,
+    ThinkingBlockWidget,
+    ToolResultLogWidget,
     ToolUseWidget,
 )
 from claude_code.ui.session_resume_modal import SessionResumeModal
 from claude_code.ui.rewind_modal import RewindModal
 from claude_code.ui.model_select_modal import ModelSelectModal
+from claude_code.ui.transcript_mode_modal import ProgressStatusModal
 from claude_code.ui.autocomplete import (
     AutocompletePopup,
     AutocompleteMode,
@@ -67,6 +70,29 @@ class TranscriptContainer(ScrollableContainer):
     """Scrollable transcript wrapper that shouldn't steal focus on click."""
 
     FOCUS_ON_CLICK = False
+
+    @property
+    def allow_vertical_scroll(self) -> bool:
+        """Disable transcript scrolling while a tool result owns the wheel."""
+        if self._tool_result_scroll_locked():
+            return False
+        return super().allow_vertical_scroll
+
+    def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        """Swallow transcript wheel events while tool-result scroll lock is active."""
+        if self._tool_result_scroll_locked():
+            event.stop()
+
+    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        """Swallow transcript wheel events while tool-result scroll lock is active."""
+        if self._tool_result_scroll_locked():
+            event.stop()
+
+    def _tool_result_scroll_locked(self) -> bool:
+        """Return True when any tool result is still in explicit scroll-lock mode."""
+        return any(
+            widget.pointer_scroll_enabled for widget in self.screen.query(ToolResultLogWidget)
+        )
 
 
 class REPLScreen(Screen):
@@ -100,6 +126,8 @@ class REPLScreen(Screen):
         self._tool_widget_context: dict[str, ToolUseWidget] = {}
         self._query_worker: Optional[Worker] = None
         self._snapshot_status: Optional[dict] = None
+        self._transcript_collapsible_mode_expanded = False
+        self._transcript_mode_switch_in_progress = False
 
         self._history: list[str] = []
         self._history_index: int = 0
@@ -199,7 +227,32 @@ class REPLScreen(Screen):
             return
 
         if event.widget.__class__.__name__.endswith("CollapsibleTitle"):
+            self._deactivate_all_tool_result_scroll_locks()
             self._schedule_input_focus()
+
+    def on_click(self, event: events.Click) -> None:
+        """Deactivate tool-result inner scrolling when the click lands elsewhere."""
+        if any(
+            isinstance(node, ToolResultLogWidget)
+            for node in event.widget.ancestors_with_self
+        ):
+            return
+
+        self._deactivate_all_tool_result_scroll_locks()
+
+    def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        """Keep transcript scrolling locked while a tool result owns the wheel."""
+        if self._has_active_tool_result_scroll_lock():
+            event.stop()
+
+    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        """Keep transcript scrolling locked while a tool result owns the wheel."""
+        if self._has_active_tool_result_scroll_lock():
+            event.stop()
+
+    def _has_active_tool_result_scroll_lock(self) -> bool:
+        """Return True when any tool result is still in explicit scroll-lock mode."""
+        return any(widget.pointer_scroll_enabled for widget in self.query(ToolResultLogWidget))
 
     async def _fetch_model_info_from_server(self) -> None:
         """Fetch model information from server."""
@@ -303,7 +356,13 @@ class REPLScreen(Screen):
     def on_collapsible_toggled(self, event) -> None:
         """Keep the composer focused after toggling transcript collapsibles."""
         event.stop()
+        self._deactivate_all_tool_result_scroll_locks()
         self._schedule_input_focus()
+
+    def _deactivate_all_tool_result_scroll_locks(self) -> None:
+        """Release every active tool-result wheel lock in the transcript."""
+        for widget in self.query(ToolResultLogWidget):
+            widget.deactivate_pointer_scroll()
 
     def _scroll_content_area_to_bottom(self) -> None:
         """Pin the transcript to the bottom when autocomplete expands the input area."""
@@ -383,6 +442,16 @@ class REPLScreen(Screen):
             pass
 
     async def on_key(self, event: events.Key) -> None:
+        if event.key == "ctrl+e" and self._has_active_tool_result_scroll_lock():
+            event.stop()
+            self._deactivate_all_tool_result_scroll_locks()
+            return
+
+        if event.key == "ctrl+o":
+            event.stop()
+            await self._toggle_transcript_collapsibles_with_modal()
+            return
+
         if event.key == "escape" and self._is_processing:
             event.stop()
             await self._cancel_current_query()
@@ -413,6 +482,50 @@ class REPLScreen(Screen):
 
         input_widget.text = self._nav_items[self._history_index]
         input_widget.move_cursor(input_widget.document.end)
+
+    def _toggle_transcript_collapsibles(self) -> None:
+        """Toggle the application-wide think/tool transcript mode."""
+        self._transcript_collapsible_mode_expanded = (
+            not self._transcript_collapsible_mode_expanded
+        )
+        self._apply_transcript_collapsible_mode()
+        self._refresh_context_usage_label()
+
+    async def _toggle_transcript_collapsibles_with_modal(self) -> None:
+        """Hide transcript relayout behind a transient modal."""
+        await self._run_with_progress_modal(
+            "Switching...",
+            self._toggle_transcript_collapsibles,
+        )
+
+    async def _run_with_progress_modal(self, status_text: str, operation) -> None:
+        """Run a UI-affecting operation behind a transient status modal."""
+        if self._transcript_mode_switch_in_progress:
+            operation()
+            return
+
+        self._transcript_mode_switch_in_progress = True
+        modal = ProgressStatusModal(status_text)
+
+        try:
+            await self.app.push_screen(modal)
+            await asyncio.sleep(0)
+
+            with self.app.batch_update():
+                operation()
+                self.refresh(layout=True, repaint=True)
+
+            await asyncio.sleep(0)
+            await modal.dismiss(None)
+        finally:
+            self._transcript_mode_switch_in_progress = False
+
+    def _apply_transcript_collapsible_mode(self) -> None:
+        """Apply the current application-wide think/tool mode to mounted widgets."""
+        for widget in self.query(ThinkingBlockWidget):
+            widget.apply_transcript_collapsible_mode()
+        for widget in self.query(ToolUseWidget):
+            widget.apply_transcript_collapsible_mode()
 
     def _hide_welcome_widget(self) -> None:
         if not self._show_welcome:
@@ -447,6 +560,11 @@ class REPLScreen(Screen):
         return "Type your message and press Enter (Shift+Enter for new line)"
 
     def _context_usage_text(self) -> str:
+        mode_text = (
+            "Mode: expanded (ctrl+o to toggle)"
+            if self._transcript_collapsible_mode_expanded
+            else "Mode: compact (ctrl+o to toggle)"
+        )
         model_text = f"Model: {self._current_model_name}"
 
         if self._context_window_tokens:
@@ -482,10 +600,13 @@ class REPLScreen(Screen):
                     f" | Modified: +{additions}/-{deletions} in {files} file(s)"
                 )
 
-        return f"{model_text} | {context_text}{snapshot_text}"
+        return f"{mode_text} | {model_text} | {context_text}{snapshot_text}"
 
     def _refresh_context_usage_label(self) -> None:
-        label = self.query_one("#context-usage", Label)
+        try:
+            label = self.query_one("#context-usage", Label)
+        except Exception:
+            return
         label.update(self._context_usage_text())
 
     async def _refresh_snapshot_status(self) -> None:
@@ -754,34 +875,58 @@ class REPLScreen(Screen):
         if self._is_processing:
             return
 
-        new_session_id = await self.client.create_session(self.working_directory)
-        self.session_id = new_session_id
+        async def do_start_new_session() -> None:
+            new_session_id = await self.client.create_session(self.working_directory)
+            self.session_id = new_session_id
 
-        message_list = self.query_one("#message-list", MessageList)
-        message_list.clear()
+            message_list = self.query_one("#message-list", MessageList)
+            message_list.clear()
 
-        self._session_title = None
-        self._latest_usage = None
-        self._snapshot_status = None
-        self._reset_streaming_state()
-        self._reset_tool_contexts()
-        
-        # Fetch model info from server
-        await self._fetch_model_info_from_server()
+            self._session_title = None
+            self._latest_usage = None
+            self._snapshot_status = None
+            self._reset_streaming_state()
+            self._reset_tool_contexts()
 
-        input_widget = self.query_one("#user-input", InputTextArea)
-        input_widget.load_text("")
+            await self._fetch_model_info_from_server()
 
-        self._show_welcome = True
+            input_widget = self.query_one("#user-input", InputTextArea)
+            input_widget.load_text("")
+
+            self._show_welcome = True
+            try:
+                welcome_widget = self.query_one("#welcome-widget", WelcomeWidget)
+                welcome_widget.display = True
+                welcome_widget.set_model_name(self._current_model_name)
+            except Exception:
+                pass
+
+            self._refresh_context_usage_label()
+            input_widget.focus()
+
+        await self._run_async_with_progress_modal(
+            "Loading session...",
+            do_start_new_session,
+        )
+
+    async def _run_async_with_progress_modal(self, status_text: str, operation) -> None:
+        """Run an async UI-affecting operation behind a transient status modal."""
+        if self._transcript_mode_switch_in_progress:
+            await operation()
+            return
+
+        self._transcript_mode_switch_in_progress = True
+        modal = ProgressStatusModal(status_text)
+
         try:
-            welcome_widget = self.query_one("#welcome-widget", WelcomeWidget)
-            welcome_widget.display = True
-            welcome_widget.set_model_name(self._current_model_name)
-        except Exception:
-            pass
-
-        self._refresh_context_usage_label()
-        input_widget.focus()
+            await self.app.push_screen(modal)
+            await asyncio.sleep(0)
+            await operation()
+            self.refresh(layout=True, repaint=True)
+            await asyncio.sleep(0)
+            await modal.dismiss(None)
+        finally:
+            self._transcript_mode_switch_in_progress = False
 
     def _show_sessions_modal(self) -> None:
         """Show the sessions modal for switching sessions."""
@@ -828,60 +973,62 @@ class REPLScreen(Screen):
 
         self._set_processing_state(True)
         try:
-            session_info = await self.client.get_session(self.session_id)
-            if not session_info:
-                return
-
-            revert_result = await self.client.revert(
-                self.session_id,
-                target_message_id=message_id,
-            )
-
-            if revert_result.get("success"):
-                summary = revert_result.get("summary", {})
-                additions = summary.get("additions", 0)
-                deletions = summary.get("deletions", 0)
-                files = summary.get("files", 0)
-
-                message_list = self.query_one("#message-list", MessageList)
-                message_list.clear()
-
+            async def do_rewind() -> None:
                 session_info = await self.client.get_session(self.session_id)
-                if session_info and session_info.messages:
-                    messages_to_render = (
-                        session_info.messages[:-1]
-                        if len(session_info.messages) > 0
-                        else []
-                    )
-                    await self._render_messages(message_list, messages_to_render)
-                    self._anchor_transcript_after_refresh()
+                if not session_info:
+                    return
 
-                    last_msg = (
-                        session_info.messages[-1] if session_info.messages else None
-                    )
-                    if last_msg and last_msg.type == MessageRole.USER:
-                        pending_text = last_msg.original_text or last_msg.get_text()
-                        input_widget = self.query_one("#user-input", InputTextArea)
-                        input_widget.load_text(pending_text)
-                        line_count = input_widget.document.line_count
-                        if line_count > 0:
-                            last_line = line_count - 1
-                            last_col = len(input_widget.document.get_line(last_line))
-                            input_widget.move_cursor((last_line, last_col))
-
-                info_msg = Message.system_message(
-                    f"Rewound to message #{message_idx + 1}. "
-                    f"Undid changes in {files} file(s): "
-                    f"removed {additions} line(s), restored {deletions} line(s)."
+                revert_result = await self.client.revert(
+                    self.session_id,
+                    target_message_id=message_id,
                 )
-                await message_list.add_message(info_msg)
-                await self._refresh_snapshot_status()
-            else:
-                error_msg = revert_result.get("message", "Unknown error")
-                message_list = self.query_one("#message-list", MessageList)
-                error_widget = Message.system_message(f"Rewind failed: {error_msg}")
-                await message_list.add_message(error_widget)
 
+                if revert_result.get("success"):
+                    summary = revert_result.get("summary", {})
+                    additions = summary.get("additions", 0)
+                    deletions = summary.get("deletions", 0)
+                    files = summary.get("files", 0)
+
+                    message_list = self.query_one("#message-list", MessageList)
+                    message_list.clear()
+
+                    session_info = await self.client.get_session(self.session_id)
+                    if session_info and session_info.messages:
+                        messages_to_render = (
+                            session_info.messages[:-1]
+                            if len(session_info.messages) > 0
+                            else []
+                        )
+                        await self._render_messages(message_list, messages_to_render)
+                        self._anchor_transcript_after_refresh()
+
+                        last_msg = (
+                            session_info.messages[-1] if session_info.messages else None
+                        )
+                        if last_msg and last_msg.type == MessageRole.USER:
+                            pending_text = last_msg.original_text or last_msg.get_text()
+                            input_widget = self.query_one("#user-input", InputTextArea)
+                            input_widget.load_text(pending_text)
+                            line_count = input_widget.document.line_count
+                            if line_count > 0:
+                                last_line = line_count - 1
+                                last_col = len(input_widget.document.get_line(last_line))
+                                input_widget.move_cursor((last_line, last_col))
+
+                    info_msg = Message.system_message(
+                        f"Rewound to message #{message_idx + 1}. "
+                        f"Undid changes in {files} file(s): "
+                        f"removed {additions} line(s), restored {deletions} line(s)."
+                    )
+                    await message_list.add_message(info_msg)
+                    await self._refresh_snapshot_status()
+                else:
+                    error_msg = revert_result.get("message", "Unknown error")
+                    message_list = self.query_one("#message-list", MessageList)
+                    error_widget = Message.system_message(f"Rewind failed: {error_msg}")
+                    await message_list.add_message(error_widget)
+
+            await self._run_async_with_progress_modal("Rewinding...", do_rewind)
         except Exception as e:
             log_full_exception(logger, "Rewind error", e)
             message_list = self.query_one("#message-list", MessageList)
@@ -898,55 +1045,61 @@ class REPLScreen(Screen):
         if session_summary is None:
             return
 
-        session_info = await self.client.get_session(session_summary.session_id)
-        if session_info is None:
-            return
+        async def do_load_session() -> None:
+            session_info = await self.client.get_session(session_summary.session_id)
+            if session_info is None:
+                return
 
-        self.session_id = session_summary.session_id
+            self.session_id = session_summary.session_id
 
-        message_list = self.query_one("#message-list", MessageList)
-        message_list.clear()
+            message_list = self.query_one("#message-list", MessageList)
+            message_list.clear()
 
-        self._session_title = session_info.title
-        self._latest_usage = session_info.total_usage
-        self._current_model_id = session_info.model_id or self._current_model_id
-        self._current_model_name = session_info.model_name or self._current_model_name
-        
-        # Fetch model context from server
-        if self._current_model_id:
-            try:
-                result = await self.client.list_models()
-                for model in result.get("models", []):
-                    if model.get("model_id") == self._current_model_id:
-                        self._context_window_tokens = get_configured_context_window_tokens(
-                            str(model.get("context", 0))
-                        )
-                        break
-            except Exception:
-                pass
-        
-        self._reset_streaming_state()
-        self._reset_tool_contexts()
+            self._session_title = session_info.title
+            self._latest_usage = session_info.total_usage
+            self._current_model_id = session_info.model_id or self._current_model_id
+            self._current_model_name = session_info.model_name or self._current_model_name
 
-        self._hide_welcome_widget()
+            if self._current_model_id:
+                try:
+                    result = await self.client.list_models()
+                    for model in result.get("models", []):
+                        if model.get("model_id") == self._current_model_id:
+                            self._context_window_tokens = (
+                                get_configured_context_window_tokens(
+                                    str(model.get("context", 0))
+                                )
+                            )
+                            break
+                except Exception:
+                    pass
 
-        messages = session_info.messages
-        pending_user_text: Optional[str] = None
+            self._reset_streaming_state()
+            self._reset_tool_contexts()
+            self._hide_welcome_widget()
 
-        if messages and messages[-1].type == MessageRole.USER:
-            last_message = messages[-1]
-            pending_user_text = last_message.original_text or last_message.get_text()
-            messages = messages[:-1]
+            messages = session_info.messages
+            pending_user_text: Optional[str] = None
 
-        await self._render_messages(message_list, messages)
-        self._anchor_transcript_after_refresh()
+            if messages and messages[-1].type == MessageRole.USER:
+                last_message = messages[-1]
+                pending_user_text = last_message.original_text or last_message.get_text()
+                messages = messages[:-1]
 
-        self._refresh_context_usage_label()
-        await self._refresh_snapshot_status()
+            await self._render_messages(message_list, messages)
+            self._anchor_transcript_after_refresh()
 
-        input_widget = self.query_one("#user-input", InputTextArea)
-        input_widget.load_text(pending_user_text or "")
-        input_widget.focus()
+            self._refresh_context_usage_label()
+            await self._refresh_snapshot_status()
+
+            input_widget = self.query_one("#user-input", InputTextArea)
+            input_widget.load_text(pending_user_text or "")
+            input_widget.focus()
+
+        await self._run_async_with_progress_modal(
+            "Loading session...",
+            do_load_session,
+        )
 
     async def _cancel_current_query(self) -> None:
         """Send interrupt to server and reset UI."""

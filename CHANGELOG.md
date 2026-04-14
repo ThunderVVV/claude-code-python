@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-14
+
+#### TUI Tool Result Scroll Lock and Transcript Collapsible Mode
+- Added explicit scroll activation for tool results: click on a tool output to lock scrolling inside it
+- Added scroll lock exit: click outside or press Ctrl+E to release scroll lock
+- Added visual feedback for active scroll lock (background highlight + status hint)
+- Added transcript collapsible mode toggle with Ctrl+O (switch between compact/expanded views)
+- Added transient progress modal during transcript mode switches to hide layout flicker
+- Added streaming context awareness: Edit/Write blocks stay expanded while assistant is streaming
+- Added mode indicator in context usage bar (shows "Mode: compact/expanded (ctrl+o to toggle)")
+- Added `claude_code/ui/transcript_mode_modal.py` - ProgressStatusModal for UI operations
+- Added `tests/test_ui_tool_result_scroll_lock.py` - Tests for scroll lock and mode switching
+- Updated `ToolResultLogWidget` with pointer scroll activation/deactivation logic
+- Updated `ThinkingBlockWidget` and `ToolUseWidget` with transcript collapsible mode support
+
 ### Changed - 2026-04-14
 
 #### README Cleanup

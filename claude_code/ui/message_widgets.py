@@ -8,6 +8,7 @@ from textual.app import ComposeResult
 from textual.content import Content, Span
 from textual.containers import Container, VerticalGroup, ScrollableContainer
 from textual.reactive import reactive
+from textual.events import Click
 from textual.widgets import Collapsible, Label, RichLog, Static
 from textual.widgets._collapsible import CollapsibleTitle
 
@@ -155,6 +156,7 @@ class ThinkingBlockWidget(VerticalGroup):
         super().__init__(**kwargs)
         self._thinking = initial_thinking
         self._content_widget: Optional[Static] = None
+        self._collapsible: Optional[Collapsible] = None
         self.add_class("thinking-block")
 
     def compose(self) -> ComposeResult:
@@ -164,12 +166,31 @@ class ThinkingBlockWidget(VerticalGroup):
             collapsed_symbol="",
             expanded_symbol="",
             classes="thinking-collapsible",
-        ):
+        ) as collapsible:
+            self._collapsible = collapsible
             self._content_widget = Static(
                 sanitize_terminal_text(self._thinking),
                 classes="thinking-content",
             )
             yield self._content_widget
+
+    def on_mount(self) -> None:
+        self.apply_transcript_collapsible_mode()
+
+    def apply_transcript_collapsible_mode(self) -> None:
+        """Enforce the current application-wide transcript collapsible mode."""
+        if not self._collapsible:
+            return
+        desired_collapsed = not self._transcript_collapsible_mode_expanded()
+        if self._collapsible.collapsed != desired_collapsed:
+            self._collapsible.collapsed = desired_collapsed
+
+    def _transcript_collapsible_mode_expanded(self) -> bool:
+        """Read the application-wide transcript collapsible mode from the screen."""
+        try:
+            return bool(getattr(self.screen, "_transcript_collapsible_mode_expanded", False))
+        except Exception:
+            return False
 
     async def append_thinking(self, thinking: str) -> None:
         """Append streamed thinking content."""
@@ -193,6 +214,7 @@ class ToolResultLogWidget(RichLog):
     """Widget for displaying tool results as plain wrapped text."""
 
     FOCUS_ON_CLICK = False
+    SCROLL_ACTIVATION_LINE_LIMIT = 10
 
     DEFAULT_CSS = """
     ToolResultLogWidget {
@@ -203,7 +225,11 @@ class ToolResultLogWidget(RichLog):
         overflow-x: hidden;
         scrollbar-visibility: hidden;
         background: transparent;
-        padding: 0 1;
+        padding: 0;
+    }
+
+    ToolResultLogWidget.-active-scroll-lock {
+        background: $panel;
     }
     """
 
@@ -211,13 +237,62 @@ class ToolResultLogWidget(RichLog):
         super().__init__(
             highlight=False,
             max_lines=1000,
-            auto_scroll=True,
+            auto_scroll=False,
             wrap=True,
             markup=False,
             min_width=1,
             **kwargs,
         )
+        self._pointer_scroll_enabled = False
         self.add_class("tool-result-log")
+
+    @property
+    def allow_vertical_scroll(self) -> bool:
+        """Gate internal wheel scrolling behind explicit user activation."""
+        return self._pointer_scroll_enabled and super().allow_vertical_scroll
+
+    def activate_pointer_scroll(self) -> None:
+        """Allow this log to consume pointer wheel events."""
+        if not self.can_activate_pointer_scroll():
+            return
+        self._pointer_scroll_enabled = True
+        self.add_class("-active-scroll-lock")
+        self._notify_tail_state_changed()
+
+    def deactivate_pointer_scroll(self) -> None:
+        """Return wheel scrolling to the outer transcript."""
+        self._pointer_scroll_enabled = False
+        self.remove_class("-active-scroll-lock")
+        self._notify_tail_state_changed()
+
+    @property
+    def pointer_scroll_enabled(self) -> bool:
+        """Expose whether this tool result currently owns wheel scrolling."""
+        return self._pointer_scroll_enabled
+
+    def on_click(self, event: Click) -> None:
+        """Require an explicit click before wheel events scroll inside the log."""
+        del event
+        self.activate_pointer_scroll()
+
+    def can_activate_pointer_scroll(self) -> bool:
+        """Return True when this log has overflow content to scroll through."""
+        for node in self.ancestors_with_self:
+            if isinstance(node, ToolUseWidget):
+                return len(node._output_lines) > node.OUTPUT_VISIBLE_LINE_LIMIT
+        return len(self.lines) > self.SCROLL_ACTIVATION_LINE_LIMIT
+
+    def _on_mouse_scroll_down(self, event) -> None:
+        """Lock wheel scrolling inside the log while it remains activated."""
+        if self._pointer_scroll_enabled:
+            self._scroll_down_for_pointer(animate=False)
+            event.stop()
+
+    def _on_mouse_scroll_up(self, event) -> None:
+        """Lock wheel scrolling inside the log while it remains activated."""
+        if self._pointer_scroll_enabled:
+            self._scroll_up_for_pointer(animate=False)
+            event.stop()
 
     def write_line(
         self, line: str, scroll_end: bool | None = None
@@ -225,13 +300,21 @@ class ToolResultLogWidget(RichLog):
         """Compatibility helper matching Log.write_line."""
         return self.write(line, scroll_end=scroll_end)
 
+    def _notify_tail_state_changed(self) -> None:
+        """Refresh the parent tool footer when pointer-scroll activation changes."""
+        for node in self.ancestors_with_self:
+            if isinstance(node, ToolUseWidget):
+                node._schedule_output_tail_sync()
+                break
+
 
 class ToolUseWidget(VerticalGroup):
     """Widget for displaying tool use information"""
 
     OUTPUT_BRANCH_VERTICAL = "│"
     OUTPUT_BRANCH_END = "╰"
-    OUTPUT_TAIL_SCROLL_HINT = "scroll to view"
+    OUTPUT_TAIL_SCROLL_HINT = "click and scroll to view"
+    OUTPUT_TAIL_ACTIVE_SCROLL_HINT = "Viewing , click outside or ctrl+e to exit"
     OUTPUT_VISIBLE_LINE_LIMIT = 10
 
     def __init__(
@@ -239,12 +322,14 @@ class ToolUseWidget(VerticalGroup):
         tool_name: str,
         tool_input: dict,
         tool_use_id: str,
+        streaming_context: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.tool_name = tool_name
         self.tool_input = tool_input
         self.tool_use_id = tool_use_id
+        self._streaming_context = streaming_context
         self._result: Optional[tuple[str, bool]] = None  # (summary, is_error)
         self._output_lines: List[str] = []
         self._collapsible: Optional[Collapsible] = None
@@ -279,6 +364,7 @@ class ToolUseWidget(VerticalGroup):
         if self._collapsible:
             self._collapsible.title = self._build_title()
             self._auto_expand_once()
+            self.apply_transcript_collapsible_mode()
         if self._container and self._container.is_mounted:
             self._render_details()
             self._schedule_output_tail_sync()
@@ -290,6 +376,7 @@ class ToolUseWidget(VerticalGroup):
         if self._collapsible:
             self._collapsible.title = self._build_title()
             self._auto_expand_once()
+            self.apply_transcript_collapsible_mode()
         if self._container and self._container.is_mounted:
             self._render_details()
             self._schedule_output_tail_sync()
@@ -299,6 +386,7 @@ class ToolUseWidget(VerticalGroup):
         if self._collapsible:
             self._collapsible.title = self._build_title()
             self._auto_expand_once()
+            self.apply_transcript_collapsible_mode()
         if self._container and self._container.is_mounted and self._result:
             self._render_details()
             self._schedule_output_tail_sync()
@@ -308,11 +396,26 @@ class ToolUseWidget(VerticalGroup):
         if event.collapsible is self._collapsible:
             self._schedule_output_tail_sync()
 
+    def on_collapsible_collapsed(self, event: Collapsible.Collapsed) -> None:
+        """Release any active inner scroll lock when the tool body is collapsed."""
+        if event.collapsible is self._collapsible:
+            self._deactivate_output_scroll_lock()
+
     def _schedule_output_tail_sync(self) -> None:
         """Retry tail sync after layout settles inside collapsibles."""
         self.call_after_refresh(self._sync_output_branch_tail)
         self.set_timer(0.01, self._sync_output_branch_tail)
         self.set_timer(0.05, self._sync_output_branch_tail)
+
+    def _deactivate_output_scroll_lock(self) -> None:
+        """Drop any active tool-result scroll lock owned by this tool block."""
+        if not self._container:
+            return
+        try:
+            log_widget = self._container.query_one(ToolResultLogWidget)
+        except Exception:
+            return
+        log_widget.deactivate_pointer_scroll()
 
     def _build_title(self) -> Content:
         """Return the current single-line title for the tool call."""
@@ -330,7 +433,7 @@ class ToolUseWidget(VerticalGroup):
 
     def _should_auto_expand(self) -> bool:
         """Return True when this tool block should start expanded."""
-        return self.tool_name in {"Edit", "Write"}
+        return self._should_force_expand_for_streaming_mode()
 
     def _auto_expand_once(self) -> None:
         """Expand Edit blocks once without overriding later manual collapse."""
@@ -339,6 +442,35 @@ class ToolUseWidget(VerticalGroup):
         if self._collapsible:
             self._collapsible.collapsed = False
             self._did_auto_expand = True
+
+    def apply_transcript_collapsible_mode(self) -> None:
+        """Enforce the current application-wide transcript collapsible mode."""
+        if not self._collapsible:
+            return
+        desired_collapsed = self._desired_collapsed_for_mode(
+            self._transcript_collapsible_mode_expanded()
+        )
+        if self._collapsible.collapsed != desired_collapsed:
+            if desired_collapsed:
+                self._deactivate_output_scroll_lock()
+            self._collapsible.collapsed = desired_collapsed
+
+    def _desired_collapsed_for_mode(self, expanded_mode: bool) -> bool:
+        """Return the collapsed state required by the global transcript mode."""
+        if self._should_force_expand_for_streaming_mode():
+            return False
+        return not expanded_mode
+
+    def _should_force_expand_for_streaming_mode(self) -> bool:
+        """Edit/Write tool blocks stay open while the assistant is streaming."""
+        return self._streaming_context and self.tool_name in {"Edit", "Write"}
+
+    def _transcript_collapsible_mode_expanded(self) -> bool:
+        """Read the application-wide transcript collapsible mode from the screen."""
+        try:
+            return bool(getattr(self.screen, "_transcript_collapsible_mode_expanded", False))
+        except Exception:
+            return False
 
     def _compose_details(self) -> ComposeResult:
         """Compose the detail widgets."""
@@ -454,7 +586,7 @@ class ToolUseWidget(VerticalGroup):
             try:
                 log_widget = self._container.query_one(ToolResultLogWidget)
                 for line in self._format_output_branch_lines():
-                    log_widget.write_line(line)
+                    log_widget.write_line(line, scroll_end=False)
                 self._schedule_output_tail_sync()
             except Exception:
                 pass
@@ -475,14 +607,35 @@ class ToolUseWidget(VerticalGroup):
 
         log_widget.clear()
         for line in self._format_output_branch_lines():
-            log_widget.write_line(line)
+            log_widget.write_line(line, scroll_end=False)
 
         suffix = "line" if line_count == 1 else "lines"
-        tail_text = f"{self.OUTPUT_BRANCH_END} {line_count} {suffix} output"
-        if scrollable:
-            tail_text = f"{tail_text} ({self.OUTPUT_TAIL_SCROLL_HINT})"
+        tail_text = self._build_output_tail_text(
+            line_count,
+            scrollable=scrollable,
+            pointer_scroll_enabled=log_widget._pointer_scroll_enabled,
+        )
         tail_widget.update(tail_text)
         tail_widget.display = True
+
+    def _build_output_tail_text(
+        self,
+        line_count: int,
+        *,
+        scrollable: bool,
+        pointer_scroll_enabled: bool,
+    ) -> str:
+        """Build the footer text that explains the current scrolling state."""
+        suffix = "line" if line_count == 1 else "lines"
+        tail_text = f"{self.OUTPUT_BRANCH_END} {line_count} {suffix} output"
+        if not scrollable:
+            return tail_text
+        hint = (
+            self.OUTPUT_TAIL_ACTIVE_SCROLL_HINT
+            if pointer_scroll_enabled
+            else self.OUTPUT_TAIL_SCROLL_HINT
+        )
+        return f"{tail_text} ({hint})"
 
     def _format_output_branch_lines(self) -> List[str]:
         """Render tree prefixes inline with the tool output content."""
@@ -630,6 +783,7 @@ class MessageWidget(VerticalGroup):
                     tool_name=block.name,
                     tool_input=block.input,
                     tool_use_id=block.id,
+                    streaming_context=False,
                 )
             elif isinstance(block, ToolResultContent):
                 content = block.content
@@ -664,6 +818,7 @@ class MessageWidget(VerticalGroup):
                     tool_name=tool_use.name,
                     tool_input=tool_use.input,
                     tool_use_id=tool_use.id,
+                    streaming_context=True,
                 )
                 if tool_use.id:
                     self._tool_widgets_by_id[tool_use.id] = tool_widget
@@ -749,6 +904,7 @@ class MessageWidget(VerticalGroup):
                 tool_name=tool_use.name,
                 tool_input=tool_use.input,
                 tool_use_id=tool_use.id,
+                streaming_context=True,
             )
             if tool_use.id:
                 self._tool_widgets_by_id[tool_use.id] = tool_widget
