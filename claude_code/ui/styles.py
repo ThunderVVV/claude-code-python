@@ -424,7 +424,7 @@ MarkdownHorizontalRule {
 }
 
 .thinking-content {
-    text-style: none;
+    text-style: italic;
     padding: 0;
     margin-left: 0;
     margin: 0;

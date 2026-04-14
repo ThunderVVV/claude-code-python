@@ -80,7 +80,7 @@ class RewindModal(ModalScreen[Optional[Tuple[str, int]]]):
             #revert-info {
                 padding: 0 1;
                 height: auto;
-                color: $text-muted;
+                color: $text-secondary;
             }
         }
     }

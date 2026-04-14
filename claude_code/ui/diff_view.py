@@ -243,7 +243,7 @@ class DiffView(containers.VerticalGroup):
         .ellipsis {
             text-align: center;
             width: 1fr;
-            color: $text-muted;
+            color: $text-secondary;
             text-style: bold;
             offset-x: -1;
         }

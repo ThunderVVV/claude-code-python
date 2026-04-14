@@ -21,8 +21,6 @@ from textual.widgets import Label
 from claude_code.utils.logging_config import tui_log
 
 
-
-
 class AutocompleteMode(Enum):
     """Autocomplete mode."""
 
@@ -211,7 +209,7 @@ class AutocompletePopup(VerticalGroup):
     }
     
     .autocomplete-empty {
-        color: $text-muted;
+        color: $text-secondary;
         padding: 0 1;
         height: 1;
     }
@@ -373,7 +371,9 @@ class AutocompletePopup(VerticalGroup):
             items = self._filtered_commands
             if not items:
                 self.mount(
-                    Label("No commands found", classes="autocomplete-empty", markup=False)
+                    Label(
+                        "No commands found", classes="autocomplete-empty", markup=False
+                    )
                 )
                 return
 
@@ -411,7 +411,9 @@ class AutocompletePopup(VerticalGroup):
         """Keep the selected autocomplete row visible while navigating."""
         children = list(self.children)
         if 0 <= self.selected_index < len(children):
-            self.scroll_to_widget(children[self.selected_index], animate=False, immediate=True)
+            self.scroll_to_widget(
+                children[self.selected_index], animate=False, immediate=True
+            )
 
     def navigate_up(self) -> None:
         """Move selection up."""
@@ -456,6 +458,7 @@ class AutocompletePopup(VerticalGroup):
         elif self.mode == AutocompleteMode.AT:
             return len(self._filtered_options)
         return 0
+
 
 def detect_autocomplete_trigger(
     text: str, cursor_position: int

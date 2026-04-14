@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-04-14
+
+#### TUI Color Variable Consistency
+- Changed `$text-muted` to `$text-secondary` in autocomplete popup for consistent theming
+- Changed `$text-muted` to `$text-secondary` in diff view ellipsis
+- Changed `$text-muted` to `$text-secondary` in rewind modal info text
+- Removed excess blank lines in autocomplete.py
+
+#### TUI Thinking Content Style
+- Changed thinking content from normal text style to italic for better visual distinction
+
 ### Added - 2026-04-14
 
 #### TUI Tool Result Scroll Lock and Transcript Collapsible Mode
