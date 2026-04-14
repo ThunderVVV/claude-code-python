@@ -38,7 +38,7 @@ class FlushCollapsibleTitle(Static, can_focus=True):
     """Collapsible title that doesn't reserve leading space for an empty symbol."""
 
     BINDING_GROUP_TITLE = "Collapsible"
-    ALLOW_SELECT = False
+    ALLOW_SELECT = True
     collapsed = reactive(True)
     label = reactive(Content("Toggle"))
 

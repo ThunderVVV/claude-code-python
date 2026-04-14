@@ -5,7 +5,10 @@ from textual.app import App, ComposeResult
 from textual.events import Click, MouseScrollDown, MouseScrollUp
 from textual.widgets import Static
 
-from claude_code.ui.message_widgets import ToolResultLogWidget, ToolUseWidget
+from claude_code.ui.message_widgets import (
+    FlushCollapsibleTitle,
+    ToolResultLogWidget, ToolUseWidget,
+)
 
 
 class ToolResultLogTestApp(App[None]):
@@ -39,6 +42,10 @@ def test_tool_result_log_widget_defaults_enable_wrapping():
     assert widget.SCROLL_ACTIVATION_LINE_LIMIT == 10
     assert widget.allow_vertical_scroll is False
     assert "-active-scroll-lock" not in widget.classes
+
+
+def test_flush_collapsible_title_allows_selection():
+    assert FlushCollapsibleTitle.ALLOW_SELECT is True
 
 
 def test_tool_result_log_widget_requires_activation_for_pointer_scroll(monkeypatch: pytest.MonkeyPatch):

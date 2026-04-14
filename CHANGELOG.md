@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added an early return in `ToolResultLogWidget.deactivate_pointer_scroll()` so already-unlocked logs no longer trigger redundant UI work
 - Optimized tool output tail refreshes to update only the tail hint text instead of clearing and rewriting the full `RichLog` body
 - Updated the active tool-output hint text from `click outside` to `click here` while keeping `Ctrl+E` as the explicit exit shortcut
+- Kept collapsible titles selectable while reverting the incomplete `RichLog` text-selection experiment
+- Removed inline markdown code background fill so ``code`` spans render without a shaded chip
 - Updated TUI scroll-lock tests to reflect the new collapsible and tool-result interaction behavior
 
 ### Changed - 2026-04-14

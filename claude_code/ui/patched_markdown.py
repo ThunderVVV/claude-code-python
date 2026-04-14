@@ -867,11 +867,11 @@ class Markdown(ScrollView, can_focus=True):
             text-style: $markdown-h6-text-style;
         }
         & > .markdown--fence {
-            background: black 10%;
+            background: transparent;
             color: rgb(210, 210, 210);
         }
         &:light > .markdown--fence {
-            background: white 30%;
+            background: transparent;
         }
         & > .markdown--hr {
             color: $secondary;
@@ -900,11 +900,11 @@ class Markdown(ScrollView, can_focus=True):
             text-style: bold;
         }
         &:dark > .code_inline {
-            background: $warning 10%;
+            background: transparent;
             color: $text-warning 95%;
         }
         &:light > .code_inline {
-            background: $error 5%;
+            background: transparent;
             color: $text-error 95%;
         }
         & > .em {
