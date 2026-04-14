@@ -581,3 +581,60 @@ class ErrorEvent(QueryEvent):
 
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         return {"type": "error", "error": self.error, "is_fatal": self.is_fatal}
+
+
+def message_to_api_dict(
+    message: Message,
+    working_directory: str = "",
+) -> Dict[str, Any]:
+    """Serialize a message for web transport with file expansion support.
+
+    This is the unified serialization function for API responses.
+    """
+    from cc_code.core.file_expansion import (
+        build_visible_file_expansions,
+        serialize_file_expansions,
+        has_web_reference,
+    )
+
+    # Get basic message dict from the message's unified to_dict method
+    message_dict = message.to_dict()
+
+    # Add file expansions if needed
+    if getattr(message, "file_expansions", None):
+        message_dict["file_expansions"] = serialize_file_expansions(
+            message.file_expansions
+        )
+    elif message_dict["role"] == "user" and message.original_text and working_directory:
+        file_expansions = build_visible_file_expansions(
+            message.original_text,
+            working_directory,
+        )
+        if file_expansions:
+            message_dict["file_expansions"] = serialize_file_expansions(file_expansions)
+
+    # Add web enabled flag
+    if message_dict["role"] == "user":
+        message_dict["web_enabled"] = bool(
+            getattr(message, "web_enabled", False)
+            or (message.original_text and has_web_reference(message.original_text))
+        )
+
+    return message_dict
+
+
+def event_to_api_dict(
+    event: QueryEvent,
+    working_directory: str = "",
+) -> Dict[str, Any]:
+    """Convert event to dictionary for SSE streaming using unified to_dict methods."""
+    event_dict = event.to_dict(working_directory=working_directory)
+
+    # Special handling for MessageCompleteEvent to add file expansions
+    if isinstance(event, MessageCompleteEvent) and event.message:
+        event_dict["message"] = message_to_api_dict(
+            event.message,
+            working_directory=working_directory,
+        )
+
+    return event_dict

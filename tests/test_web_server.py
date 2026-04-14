@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from cc_code.core.messages import Message, MessageCompleteEvent
-from cc_code.core.file_expansion import build_visible_file_expansions
-from cc_code.api.server import (
-    create_app as create_api_app,
-    event_to_dict,
-    message_to_dict,
+from cc_code.core.messages import (
+    Message,
+    MessageCompleteEvent,
+    message_to_api_dict,
+    event_to_api_dict,
 )
+from cc_code.core.file_expansion import build_visible_file_expansions
+from cc_code.api.server import create_app as create_api_app
 
 
 def test_build_visible_file_expansions_skips_web_marker(tmp_path):
@@ -32,7 +33,7 @@ def test_message_to_dict_reconstructs_user_visible_metadata(tmp_path):
         original_text="@example.py @web explain this file",
     )
 
-    result = message_to_dict(message, working_directory=str(tmp_path))
+    result = message_to_api_dict(message, working_directory=str(tmp_path))
 
     assert result["role"] == "user"
     assert result["original_text"] == "@example.py @web explain this file"
@@ -51,7 +52,7 @@ def test_event_to_dict_includes_serialized_message_payload(tmp_path):
     )
 
     event = MessageCompleteEvent(message=message)
-    result = event_to_dict(event, working_directory=str(tmp_path))
+    result = event_to_api_dict(event, working_directory=str(tmp_path))
 
     assert result["type"] == "message_complete"
     assert result["message"]["role"] == "user"

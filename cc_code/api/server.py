@@ -16,8 +16,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from cc_code.core.messages import (
-    MessageCompleteEvent,
     generate_uuid,
+    message_to_api_dict,
+    event_to_api_dict,
 )
 from cc_code.core.query_engine import QueryEngine
 from cc_code.core.tools import ToolRegistry
@@ -120,6 +121,12 @@ class SessionManager:
     def list_sessions(self):
         return self._session_store.list_sessions()
 
+    async def close_all(self) -> None:
+        """Close all engines and release resources."""
+        for engine in self._engines.values():
+            await engine.close()
+        self._engines.clear()
+
     def get_session(self, session_id: str) -> Optional[PersistedSession]:
         # First try to get from engine (in-memory, most up-to-date)
         engine = self._engines.get(session_id)
@@ -181,54 +188,6 @@ def _normalize_api_prefix(api_prefix: str) -> str:
     return f"/{prefix}" if prefix else ""
 
 
-def message_to_dict(message, working_directory: str = "") -> dict:
-    """Serialize a message for web transport with file expansion support."""
-    from cc_code.core.file_expansion import (
-        build_visible_file_expansions,
-        serialize_file_expansions,
-        has_web_reference,
-    )
-
-    # Get basic message dict from the message's unified to_dict method
-    message_dict = message.to_dict()
-
-    # Add file expansions if needed
-    if getattr(message, "file_expansions", None):
-        message_dict["file_expansions"] = serialize_file_expansions(
-            message.file_expansions
-        )
-    elif message_dict["role"] == "user" and message.original_text and working_directory:
-        file_expansions = build_visible_file_expansions(
-            message.original_text,
-            working_directory,
-        )
-        if file_expansions:
-            message_dict["file_expansions"] = serialize_file_expansions(file_expansions)
-
-    # Add web enabled flag
-    if message_dict["role"] == "user":
-        message_dict["web_enabled"] = bool(
-            getattr(message, "web_enabled", False)
-            or (message.original_text and has_web_reference(message.original_text))
-        )
-
-    return message_dict
-
-
-def event_to_dict(event, working_directory: str = "") -> dict:
-    """Convert event to dictionary for SSE streaming using unified to_dict methods."""
-    event_dict = event.to_dict(working_directory=working_directory)
-    
-    # Special handling for MessageCompleteEvent to add file expansions
-    if isinstance(event, MessageCompleteEvent) and event.message:
-        event_dict["message"] = message_to_dict(
-            event.message,
-            working_directory=working_directory,
-        )
-    
-    return event_dict
-
-
 api_router = APIRouter()
 
 
@@ -251,7 +210,7 @@ async def event_stream(chat_request: ChatRequest, session_manager: SessionManage
         )
 
         async for event in engine.submit_message(chat_request.user_text):
-            event_dict = event_to_dict(
+            event_dict = event_to_api_dict(
                 event,
                 working_directory=chat_request.working_directory,
             )
@@ -282,7 +241,7 @@ async def compact_stream(request: CompactRequest, session_manager: SessionManage
 
         # Use the engine's compact handling directly (streaming)
         async for event in engine.submit_message("/compact"):
-            event_dict = event_to_dict(
+            event_dict = event_to_api_dict(
                 event,
                 working_directory=request.working_directory,
             )
@@ -538,7 +497,7 @@ async def get_session(session_id: str, http_request: Request):
         messages_list = []
         for msg in session.messages:
             messages_list.append(
-                message_to_dict(msg, working_directory=session.working_directory)
+                message_to_api_dict(msg, working_directory=session.working_directory)
             )
 
         return {
@@ -566,6 +525,9 @@ async def lifespan(app: FastAPI):
     """Manage application lifecycle"""
     logger.info("Server starting")
     yield
+    # Cleanup on shutdown
+    session_manager: SessionManager = app.state.session_manager
+    await session_manager.close_all()
     logger.info("Server shutting down")
 
 
