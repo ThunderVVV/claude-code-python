@@ -253,53 +253,6 @@ class OpenAIClient:
 
         return text, thinking, tool_calls
 
-    def parse_non_stream_response(
-        self,
-        response: Dict[str, Any],
-    ) -> tuple[str, str, List[ToolUseContent], Optional[Usage]]:
-        """
-        Parse a non-stream response into text, thinking, tool uses, and usage.
-
-        Returns (text, thinking, tool_uses, usage)
-        """
-        text = ""
-        thinking = ""
-        tool_uses = []
-        usage = None
-
-        choices = response.get("choices", [])
-        if not choices:
-            return text, thinking, tool_uses, usage
-
-        message = choices[0].get("message", {})
-
-        # Extract reasoning_content (thinking) - for models like DeepSeek
-        if "reasoning_content" in message and message["reasoning_content"] is not None:
-            thinking = message["reasoning_content"]
-
-        # Extract text content
-        if "content" in message and message["content"] is not None:
-            text = message["content"]
-
-        # Extract tool calls
-        if "tool_calls" in message and message["tool_calls"] is not None:
-            for tc in message["tool_calls"]:
-                try:
-                    args = json.loads(tc["function"]["arguments"])
-                    tool_uses.append(
-                        ToolUseContent(
-                            id=tc["id"],
-                            name=tc["function"]["name"],
-                            input=args,
-                        )
-                    )
-                except (KeyError, json.JSONDecodeError):
-                    continue
-
-        usage = self.extract_usage(response)
-
-        return text, thinking, tool_uses, usage
-
     def extract_usage(self, payload: Dict[str, Any]) -> Optional[Usage]:
         """Extract usage metadata from streaming or non-streaming payloads."""
         usage_payload = payload.get("usage")
@@ -429,35 +382,6 @@ class OpenAIClient:
             except json.JSONDecodeError:
                 continue
         return partial
-
-    async def _chat_completion_raw(
-        self,
-        messages: List[Dict[str, Any]],
-        model: Optional[str] = None,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-    ) -> Dict[str, Any]:
-        """Simple non-streaming chat completion for internal use.
-
-        Args:
-            messages: List of message dicts in OpenAI format
-            model: Model name (uses config default if not provided)
-            max_tokens: Max tokens (uses config default if not provided)
-            temperature: Temperature (uses config default if not provided)
-
-        Returns:
-            Raw response dict
-        """
-        request_params = {
-            "model": model or self.config.model_name,
-            "messages": messages,
-            "max_tokens": max_tokens or self.config.max_tokens,
-            "temperature": temperature if temperature is not None else self.config.temperature,
-            "stream": False,
-        }
-
-        response = await self._client.chat.completions.create(**request_params)
-        return response.model_dump()
 
 
 class APIError(Exception):

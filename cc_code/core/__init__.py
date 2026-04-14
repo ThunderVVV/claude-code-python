@@ -26,8 +26,6 @@ from cc_code.core.tools import (
     ToolContext,
     ToolInputSchema,
     ToolRegistry,
-    PermissionResult,
-    ValidationResult,
 )
 from cc_code.core.query_engine import QueryEngine, QueryConfig
 
@@ -61,6 +59,4 @@ __all__ = [
     "ToolContext",
     "ToolInputSchema",
     "ToolRegistry",
-    "PermissionResult",
-    "ValidationResult",
 ]

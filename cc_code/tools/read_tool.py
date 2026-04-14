@@ -11,7 +11,6 @@ from cc_code.core.tools import (
     BaseTool,
     ToolContext,
     ToolInputSchema,
-    ValidationResult,
 )
 from cc_code.tools.file_utils import expand_path, format_file_result
 
@@ -90,21 +89,6 @@ Usage:
         if path:
             return os.path.basename(path)
         return self.name
-
-    async def validate_input(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> ValidationResult:
-        """Validate file path before reading"""
-        file_path = input.get("file_path", "")
-        if not file_path:
-            return ValidationResult(
-                result=False,
-                message="file_path is required",
-                error_code=1,
-            )
-        return ValidationResult(result=True)
 
     async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
         file_path = input.get("file_path", "")

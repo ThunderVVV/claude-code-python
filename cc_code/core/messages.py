@@ -87,7 +87,7 @@ class TextContent:
     text: str = ""
 
     def to_api_format(self) -> Dict[str, Any]:
-        return {"type": "text", "text": self.text}
+        return self.to_dict()
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
@@ -103,11 +103,7 @@ class ThinkingContent:
     signature: str = ""
 
     def to_api_format(self) -> Dict[str, Any]:
-        return {
-            "type": "thinking",
-            "thinking": self.thinking,
-            "signature": self.signature,
-        }
+        return self.to_dict()
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
@@ -189,12 +185,7 @@ class PatchContent:
     files: List[str] = field(default_factory=list)  # List of changed file paths
 
     def to_api_format(self) -> Dict[str, Any]:
-        return {
-            "type": "patch",
-            "prev_hash": self.prev_hash,
-            "hash": self.hash,
-            "files": self.files,
-        }
+        return self.to_dict()
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""

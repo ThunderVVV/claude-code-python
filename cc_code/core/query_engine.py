@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from dataclasses import dataclass
@@ -55,10 +54,8 @@ logger = logging.getLogger(__name__)
 class QueryConfig:
     """Configuration for the query engine"""
 
-    max_turns: int = 1000000
-    stream: bool = True
-    system_prompt: str = ""
     working_directory: str = ""
+    max_turns: int = 1000000  # Large value for effectively unlimited turns
 
 
 class QueryEngine:
@@ -945,100 +942,64 @@ class QueryEngine:
                 async for chunk in self._client.chat_completion(
                     filtered_messages,  # Use filtered messages, not all messages
                     self.tool_registry,
-                    stream=self.config.stream,
+                    stream=True,
                     system_prompt=system_prompt,
                 ):
                     self._raise_if_interrupted()
-                    if self.config.stream:
-                        extract_usage = getattr(self._client, "extract_usage", None)
-                        chunk_usage = (
-                            extract_usage(chunk) if callable(extract_usage) else None
+                    extract_usage = getattr(self._client, "extract_usage", None)
+                    chunk_usage = (
+                        extract_usage(chunk) if callable(extract_usage) else None
+                    )
+                    if chunk_usage:
+                        current_usage = chunk_usage
+                        self.state.total_usage = chunk_usage
+
+                    # Parse streaming chunk
+                    text_delta, thinking_delta, tool_call_deltas = (
+                        self._client.parse_stream_chunk(chunk)
+                    )
+
+                    # Accumulate thinking
+                    if thinking_delta:
+                        current_thinking += thinking_delta
+                        yield ThinkingEvent(thinking=thinking_delta)
+
+                    # Accumulate text
+                    if text_delta:
+                        current_text += text_delta
+                        self.state.current_streaming_text = current_text
+                        yield TextEvent(text=text_delta)
+
+                    # Accumulate tool calls
+                    if tool_call_deltas:
+                        accumulated_tool_calls = self._client.accumulate_tool_calls(
+                            accumulated_tool_calls,
+                            tool_call_deltas,
                         )
-                        if chunk_usage:
-                            current_usage = chunk_usage
-                            self.state.total_usage = chunk_usage
-
-                        # Parse streaming chunk
-                        text_delta, thinking_delta, tool_call_deltas = (
-                            self._client.parse_stream_chunk(chunk)
-                        )
-
-                        # Accumulate thinking
-                        if thinking_delta:
-                            current_thinking += thinking_delta
-                            yield ThinkingEvent(thinking=thinking_delta)
-
-                        # Accumulate text
-                        if text_delta:
-                            current_text += text_delta
-                            self.state.current_streaming_text = current_text
-                            yield TextEvent(text=text_delta)
-
-                        # Accumulate tool calls
-                        if tool_call_deltas:
-                            accumulated_tool_calls = self._client.accumulate_tool_calls(
-                                accumulated_tool_calls,
-                                tool_call_deltas,
+                        preview_tool_uses = (
+                            self._client.partial_tool_calls_to_content_blocks(
+                                accumulated_tool_calls
                             )
-                            preview_tool_uses = (
-                                self._client.partial_tool_calls_to_content_blocks(
-                                    accumulated_tool_calls
-                                )
-                            )
-                            for tool_use in preview_tool_uses:
-                                if tool_use.id in previewed_tool_use_ids:
-                                    continue
-                                previewed_tool_use_ids.add(tool_use.id)
-                                logger.debug(
-                                    f"Previewing partial tool use: tool_use.name={tool_use.name}, tool_use.id={tool_use.id}, tool_use.input: {tool_use.input}"
-                                )
-                                yield ToolUseEvent(
-                                    tool_use_id=tool_use.id,
-                                    tool_name=tool_use.name,
-                                    input=tool_use.input,
-                                )
-
-                        # Check for finish reason
-                        choices = chunk.get("choices", [])
-                        if choices:
-                            finish_reason = choices[0].get("finish_reason")
-                            if finish_reason:
-                                stop_reason = finish_reason
-                    else:
-                        # Non-streaming response
-                        choices = chunk.get("choices", [])
-                        text, thinking, tool_uses, usage = (
-                            self._client.parse_non_stream_response(chunk)
                         )
-                        current_text = text
-                        current_thinking = thinking
-                        current_usage = usage
-                        accumulated_tool_calls = []
-
-                        # Convert tool uses to deltas
-                        for tu in tool_uses:
-                            accumulated_tool_calls.append(
-                                ToolCallDelta(
-                                    id=tu.id,
-                                    name=tu.name,
-                                    arguments=json.dumps(tu.input),
-                                )
+                        for tool_use in preview_tool_uses:
+                            if tool_use.id in previewed_tool_use_ids:
+                                continue
+                            previewed_tool_use_ids.add(tool_use.id)
+                            logger.debug(
+                                f"Previewing partial tool use: tool_use.name={tool_use.name}, tool_use.id={tool_use.id}, tool_use.input: {tool_use.input}"
+                            )
+                            yield ToolUseEvent(
+                                tool_use_id=tool_use.id,
+                                tool_name=tool_use.name,
+                                input=tool_use.input,
                             )
 
-                        if thinking:
-                            yield ThinkingEvent(thinking=thinking)
-
-                        if text:
-                            yield TextEvent(text=text)
-
-                        if usage:
-                            self.state.total_usage = usage
-
-                        stop_reason = (
-                            choices[0].get("finish_reason", "stop")
-                            if choices
-                            else "stop"
-                        )
+                    # Check for finish reason
+                    choices = chunk.get("choices", [])
+                    if choices:
+                        finish_reason = choices[0].get("finish_reason")
+                        if finish_reason:
+                            stop_reason = finish_reason
 
                 # Build content blocks
                 self._raise_if_interrupted()

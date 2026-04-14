@@ -29,24 +29,6 @@ class ToolInputSchema:
 
 
 @dataclass
-class PermissionResult:
-    """Result of a permission check"""
-
-    behavior: str = "allow"  # allow, deny, ask
-    message: Optional[str] = None
-    updated_input: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class ValidationResult:
-    """Result of input validation"""
-
-    result: bool = True
-    message: Optional[str] = None
-    error_code: int = 0
-
-
-@dataclass
 class ToolContext:
     """Context passed to tools during execution"""
 

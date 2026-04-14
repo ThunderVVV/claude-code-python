@@ -10,7 +10,6 @@ from cc_code.core.tools import (
     BaseTool,
     ToolContext,
     ToolInputSchema,
-    ValidationResult,
 )
 from cc_code.tools.file_utils import (
     expand_path,
@@ -84,53 +83,6 @@ Usage:
         if path:
             return f"Editing {os.path.basename(path)}"
         return "Editing file"
-
-    async def validate_input(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> ValidationResult:
-        """Validate edit input"""
-        old_string = input.get("old_string", "")
-        new_string = input.get("new_string", "")
-        file_path = input.get("file_path", "")
-
-        if old_string == new_string:
-            return ValidationResult(
-                result=False,
-                message="No changes to make: old_string and new_string are exactly the same.",
-                error_code=1,
-            )
-
-        full_path = expand_path(file_path)
-        if os.path.exists(full_path):
-            try:
-                with open(full_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-
-                actual_old_string = find_actual_string(content, old_string)
-                if actual_old_string is None:
-                    return ValidationResult(
-                        result=False,
-                        message=f"String to replace not found in file.\nString: {old_string}",
-                        error_code=8,
-                    )
-
-                matches = content.count(actual_old_string)
-                replace_all = input.get("replace_all", False)
-                if matches > 1 and not replace_all:
-                    return ValidationResult(
-                        result=False,
-                        message=f"Found {matches} matches of the string to replace, but replace_all is false. "
-                        f"To replace all occurrences, set replace_all to true. "
-                        f"To replace only one occurrence, please provide more context to uniquely identify the instance.\n"
-                        f"String: {old_string}",
-                        error_code=9,
-                    )
-            except Exception:
-                pass
-
-        return ValidationResult(result=True)
 
     async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
         file_path = input.get("file_path", "")
