@@ -6,7 +6,10 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+if TYPE_CHECKING:
+    from cc_code.core.snapshot import RevertState
 
 
 def get_configured_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
@@ -358,6 +361,74 @@ class Message:
         """Get usage data from assistant messages when available."""
         return self.usage
 
+    def serialize(
+        self,
+        format: str = "api",
+        working_directory: str = "",
+        include_persistence_fields: bool = False,
+    ) -> Dict[str, Any]:
+        """Unified serialization method.
+        
+        Args:
+            format: Output format - "api" (OpenAI API), "dict" (general dict), "persistence" (disk storage)
+            working_directory: Working directory for file expansion resolution
+            include_persistence_fields: Include timestamp, is_meta, etc. for disk persistence
+        
+        Returns:
+            Serialized message dictionary
+        """
+        if format == "api":
+            return self.to_api_format()
+
+        # Unified dict format
+        content_blocks = [block.to_dict() for block in self.content]
+        message_dict = {
+            "uuid": self.uuid,
+            "role": self.type.value if hasattr(self.type, "value") else str(self.type),
+            "content": content_blocks,
+            "content_blocks": content_blocks,
+        }
+
+        if self.original_text:
+            message_dict["original_text"] = self.original_text
+
+        if self.usage:
+            message_dict["usage"] = {
+                "input_tokens": self.usage.input_tokens,
+                "output_tokens": self.usage.output_tokens,
+            }
+
+        if self.stop_reason:
+            message_dict["stop_reason"] = self.stop_reason
+
+        # Persistence-specific fields
+        if include_persistence_fields or format == "persistence":
+            message_dict["type"] = self.type.value
+            message_dict["timestamp"] = self.timestamp.isoformat()
+            message_dict["is_meta"] = self.is_meta
+            message_dict["is_compact_summary"] = self.is_compact_summary
+            message_dict["is_visible_in_transcript_only"] = (
+                self.is_visible_in_transcript_only
+            )
+
+            if self.parent_id:
+                message_dict["parent_id"] = self.parent_id
+
+            if self.subtype:
+                message_dict["subtype"] = self.subtype
+
+            if self.file_expansions:
+                message_dict["file_expansions"] = [
+                    {
+                        "file_path": exp.file_path,
+                        "content": exp.content,
+                        "display_path": exp.display_path,
+                    }
+                    for exp in self.file_expansions
+                ]
+
+        return message_dict
+
     def to_api_format(self) -> Dict[str, Any]:
         """Convert to API format for OpenAI"""
         if self.type == MessageRole.SYSTEM:
@@ -396,72 +467,45 @@ class Message:
     def to_dict(
         self, use_content_key: bool = False, include_persistence_fields: bool = False
     ) -> Dict[str, Any]:
-        """Convert to dictionary for serialization.
-
-        This is the unified serialization method for all purposes.
-
-        Args:
-            use_content_key: If True, use "content" key instead of "content_blocks"
-            include_persistence_fields: If True, include timestamp, is_meta, etc. for disk persistence
-        """
-        content_key = "content" if use_content_key else "content_blocks"
-        message_dict = {
-            "uuid": self.uuid,
-            "role": self.type.value if hasattr(self.type, "value") else str(self.type),
-            content_key: [block.to_dict() for block in self.content],
-        }
-
-        if self.original_text:
-            message_dict["original_text"] = self.original_text
-
-        if self.usage:
-            message_dict["usage"] = {
-                "input_tokens": self.usage.input_tokens,
-                "output_tokens": self.usage.output_tokens,
-            }
-
-        if self.stop_reason:
-            message_dict["stop_reason"] = self.stop_reason
-
-        # Persistence-specific fields
-        if include_persistence_fields:
-            message_dict["type"] = self.type.value
-            message_dict["timestamp"] = self.timestamp.isoformat()
-            message_dict["is_meta"] = self.is_meta
-            message_dict["is_compact_summary"] = self.is_compact_summary
-            message_dict["is_visible_in_transcript_only"] = (
-                self.is_visible_in_transcript_only
-            )
-
-            if self.parent_id:
-                message_dict["parent_id"] = self.parent_id
-
-            if self.subtype:
-                message_dict["subtype"] = self.subtype
-
-            if self.file_expansions:
-                message_dict["file_expansions"] = [
-                    {
-                        "file_path": exp.file_path,
-                        "content": exp.content,
-                        "display_path": exp.display_path,
-                    }
-                    for exp in self.file_expansions
-                ]
-
-        return message_dict
+        """Convert to dictionary for serialization (backward compatibility wrapper)."""
+        return self.serialize(
+            format="persistence" if include_persistence_fields else "dict",
+            include_persistence_fields=include_persistence_fields
+        )
 
 
 @dataclass
-class QueryState:
-    """State for a query session"""
-
+class SessionState:
+    """Unified session state - combines runtime state, persistence, and revert tracking."""
+    
+    # Core state
     messages: List[Message] = field(default_factory=list)
     current_turn: int = 0
     is_streaming: bool = False
     current_streaming_text: str = ""
     session_id: str = field(default_factory=generate_uuid)
     total_usage: Usage = field(default_factory=Usage)
+    
+    # Session metadata
+    title: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    working_directory: str = ""
+    model_id: Optional[str] = None
+    model_name: Optional[str] = None
+    
+    # Revert tracking
+    revert_message_id: Optional[str] = None
+    revert_part_id: Optional[str] = None
+    revert_snapshot: Optional[str] = None
+    revert_diff_additions: int = 0
+    revert_diff_deletions: int = 0
+    revert_diff_files: int = 0
+    
+    # Total diff tracking
+    total_diff_additions: int = 0
+    total_diff_deletions: int = 0
+    total_diff_files: int = 0
 
     def add_message(self, message: Message) -> None:
         """Add a message to the state"""
@@ -478,6 +522,56 @@ class QueryState:
         self.is_streaming = False
         self.current_streaming_text = ""
         self.total_usage = Usage()
+        self.title = ""
+        self.created_at = ""
+        self.updated_at = ""
+        self.working_directory = ""
+        self.model_id = None
+        self.model_name = None
+        self.set_revert_state(None)
+        self.total_diff_additions = 0
+        self.total_diff_deletions = 0
+        self.total_diff_files = 0
+        self.session_id = generate_uuid()
+
+    def get_revert_state(self) -> Optional["RevertState"]:
+        """Get revert state if exists."""
+        if self.revert_message_id:
+            from cc_code.core.snapshot import DiffSummary
+            from cc_code.core.snapshot import RevertState
+
+            return RevertState(
+                message_id=self.revert_message_id,
+                part_id=self.revert_part_id,
+                snapshot=self.revert_snapshot,
+                diff=DiffSummary(
+                    additions=self.revert_diff_additions,
+                    deletions=self.revert_diff_deletions,
+                    files=self.revert_diff_files,
+                ),
+            )
+        return None
+
+    def set_revert_state(self, state: Optional["RevertState"]) -> None:
+        """Set revert state."""
+        if state:
+            self.revert_message_id = state.message_id
+            self.revert_part_id = state.part_id
+            self.revert_snapshot = state.snapshot
+            if state.diff:
+                self.revert_diff_additions = state.diff.additions
+                self.revert_diff_deletions = state.diff.deletions
+                self.revert_diff_files = state.diff.files
+        else:
+            self.revert_message_id = None
+            self.revert_part_id = None
+            self.revert_snapshot = None
+            self.revert_diff_additions = 0
+            self.revert_diff_deletions = 0
+            self.revert_diff_files = 0
+
+# Legacy aliases for backward compatibility
+QueryState = SessionState
 
 
 # Query event types for the query loop

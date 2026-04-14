@@ -148,10 +148,10 @@ class QueryEngine:
             working_directory: Working directory for the session
             instruction_config: Optional instruction configuration for CLAUDE.md/AGENTS.md loading
         """
-        from cc_code.core.session_store import PersistedSession
-        from cc_code.core.snapshot import DiffSummary, RevertState
+        from cc_code.core.messages import SessionState
+        from cc_code.core.snapshot import DiffSummary
 
-        persisted: Optional[PersistedSession] = None
+        persisted: Optional[SessionState] = None
         if session_id:
             persisted = session_store.load_session(session_id)
 
@@ -177,24 +177,17 @@ class QueryEngine:
         if instruction_config:
             engine._instruction_config = instruction_config
 
-        if persisted and persisted.revert_state:
-            engine._initial_revert_state = RevertState(
-                message_id=persisted.revert_state.message_id,
-                part_id=persisted.revert_state.part_id,
-                snapshot=persisted.revert_state.snapshot,
-                diff=DiffSummary(
-                    additions=persisted.revert_state.additions,
-                    deletions=persisted.revert_state.deletions,
-                    files=persisted.revert_state.files,
-                ),
-            )
+        if persisted:
+            revert = persisted.get_revert_state()
+            if revert:
+                engine._initial_revert_state = revert
 
-        if persisted and persisted.total_diff:
-            engine._total_diff = DiffSummary(
-                additions=persisted.total_diff.get("additions", 0),
-                deletions=persisted.total_diff.get("deletions", 0),
-                files=persisted.total_diff.get("files", 0),
-            )
+            if persisted.total_diff_additions or persisted.total_diff_deletions or persisted.total_diff_files:
+                engine._total_diff = DiffSummary(
+                    additions=persisted.total_diff_additions,
+                    deletions=persisted.total_diff_deletions,
+                    files=persisted.total_diff_files,
+                )
 
         await engine.initialize()
         if engine._snapshot_manager:
@@ -597,16 +590,32 @@ class QueryEngine:
             return
 
         try:
-            from cc_code.core.session_store import (
-                derive_session_title,
-                RevertStateData,
-            )
+            from cc_code.core.session_store import RevertStateData, derive_session_title
 
             self._session_title = self._session_title or derive_session_title(
                 self.state.messages, self._session_id
             )
 
-            revert_data: Optional[RevertStateData] = None
+            # Update state metadata
+            self.state.title = self._session_title
+            self.state.created_at = self._session_created_at or ""
+            self.state.working_directory = self._cwd
+            self.state.model_id = self.client_config.model_id
+            self.state.model_name = self.client_config.model_name
+            
+            # Keep persisted state aligned with current runtime state.
+            self.state.set_revert_state(self._revert_state)
+
+            if self._total_diff:
+                self.state.total_diff_additions = self._total_diff.additions
+                self.state.total_diff_deletions = self._total_diff.deletions
+                self.state.total_diff_files = self._total_diff.files
+            else:
+                self.state.total_diff_additions = 0
+                self.state.total_diff_deletions = 0
+                self.state.total_diff_files = 0
+
+            revert_data = None
             if self._revert_state:
                 revert_data = RevertStateData(
                     message_id=self._revert_state.message_id,
@@ -618,10 +627,14 @@ class QueryEngine:
                     deletions=self._revert_state.diff.deletions
                     if self._revert_state.diff
                     else 0,
-                    files=self._revert_state.diff.files
-                    if self._revert_state.diff
-                    else 0,
+                    files=self._revert_state.diff.files if self._revert_state.diff else 0,
                 )
+
+            total_diff = {
+                "additions": self.state.total_diff_additions,
+                "deletions": self.state.total_diff_deletions,
+                "files": self.state.total_diff_files,
+            }
 
             session = self._session_store.save_snapshot(
                 session_id=self._session_id,
@@ -634,13 +647,7 @@ class QueryEngine:
                 model_name=self.client_config.model_name,
                 total_usage=self.state.total_usage,
                 revert_state=revert_data,
-                total_diff={
-                    "additions": self._total_diff.additions if self._total_diff else 0,
-                    "deletions": self._total_diff.deletions if self._total_diff else 0,
-                    "files": self._total_diff.files if self._total_diff else 0,
-                }
-                if self._total_diff
-                else None,
+                total_diff=total_diff,
             )
             self._session_title = session.title
             self._session_created_at = session.created_at
@@ -1099,33 +1106,25 @@ class QueryEngine:
                         result = await tool.call(
                             tool_use.input, self._get_tool_context(assistant_message_id)
                         )
-                        is_error = tool.is_error_result(result, tool_use.input)
-
-                        # Extract loaded instruction metadata from Read tool results
+                        
+                        # Handle structured tool results (e.g., Read tool with metadata)
                         metadata = None
-                        if tool_use.name == "Read" and "<!-- loaded:" in result:
-                            import re
-
-                            match = re.search(r"<!-- loaded: (\[.*?\]) -->", result)
-                            if match:
-                                try:
-                                    loaded_paths = __import__("json").loads(
-                                        match.group(1)
-                                    )
-                                    metadata = {"loaded": loaded_paths}
-                                    # Remove the metadata comment from result
-                                    result = re.sub(
-                                        r"\n\n<!-- loaded: \[.*?\] -->", "", result
-                                    )
-                                except (__import__("json").JSONDecodeError, ValueError):
-                                    pass
+                        if isinstance(result, dict) and "content" in result:
+                            # Structured result with metadata
+                            metadata = result.get("metadata")
+                            is_error = tool.is_error_result(result["content"], tool_use.input)
+                            result_str = result["content"]
+                        else:
+                            # Simple string result
+                            result_str = result
+                            is_error = tool.is_error_result(result_str, tool_use.input)
 
                         yield ToolResultEvent(
                             tool_use_id=tool_use.id,
-                            result=result,
+                            result=result_str,
                             is_error=is_error,
                         )
-                        tool_results.append((tool_use.id, result, is_error, metadata))
+                        tool_results.append((tool_use.id, result_str, is_error, metadata))
                     except Exception as e:
                         error_msg = f"Tool execution failed: {str(e)}"
                         yield ToolResultEvent(

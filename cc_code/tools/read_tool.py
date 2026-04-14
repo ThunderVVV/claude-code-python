@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -128,7 +127,7 @@ Usage:
             )
 
             # Load nearby instructions if context provides the necessary info
-            nearby_instructions: List[str] = []
+            loaded_paths: List[str] = []
             if context.instruction_service and context.message_id and context.messages:
                 try:
                     
@@ -139,25 +138,22 @@ Usage:
                         project_root=context.project_root,
                     )
                     if instructions:
-                        # instructions is now a list of formatted strings
-                        nearby_instructions = []
                         for inst in instructions:
                             # Extract path from "Instructions from: <path>\n<content>"
                             lines = inst.split('\n', 1)
                             if lines[0].startswith("Instructions from: "):
                                 path = lines[0][len("Instructions from: "):]
-                                nearby_instructions.append(path)
+                                loaded_paths.append(path)
                             result += f"\n\n---\n{inst}"
                         logger.debug(f"Appended {len(instructions)} nearby instructions to Read result")
                 except Exception as e:
                     logger.warning(f"Failed to load nearby instructions: {e}")
 
-            # Add metadata about loaded instructions (for deduplication tracking)
-            if nearby_instructions:
-                # Add a metadata marker that can be extracted later
-                result += f"\n\n<!-- loaded: {json.dumps(nearby_instructions)} -->"
-
-            return result
+            # Return structured result with metadata
+            return {
+                "content": result,
+                "metadata": {"loaded": loaded_paths} if loaded_paths else None
+            }
 
         except PermissionError:
             return f"Error: Permission denied reading file: {full_path}"

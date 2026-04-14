@@ -19,13 +19,12 @@ from cc_code.core.messages import (
     generate_uuid,
     message_to_api_dict,
     event_to_api_dict,
+    SessionState,
+    Usage,
 )
 from cc_code.core.query_engine import QueryEngine
 from cc_code.core.tools import ToolRegistry
-from cc_code.core.session_store import (
-    SessionStore,
-    PersistedSession,
-)
+from cc_code.core.session_store import SessionStore
 from cc_code.core.settings import (
     SettingsStore,
     build_client_config,
@@ -35,7 +34,6 @@ from cc_code.core.instruction import InstructionConfig
 from cc_code.services.openai_client import OpenAIClientConfig
 
 logger = logging.getLogger(__name__)
-
 
 class SessionManager:
     """Manages session and engine lifecycle."""
@@ -71,7 +69,6 @@ class SessionManager:
     ) -> QueryEngine:
         client_config = self._resolve_client_config(session_id, model_id)
 
-        # Get custom instructions from settings
         settings = self.get_settings()
         instruction_config = InstructionConfig(
             custom_instructions=settings.instructions,
@@ -89,7 +86,7 @@ class SessionManager:
     def get_engine(self, session_id: str) -> Optional[QueryEngine]:
         return self._engines.get(session_id)
 
-    def get_settings(self):
+    def get_settings(self) -> SettingsStore:
         return self._settings_store.ensure_settings()
 
     def _resolve_client_config(
@@ -97,12 +94,9 @@ class SessionManager:
     ) -> OpenAIClientConfig:
         settings = self.get_settings()
 
-        # If model_id is explicitly provided, use it
-        if model_id:
-            if model_id in settings.models:
-                return build_client_config(settings, model_id)
+        if model_id and model_id in settings.models:
+            return build_client_config(settings, model_id)
 
-        # Otherwise fall back to session or default
         if session_id:
             persisted = self._session_store.load_session(session_id)
             if persisted:
@@ -127,15 +121,12 @@ class SessionManager:
             await engine.close()
         self._engines.clear()
 
-    def get_session(self, session_id: str) -> Optional[PersistedSession]:
-        # First try to get from engine (in-memory, most up-to-date)
+    def get_session(self, session_id: str) -> Optional[SessionState]:
+        """Get session details from engine or disk."""
         engine = self._engines.get(session_id)
         if engine:
-            from cc_code.core.session_store import PersistedSession
-            from cc_code.core.messages import Usage
-
             messages = engine.get_messages()
-            return PersistedSession(
+            return SessionState(
                 session_id=session_id,
                 title=engine._session_title or "",
                 created_at=engine._session_created_at or "",
@@ -146,9 +137,8 @@ class SessionManager:
                 model_name=engine.client_config.model_name,
                 total_usage=engine.state.total_usage or Usage(),
                 messages=messages,
-                revert_state=None,
             )
-        # Fall back to disk
+
         return self._session_store.load_session(session_id)
 
 
@@ -404,7 +394,6 @@ async def switch_model(request: SwitchModelRequest, http_request: Request):
     try:
         session_manager = http_request.app.state.session_manager
         engine = session_manager.get_engine(request.session_id)
-
         settings = session_manager.get_settings()
         if request.model_id not in settings.models:
             raise HTTPException(status_code=404, detail="Model configuration not found")
@@ -485,7 +474,7 @@ async def list_sessions(http_request: Request):
 
 
 @api_router.get("/sessions/{session_id}")
-async def get_session(session_id: str, http_request: Request):
+async def get_session_endpoint(session_id: str, http_request: Request):
     """Get session details"""
     logger.info(f"GET /sessions/{session_id}")
     try:
@@ -525,7 +514,7 @@ async def lifespan(app: FastAPI):
     """Manage application lifecycle"""
     logger.info("Server starting")
     yield
-    # Cleanup on shutdown
+
     session_manager: SessionManager = app.state.session_manager
     await session_manager.close_all()
     logger.info("Server shutting down")
@@ -545,13 +534,11 @@ def create_app(
     """
     app = FastAPI(title="CC Code Python API", lifespan=lifespan)
 
-    # Create dependencies if not provided
     if settings_store is None:
         settings_store = SettingsStore()
     if tool_registry is None:
         tool_registry = ToolRegistry()
 
-    # Store in app state
     app.state.session_manager = SessionManager(settings_store, tool_registry)
 
     @app.get("/health")
