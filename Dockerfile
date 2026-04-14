@@ -21,4 +21,4 @@ RUN chmod +x /test/cc-py \
     && /test/cc-py --help
 
 FROM scratch AS export
-COPY --from=build /src/dist/ /dist/
+COPY --from=build /src/dist/cc-py /cc-py
