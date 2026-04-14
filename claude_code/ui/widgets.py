@@ -88,6 +88,30 @@ class InputTextArea(TextArea):
             self.action_cursor_down()
             return
 
+        if event.key == "shift+left":
+            event.stop()
+            event.prevent_default()
+            self.action_cursor_word_left()
+            return
+
+        if event.key == "shift+right":
+            event.stop()
+            event.prevent_default()
+            self.action_cursor_word_right()
+            return
+
+        if event.key == "shift+backspace":
+            event.stop()
+            event.prevent_default()
+            self.action_delete_word_left()
+            return
+
+        if event.key == "ctrl+shift+backspace":
+            event.stop()
+            event.prevent_default()
+            self.action_delete_to_start_of_line()
+            return
+
         await super()._on_key(event)
 
     def _navigate_autocomplete(self, direction: int) -> None:
@@ -198,6 +222,21 @@ class WelcomeWidget(Container):
                 )
                 yield Label(
                     "@web to enable web search and extract skills",
+                    classes="section-content",
+                    markup=False,
+                )
+                yield Label(
+                    "Shift+Left/Right: move by word",
+                    classes="section-content",
+                    markup=False,
+                )
+                yield Label(
+                    "Shift+Backspace: delete word",
+                    classes="section-content",
+                    markup=False,
+                )
+                yield Label(
+                    "Ctrl+Shift+Backspace: delete to line start",
                     classes="section-content",
                     markup=False,
                 )

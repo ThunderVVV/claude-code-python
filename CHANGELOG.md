@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2026-04-14
 
+#### TUI Input Shortcut Aliases
+- Added terminal-style shortcut aliases in `InputTextArea` so `Shift+Left/Right` moves by word, `Shift+Backspace` deletes one word to the left, and `Ctrl+Shift+Backspace` deletes to the start of the line
+- Updated the welcome tips text to document the new input shortcuts without overflowing the right-side panel
+- Added `tests/test_ui_input_shortcuts.py` to cover the shortcut alias behavior
+
+### Changed - 2026-04-14
+
 #### TUI Transcript Collapsible and Tool Result Responsiveness
 - Removed the transcript collapsible title/toggle side effect that cleared all tool-result scroll locks when expanding or collapsing think/tool blocks
 - Optimized tool-result scroll lock release to skip inactive widgets instead of scanning and resetting every tool output block
