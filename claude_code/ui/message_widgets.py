@@ -794,7 +794,7 @@ class MessageList(VerticalGroup):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._message_widgets: List[Container] = []
+        self._message_widgets: List[MessageWidget] = []
 
     def _get_content_area(self) -> ScrollableContainer | None:
         """Return the transcript scroll container when mounted."""
@@ -829,18 +829,47 @@ class MessageList(VerticalGroup):
         if auto_follow:
             self.call_after_refresh(self._scroll_to_latest)
 
-    async def add_message(self, message: Message, auto_follow: bool = True) -> None:
+    def first_message_widget(self) -> Optional[MessageWidget]:
+        """Return the first mounted message widget, if any."""
+        return self._message_widgets[0] if self._message_widgets else None
+
+    async def _mount_message_widget(
+        self,
+        widget: MessageWidget,
+        *,
+        auto_follow: bool = True,
+        before_widget: Optional[MessageWidget] = None,
+    ) -> None:
+        """Mount a message widget either at end or before an existing widget."""
+        if before_widget and before_widget in self._message_widgets:
+            await self.mount(widget, before=before_widget)
+            insert_index = self._message_widgets.index(before_widget)
+            self._message_widgets.insert(insert_index, widget)
+        else:
+            await self.mount(widget)
+            self._message_widgets.append(widget)
+        self.schedule_scroll_to_latest(auto_follow)
+
+    async def add_message(
+        self,
+        message: Message,
+        auto_follow: bool = True,
+        before_widget: Optional[MessageWidget] = None,
+    ) -> None:
         """Add a message to the list"""
         widget = MessageWidget(message)
-        await self.mount(widget)
-        self._message_widgets.append(widget)
-        self.schedule_scroll_to_latest(auto_follow)
+        await self._mount_message_widget(
+            widget,
+            auto_follow=auto_follow,
+            before_widget=before_widget,
+        )
 
     async def create_streaming_widget(
         self,
         message: Optional[Message] = None,
         auto_follow: bool = True,
         should_stream_live: Callable[[], bool] | None = None,
+        before_widget: Optional[MessageWidget] = None,
     ) -> MessageWidget:
         """Create a new streaming message widget for assistant responses"""
         widget = MessageWidget(
@@ -848,9 +877,11 @@ class MessageList(VerticalGroup):
             streaming=True,
             should_stream_live=should_stream_live,
         )
-        await self.mount(widget)
-        self._message_widgets.append(widget)
-        self.schedule_scroll_to_latest(auto_follow)
+        await self._mount_message_widget(
+            widget,
+            auto_follow=auto_follow,
+            before_widget=before_widget,
+        )
         return widget
 
     def clear(self) -> None:

@@ -70,6 +70,20 @@ class TranscriptContainer(ScrollableContainer):
 
     FOCUS_ON_CLICK = False
 
+    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        """Notify the screen when the user scrolls upward near transcript top."""
+        super().watch_scroll_y(old_value, new_value)
+        if new_value >= old_value:
+            return
+        if new_value > 1:
+            return
+        try:
+            callback = getattr(self.screen, "_on_transcript_scrolled_to_top", None)
+            if callable(callback):
+                callback()
+        except Exception:
+            pass
+
 
 class REPLScreen(Screen):
     """Main REPL screen - stateless frontend, only handles display.
@@ -82,6 +96,8 @@ class REPLScreen(Screen):
     """
 
     AUTO_FOCUS = "#user-input"
+    SESSION_HISTORY_INITIAL_RENDER_COUNT = 20
+    SESSION_HISTORY_LOAD_BATCH_SIZE = 20
 
     def __init__(
         self,
@@ -114,6 +130,10 @@ class REPLScreen(Screen):
         self._session_title: Optional[str] = None
         self._settings_store = SettingsStore()
         self._settings = self._settings_store.ensure_settings()
+        self._session_restore_messages: list[Message] = []
+        self._session_restore_render_start_index: int = 0
+        self._session_restore_lazy_load_enabled: bool = False
+        self._session_restore_loading_more: bool = False
         # Model info will be fetched from server
         self._current_model_id: str = ""
         self._current_model_name: str = "unconfigured"
@@ -343,6 +363,52 @@ class REPLScreen(Screen):
         """Anchor transcript after pending mounts/layout have been flushed."""
         self.call_after_refresh(self._anchor_transcript)
 
+    def _reset_session_restore_lazy_state(self) -> None:
+        """Clear incremental session-restore rendering state."""
+        self._session_restore_messages = []
+        self._session_restore_render_start_index = 0
+        self._session_restore_lazy_load_enabled = False
+        self._session_restore_loading_more = False
+
+    def _align_session_restore_start_index(
+        self,
+        messages: list[Message],
+        start_index: int,
+    ) -> int:
+        """Avoid slicing from a tool-result message without its preceding context."""
+        while start_index > 0 and messages[start_index].type == MessageRole.TOOL:
+            start_index -= 1
+        return start_index
+
+    def _prepare_session_restore_initial_messages(
+        self,
+        messages: list[Message],
+    ) -> list[Message]:
+        """Return the initial render slice and initialize lazy-load state."""
+        self._reset_session_restore_lazy_state()
+        if not messages:
+            return []
+
+        self._session_restore_messages = messages
+        start_index = max(
+            len(messages) - self.SESSION_HISTORY_INITIAL_RENDER_COUNT,
+            0,
+        )
+        start_index = self._align_session_restore_start_index(messages, start_index)
+        self._session_restore_render_start_index = start_index
+        self._session_restore_lazy_load_enabled = start_index > 0
+        return messages[start_index:]
+
+    def _on_transcript_scrolled_to_top(self) -> None:
+        """Kick off lazy history loading when the transcript reaches the top."""
+        if not self._session_restore_lazy_load_enabled:
+            return
+        if self._session_restore_loading_more:
+            return
+        if self._is_processing:
+            return
+        asyncio.create_task(self._load_more_session_history())
+
     def _schedule_autocomplete_scroll_adjustment(self) -> None:
         """Compensate scroll position after autocomplete expands the input area."""
         try:
@@ -356,10 +422,7 @@ class REPLScreen(Screen):
             self._autocomplete_scroll_baseline_height = 0
             self._autocomplete_scroll_was_near_bottom = False
 
-        self.refresh(layout=True)
         self.call_after_refresh(self._apply_autocomplete_scroll_adjustment)
-        self.set_timer(0.01, self._apply_autocomplete_scroll_adjustment)
-        self.set_timer(0.05, self._apply_autocomplete_scroll_adjustment)
 
     def _apply_autocomplete_scroll_adjustment(self) -> None:
         """Shift transcript scroll by the popup height delta to keep the bottom anchored."""
@@ -369,7 +432,9 @@ class REPLScreen(Screen):
             new_height = input_area.outer_size.height
             delta = max(new_height - self._autocomplete_scroll_baseline_height, 0)
 
-            if delta > 0:
+            if self._autocomplete_scroll_was_near_bottom:
+                self._scroll_content_area_to_bottom()
+            elif delta > 0:
                 target_scroll = min(
                     content_area.max_scroll_y,
                     content_area.scroll_y + delta,
@@ -380,9 +445,6 @@ class REPLScreen(Screen):
                     force=True,
                     immediate=True,
                 )
-
-            if self._autocomplete_scroll_was_near_bottom:
-                self._scroll_content_area_to_bottom()
         except Exception:
             pass
 
@@ -820,6 +882,7 @@ class REPLScreen(Screen):
             self.session_id = new_session_id
 
             message_list = self.query_one("#message-list", MessageList)
+            self._reset_session_restore_lazy_state()
             message_list.clear()
 
             self._session_title = None
@@ -930,6 +993,7 @@ class REPLScreen(Screen):
                     files = summary.get("files", 0)
 
                     message_list = self.query_one("#message-list", MessageList)
+                    self._reset_session_restore_lazy_state()
                     message_list.clear()
 
                     session_info = await self.client.get_session(self.session_id)
@@ -993,6 +1057,7 @@ class REPLScreen(Screen):
             self.session_id = session_summary.session_id
 
             message_list = self.query_one("#message-list", MessageList)
+            self._reset_session_restore_lazy_state()
             message_list.clear()
 
             self._session_title = session_info.title
@@ -1026,7 +1091,8 @@ class REPLScreen(Screen):
                 pending_user_text = last_message.original_text or last_message.get_text()
                 messages = messages[:-1]
 
-            await self._render_messages(message_list, messages)
+            initial_messages = self._prepare_session_restore_initial_messages(messages)
+            await self._render_messages(message_list, initial_messages)
             self._anchor_transcript_after_refresh()
 
             self._refresh_context_usage_label()
@@ -1194,6 +1260,109 @@ class REPLScreen(Screen):
             tui_log(f"ErrorEvent received: {event.error}")
             error_msg = Message.system_message(f"Error: {event.error}")
             await message_list.add_message(error_msg)
+
+    async def _prepend_messages(
+        self,
+        message_list: MessageList,
+        messages: list[Message],
+    ) -> None:
+        """Prepend messages to the transcript, preserving chronological order."""
+        assistant_widget: Optional[MessageWidget] = None
+        tool_widget_context: dict[str, ToolUseWidget] = {}
+        insert_before = message_list.first_message_widget()
+
+        for message in messages:
+            if message.type == MessageRole.ASSISTANT:
+                assistant_widget = await message_list.create_streaming_widget(
+                    message=message,
+                    auto_follow=False,
+                    before_widget=insert_before,
+                )
+                tool_widget_context = assistant_widget.get_tool_widgets()
+                continue
+
+            if message.type == MessageRole.TOOL:
+                tool_result = next(
+                    (
+                        block
+                        for block in message.content
+                        if isinstance(block, ToolResultContent)
+                    ),
+                    None,
+                )
+                if tool_result is None:
+                    continue
+
+                tool_widget = tool_widget_context.get(tool_result.tool_use_id)
+                if tool_widget is not None:
+                    tool_widget.set_result(tool_result.content, tool_result.is_error)
+                continue
+
+            assistant_widget = None
+            tool_widget_context = {}
+            await message_list.add_message(
+                message,
+                auto_follow=False,
+                before_widget=insert_before,
+            )
+
+    async def _load_more_session_history(self) -> None:
+        """Lazy-load earlier session messages when the user scrolls upward."""
+        if not self._session_restore_lazy_load_enabled:
+            return
+        if self._session_restore_loading_more:
+            return
+        if self._session_restore_render_start_index <= 0:
+            self._session_restore_lazy_load_enabled = False
+            return
+
+        try:
+            content_area = self.query_one("#content-area", ScrollableContainer)
+        except Exception:
+            return
+        if content_area.scroll_y > 1:
+            return
+
+        self._session_restore_loading_more = True
+        try:
+            current_start = self._session_restore_render_start_index
+            next_start = max(
+                current_start - self.SESSION_HISTORY_LOAD_BATCH_SIZE,
+                0,
+            )
+            next_start = self._align_session_restore_start_index(
+                self._session_restore_messages,
+                next_start,
+            )
+            if next_start >= current_start:
+                self._session_restore_lazy_load_enabled = False
+                return
+
+            older_messages = self._session_restore_messages[next_start:current_start]
+            if not older_messages:
+                self._session_restore_lazy_load_enabled = False
+                return
+
+            old_scroll_y = content_area.scroll_y
+            old_max_scroll_y = content_area.max_scroll_y
+            message_list = self.query_one("#message-list", MessageList)
+            await self._prepend_messages(message_list, older_messages)
+            self._session_restore_render_start_index = next_start
+            if self._session_restore_render_start_index <= 0:
+                self._session_restore_lazy_load_enabled = False
+
+            await asyncio.sleep(0)
+            new_max_scroll_y = content_area.max_scroll_y
+            delta = max(new_max_scroll_y - old_max_scroll_y, 0)
+            if delta > 0:
+                content_area.scroll_to(
+                    y=old_scroll_y + delta,
+                    animate=False,
+                    force=True,
+                    immediate=True,
+                )
+        finally:
+            self._session_restore_loading_more = False
 
     async def _render_messages(
         self,
