@@ -156,7 +156,6 @@ class QueryEngine:
             persisted = session_store.load_session(session_id)
 
         config = QueryConfig(
-            stream=True,
             working_directory=working_directory
             or (persisted.working_directory if persisted else ""),
         )

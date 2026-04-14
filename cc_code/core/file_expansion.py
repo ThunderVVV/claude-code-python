@@ -243,34 +243,5 @@ def build_visible_file_expansions(
     working_directory: str,
 ) -> list[FileExpansion]:
     """Reconstruct visible @file_path expansions for the web frontend."""
-    if not user_text:
-        return []
-
-    expansions: list[FileExpansion] = []
-    seen_paths: set[str] = set()
-    web_requested = has_web_reference(user_text)
-
-    for file_path, _start_pos, _end_pos in parse_file_references(user_text):
-        if file_path == "web" and web_requested:
-            continue
-        if file_path in seen_paths:
-            continue
-
-        full_path = resolve_file_path(file_path, working_directory)
-        if full_path is None:
-            continue
-
-        content = read_file_content(full_path)
-        if content is None:
-            continue
-
-        seen_paths.add(file_path)
-        expansions.append(
-            FileExpansion(
-                file_path=full_path,
-                content=content,
-                display_path=file_path,
-            )
-        )
-
+    _, expansions = expand_file_references(user_text, working_directory)
     return expansions

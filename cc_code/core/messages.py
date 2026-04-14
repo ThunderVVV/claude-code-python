@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 
-def parse_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
+def get_configured_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
     """Parse a positive integer context window token value."""
     if raw_value is None:
         return None
@@ -27,11 +27,6 @@ def parse_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
         return None
 
     return context_window_tokens
-
-
-def get_configured_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
-    """Read the configured context window size from the persistent settings."""
-    return parse_context_window_tokens(raw_value)
 
 
 def get_used_context_tokens(usage: Optional["Usage"]) -> int:
