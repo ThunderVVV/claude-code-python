@@ -128,9 +128,9 @@ class SessionManager:
             messages = engine.get_messages()
             return SessionState(
                 session_id=session_id,
-                title=engine._session_title or "",
-                created_at=engine._session_created_at or "",
-                updated_at="",
+                title=engine.state.title or "",
+                created_at=engine.state.created_at or "",
+                updated_at=engine.state.updated_at or "",
                 working_directory=engine.get_working_directory(),
                 current_turn=engine.state.current_turn,
                 model_id=engine.client_config.model_id,

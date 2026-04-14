@@ -1,5 +1,7 @@
 
-# CC Code Python
+# CC Code Python | CC Code Python（日本語）
+
+> 日本語: CC Code Python - AI プログラミングアシスタント
 
 > Code Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 
