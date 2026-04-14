@@ -261,6 +261,8 @@ class ToolResultLogWidget(RichLog):
 
     def deactivate_pointer_scroll(self) -> None:
         """Return wheel scrolling to the outer transcript."""
+        if not self._pointer_scroll_enabled:
+            return
         self._pointer_scroll_enabled = False
         self.remove_class("-active-scroll-lock")
         self._notify_tail_state_changed()
@@ -314,7 +316,7 @@ class ToolUseWidget(VerticalGroup):
     OUTPUT_BRANCH_VERTICAL = "│"
     OUTPUT_BRANCH_END = "╰"
     OUTPUT_TAIL_SCROLL_HINT = "click and scroll to view"
-    OUTPUT_TAIL_ACTIVE_SCROLL_HINT = "Viewing , click outside or ctrl+e to exit"
+    OUTPUT_TAIL_ACTIVE_SCROLL_HINT = "Viewing , click here or ctrl+e to exit"
     OUTPUT_VISIBLE_LINE_LIMIT = 10
 
     def __init__(
@@ -604,10 +606,6 @@ class ToolUseWidget(VerticalGroup):
 
         line_count = len(self._output_lines)
         scrollable = line_count > self.OUTPUT_VISIBLE_LINE_LIMIT
-
-        log_widget.clear()
-        for line in self._format_output_branch_lines():
-            log_widget.write_line(line, scroll_end=False)
 
         suffix = "line" if line_count == 1 else "lines"
         tail_text = self._build_output_tail_text(

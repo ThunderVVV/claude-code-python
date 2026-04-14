@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2026-04-14
 
+#### TUI Transcript Collapsible and Tool Result Responsiveness
+- Removed the transcript collapsible title/toggle side effect that cleared all tool-result scroll locks when expanding or collapsing think/tool blocks
+- Optimized tool-result scroll lock release to skip inactive widgets instead of scanning and resetting every tool output block
+- Added an early return in `ToolResultLogWidget.deactivate_pointer_scroll()` so already-unlocked logs no longer trigger redundant UI work
+- Optimized tool output tail refreshes to update only the tail hint text instead of clearing and rewriting the full `RichLog` body
+- Updated the active tool-output hint text from `click outside` to `click here` while keeping `Ctrl+E` as the explicit exit shortcut
+- Updated TUI scroll-lock tests to reflect the new collapsible and tool-result interaction behavior
+
+### Changed - 2026-04-14
+
 #### TUI Color Variable Consistency
 - Changed `$text-muted` to `$text-secondary` in autocomplete popup for consistent theming
 - Changed `$text-muted` to `$text-secondary` in diff view ellipsis

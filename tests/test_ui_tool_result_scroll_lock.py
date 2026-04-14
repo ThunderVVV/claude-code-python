@@ -101,7 +101,7 @@ def test_repl_screen_allows_outer_scroll_without_tool_result_lock(monkeypatch):
     assert up_event._stop_propagation is False
 
 
-def test_repl_screen_collapsible_toggle_clears_all_tool_result_locks(monkeypatch):
+def test_repl_screen_collapsible_toggle_keeps_tool_result_locks(monkeypatch):
     screen = REPLScreen(client=object(), session_id="session-1")
     widgets = [_StubToolResultLog(True), _StubToolResultLog(False)]
     monkeypatch.setattr(
@@ -115,12 +115,12 @@ def test_repl_screen_collapsible_toggle_clears_all_tool_result_locks(monkeypatch
     screen.on_collapsible_toggled(event)
 
     assert event.stopped is True
-    assert widgets[0].deactivated is True
-    assert widgets[0].pointer_scroll_enabled is False
-    assert widgets[1].deactivated is True
+    assert widgets[0].deactivated is False
+    assert widgets[0].pointer_scroll_enabled is True
+    assert widgets[1].deactivated is False
 
 
-def test_repl_screen_collapsible_title_focus_clears_all_tool_result_locks(monkeypatch):
+def test_repl_screen_collapsible_title_focus_keeps_tool_result_locks(monkeypatch):
     screen = REPLScreen(client=object(), session_id="session-1")
     widgets = [_StubToolResultLog(True), _StubToolResultLog(False)]
     monkeypatch.setattr(
@@ -132,13 +132,13 @@ def test_repl_screen_collapsible_title_focus_clears_all_tool_result_locks(monkey
 
     screen.on_descendant_focus(_StubDescendantFocusEvent(_StubCollapsibleTitle()))
 
-    assert widgets[0].deactivated is True
-    assert widgets[0].pointer_scroll_enabled is False
-    assert widgets[1].deactivated is True
+    assert widgets[0].deactivated is False
+    assert widgets[0].pointer_scroll_enabled is True
+    assert widgets[1].deactivated is False
 
 
 @pytest.mark.asyncio
-async def test_repl_screen_ctrl_e_clears_all_tool_result_locks(monkeypatch):
+async def test_repl_screen_ctrl_e_clears_only_active_tool_result_locks(monkeypatch):
     screen = REPLScreen(client=object(), session_id="session-1")
     widgets = [_StubToolResultLog(True), _StubToolResultLog(False)]
     monkeypatch.setattr(
@@ -153,7 +153,7 @@ async def test_repl_screen_ctrl_e_clears_all_tool_result_locks(monkeypatch):
     assert event.stopped is True
     assert widgets[0].deactivated is True
     assert widgets[0].pointer_scroll_enabled is False
-    assert widgets[1].deactivated is True
+    assert widgets[1].deactivated is False
 
 
 def test_transcript_container_blocks_scroll_when_tool_result_lock_is_active(monkeypatch):

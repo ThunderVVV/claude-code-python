@@ -227,7 +227,6 @@ class REPLScreen(Screen):
             return
 
         if event.widget.__class__.__name__.endswith("CollapsibleTitle"):
-            self._deactivate_all_tool_result_scroll_locks()
             self._schedule_input_focus()
 
     def on_click(self, event: events.Click) -> None:
@@ -356,13 +355,13 @@ class REPLScreen(Screen):
     def on_collapsible_toggled(self, event) -> None:
         """Keep the composer focused after toggling transcript collapsibles."""
         event.stop()
-        self._deactivate_all_tool_result_scroll_locks()
         self._schedule_input_focus()
 
     def _deactivate_all_tool_result_scroll_locks(self) -> None:
         """Release every active tool-result wheel lock in the transcript."""
         for widget in self.query(ToolResultLogWidget):
-            widget.deactivate_pointer_scroll()
+            if widget.pointer_scroll_enabled:
+                widget.deactivate_pointer_scroll()
 
     def _scroll_content_area_to_bottom(self) -> None:
         """Pin the transcript to the bottom when autocomplete expands the input area."""

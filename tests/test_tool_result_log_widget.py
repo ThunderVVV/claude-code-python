@@ -184,7 +184,7 @@ async def test_tool_result_log_widget_click_updates_tail_hint():
         await pilot.pause()
         await pilot.pause()
 
-        assert str(tail_widget.content) == "╰ 12 lines output (Viewing , click outside or ctrl+e to exit)"
+        assert str(tail_widget.content) == "╰ 12 lines output (Viewing , click here or ctrl+e to exit)"
 
 
 @pytest.mark.asyncio
@@ -209,7 +209,7 @@ def test_tool_use_widget_output_label_uses_branch_prefix():
     assert ToolUseWidget.OUTPUT_TAIL_SCROLL_HINT == "click and scroll to view"
     assert (
         ToolUseWidget.OUTPUT_TAIL_ACTIVE_SCROLL_HINT
-        == "Viewing , click outside or ctrl+e to exit"
+        == "Viewing , click here or ctrl+e to exit"
     )
     assert ToolUseWidget.OUTPUT_VISIBLE_LINE_LIMIT == 10
 
@@ -269,7 +269,7 @@ def test_tool_use_widget_tail_text_uses_active_scroll_hint():
         pointer_scroll_enabled=True,
     )
 
-    assert tail_text == "╰ 12 lines output (Viewing , click outside or ctrl+e to exit)"
+    assert tail_text == "╰ 12 lines output (Viewing , click here or ctrl+e to exit)"
 
 
 @pytest.mark.asyncio
