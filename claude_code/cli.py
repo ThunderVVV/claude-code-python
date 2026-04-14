@@ -46,7 +46,6 @@ def start_api_server(host: str, port: int) -> Optional[subprocess.Popen]:
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,
         )
         return process
     except Exception as e:
@@ -252,6 +251,28 @@ def run_tui_cmd(
         click.echo(click.style("Debug logging enabled", fg="yellow"))
 
     server_process: Optional[subprocess.Popen] = None
+    shutting_down = False
+
+    def cleanup_server(signum=None, frame=None):
+        nonlocal shutting_down
+        if shutting_down:
+            return
+        shutting_down = True
+        if server_process and server_process.poll() is None:
+            click.echo(click.style("\nStopping API server...", fg="yellow"))
+            try:
+                server_process.terminate()
+                server_process.wait(timeout=3)
+            except Exception:
+                try:
+                    server_process.kill()
+                except Exception:
+                    pass
+        if signum is not None:
+            sys.exit(128 + signum)
+
+    signal.signal(signal.SIGHUP, cleanup_server)
+    signal.signal(signal.SIGTERM, cleanup_server)
 
     if not check_server_available(api_host, api_port):
         if no_auto_start:
@@ -303,13 +324,7 @@ def run_tui_cmd(
         )
         sys.exit(1)
     finally:
-        if server_process and server_process.poll() is None:
-            click.echo(click.style("Stopping API server...", fg="yellow"))
-            try:
-                os.killpg(os.getpgid(server_process.pid), signal.SIGTERM)
-                server_process.wait(timeout=3)
-            except Exception:
-                pass
+        cleanup_server()
 
 
 cli.add_command(api_cmd)

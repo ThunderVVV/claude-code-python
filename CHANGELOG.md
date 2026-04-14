@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-14
+
+#### API Server Cleanup on Terminal Close
+- Removed `start_new_session=True` from API server subprocess to ensure it terminates when the TUI client exits
+- Added signal handlers for `SIGHUP` and `SIGTERM` to properly clean up the API server when terminal closes unexpectedly
+- API server now correctly stops when user closes terminal window directly
+
 ### Changed - 2026-04-14
 
 #### TUI Input Shortcut Aliases
