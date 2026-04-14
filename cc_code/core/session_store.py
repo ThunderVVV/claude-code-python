@@ -344,66 +344,12 @@ def _content_block_from_dict(data: dict[str, Any]) -> Any:
 
 
 def _message_to_dict(message: Message) -> dict[str, Any]:
-    """Convert message to dict using the unified to_dict method, adding persistence-specific fields."""
-    # Get basic dict from message's own to_dict with content key
-    result = message.to_dict(use_content_key=True)
-
-    # Add persistence-specific fields
-    result["type"] = message.type.value
-    result["timestamp"] = message.timestamp.isoformat()
-    result["is_meta"] = message.is_meta
-    result["is_compact_summary"] = message.is_compact_summary
-    result["is_visible_in_transcript_only"] = message.is_visible_in_transcript_only
-
-    # Add file expansions if they exist
-    if message.file_expansions:
-        result["file_expansions"] = [
-            {
-                "file_path": exp.file_path,
-                "content": exp.content,
-                "display_path": exp.display_path,
-            }
-            for exp in message.file_expansions
-        ]
-
-    return result
-
-
-def _reconstruct_message_dict(
-    role: MessageRole, content: list[Any], original_text: str
-) -> dict[str, Any]:
-    """Reconstruct message dict from content blocks."""
-    if role == MessageRole.USER:
-        text = ""
-        for block in content:
-            if isinstance(block, TextContent):
-                text = block.text
-                break
-        return {"role": "user", "content": text}
-    elif role == MessageRole.ASSISTANT:
-        return {
-            "role": "assistant",
-            "content": [block.to_api_format() for block in content],
-        }
-    elif role == MessageRole.SYSTEM:
-        text = ""
-        for block in content:
-            if isinstance(block, TextContent):
-                text = block.text
-                break
-        return {"role": "system", "content": text}
-    elif role == MessageRole.TOOL:
-        for block in content:
-            if isinstance(block, ToolResultContent):
-                return {
-                    "role": "tool",
-                    "content": block.content,
-                    "tool_call_id": block.tool_use_id,
-                }
-    return {"role": role.value, "content": ""}
+    """Convert message to dict for persistence using unified Message.to_dict()"""
+    return message.to_dict(use_content_key=True, include_persistence_fields=True)
 
 
 def _message_from_dict(data: dict[str, Any]) -> Message:
+    """Reconstruct Message from persisted dict."""
     timestamp_value = data.get("timestamp")
     timestamp = (
         datetime.fromisoformat(str(timestamp_value))
@@ -435,9 +381,14 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
         if isinstance(block_data, dict)
     ]
 
-    message_dict = data.get("message")
-    if not isinstance(message_dict, dict):
-        message_dict = _reconstruct_message_dict(role, content, original_text)
+    # Extract usage
+    usage = None
+    usage_data = data.get("usage")
+    if isinstance(usage_data, dict):
+        usage = Usage(
+            input_tokens=usage_data.get("input_tokens", 0),
+            output_tokens=usage_data.get("output_tokens", 0),
+        )
 
     tool_use_result = data.get("tool_use_result")
     if tool_use_result is None and role == MessageRole.TOOL:
@@ -457,7 +408,10 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
         is_visible_in_transcript_only=bool(
             data.get("is_visible_in_transcript_only", False)
         ),
-        message=message_dict,
+        usage=usage,
+        stop_reason=data.get("stop_reason"),
+        parent_id=data.get("parent_id"),
+        subtype=data.get("subtype"),
         file_expansions=file_expansions,
         original_text=original_text,
     )

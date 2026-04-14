@@ -32,8 +32,7 @@ from cc_code.core.tools import ToolContext, ToolRegistry
 from cc_code.core.prompts import create_default_system_prompt
 from cc_code.core.instruction import InstructionConfig, InstructionService
 from cc_code.core.file_expansion import expand_file_references
-from cc_code.core.snapshot import SnapshotManager, DiffSummary, Patch
-from cc_code.core.revert import RevertState, RevertResult
+from cc_code.core.snapshot import SnapshotManager, DiffSummary, Patch, RevertState, RevertResult
 from cc_code.services.openai_client import (
     OpenAIClient,
     OpenAIClientConfig,
@@ -503,13 +502,11 @@ class QueryEngine:
         for msg in messages:
             if (msg.type == MessageRole.ASSISTANT and 
                 msg.is_compact_summary and 
-                msg.message and 
-                msg.message.get("stop_reason") and
-                not msg.message.get("error")):
+                msg.stop_reason and
+                not msg.stop_reason.startswith("error")):
                 # This summary completed successfully
-                parent_id = msg.message.get("parent_id")
-                if parent_id:
-                    completed_parent_ids.add(parent_id)
+                if msg.parent_id:
+                    completed_parent_ids.add(msg.parent_id)
         
         if not completed_parent_ids:
             # No compaction done, return all messages
@@ -803,8 +800,7 @@ class QueryEngine:
         assistant_message = Message.assistant_message(content=[])
         assistant_message.is_compact_summary = True
         # Store parent_id for filtering (the user message that triggered compaction)
-        assistant_message.message = assistant_message.message or {}
-        assistant_message.message["parent_id"] = user_message.uuid
+        assistant_message.parent_id = user_message.uuid
 
         # Stream the summary using raw API call
         current_text = ""
@@ -845,14 +841,11 @@ class QueryEngine:
             # Update the assistant message with the final text
             assistant_message.content = [TextContent(text=current_text)]
             # Set stop_reason to mark this as a completed summary (for filtering)
-            assistant_message.message["stop_reason"] = "stop"
+            assistant_message.stop_reason = "stop"
             
             # Attach usage to the message so UI can refresh context info
             if current_usage:
-                assistant_message.message["usage"] = {
-                    "input_tokens": current_usage.input_tokens,
-                    "output_tokens": current_usage.output_tokens,
-                }
+                assistant_message.usage = current_usage
 
             # Align with opencode: KEEP ALL HISTORY, just add the summary message
             # The summary is marked with is_compact_summary = True for filtering

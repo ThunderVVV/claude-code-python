@@ -452,3 +452,26 @@ class SnapshotManager:
 def compute_worktree_hash(working_directory: str) -> str:
     """Compute a hash for the working directory path"""
     return hashlib.sha256(working_directory.encode()).hexdigest()[:16]
+
+
+# Revert state models (previously in revert.py)
+
+
+@dataclass
+class RevertState:
+    """State tracking for a revert operation"""
+
+    message_id: str  # Message ID where revert started
+    part_id: Optional[str] = None  # Specific part ID (if reverting partial message)
+    snapshot: Optional[str] = None  # Snapshot hash before revert (for unrevert)
+    diff: Optional[DiffSummary] = None  # Diff summary of reverted changes
+
+
+@dataclass
+class RevertResult:
+    """Result of a revert or unrevert operation"""
+
+    success: bool
+    message: str
+    revert_state: Optional[RevertState] = None
+    summary: Optional[DiffSummary] = None

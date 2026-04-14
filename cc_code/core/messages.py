@@ -240,7 +240,13 @@ class Message:
     is_compact_summary: bool = False
     tool_use_result: Any = None
     is_visible_in_transcript_only: bool = False
-    message: Optional[Dict[str, Any]] = None
+    # Usage and stop reason (previously in message dict)
+    usage: Optional[Usage] = None
+    stop_reason: Optional[str] = None
+    # For compact summary: parent message ID
+    parent_id: Optional[str] = None
+    # For system messages: subtype
+    subtype: Optional[str] = None
     # File expansion info for user messages
     file_expansions: List[Any] = field(
         default_factory=list
@@ -260,7 +266,6 @@ class Message:
         return cls(
             type=MessageRole.USER,
             content=[TextContent(text=text)],
-            message={"role": "user", "content": text},
             file_expansions=file_expansions or [],
             original_text=original_text or text,
             web_enabled=web_enabled,
@@ -274,34 +279,21 @@ class Message:
         stop_reason: Optional[str] = None,
     ) -> "Message":
         """Create an assistant message"""
-        msg = cls(
+        return cls(
             type=MessageRole.ASSISTANT,
             content=content,
-            message={
-                "role": "assistant",
-                "content": [block.to_api_format() for block in content],
-            },
+            usage=usage,
+            stop_reason=stop_reason,
         )
-        if usage:
-            msg.message["usage"] = {
-                "input_tokens": usage.input_tokens,
-                "output_tokens": usage.output_tokens,
-            }
-        if stop_reason:
-            msg.message["stop_reason"] = stop_reason
-        return msg
 
     @classmethod
     def system_message(cls, text: str, subtype: Optional[str] = None) -> "Message":
         """Create a system message"""
-        msg = cls(
+        return cls(
             type=MessageRole.SYSTEM,
             content=[TextContent(text=text)],
-            message={"role": "system", "content": text},
+            subtype=subtype,
         )
-        if subtype:
-            msg.message["subtype"] = subtype
-        return msg
 
     @classmethod
     def tool_result_message(
@@ -322,11 +314,6 @@ class Message:
                     metadata=metadata,
                 )
             ],
-            message={
-                "role": "tool",
-                "content": content,
-                "tool_call_id": tool_use_id,
-            },
             tool_use_result=content,
         )
 
@@ -350,14 +337,7 @@ class Message:
 
     def get_usage(self) -> Optional[Usage]:
         """Get usage data from assistant messages when available."""
-        usage = self.message.get("usage") if self.message else None
-        if not isinstance(usage, dict):
-            return None
-
-        return Usage(
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
-        )
+        return self.usage
 
     def to_api_format(self) -> Dict[str, Any]:
         """Convert to API format for OpenAI"""
@@ -394,11 +374,14 @@ class Message:
                     }
         return {"role": "user", "content": ""}
 
-    def to_dict(self, use_content_key: bool = False) -> Dict[str, Any]:
-        """Convert to dictionary for serialization (basic version)
+    def to_dict(self, use_content_key: bool = False, include_persistence_fields: bool = False) -> Dict[str, Any]:
+        """Convert to dictionary for serialization.
+
+        This is the unified serialization method for all purposes.
 
         Args:
             use_content_key: If True, use "content" key instead of "content_blocks"
+            include_persistence_fields: If True, include timestamp, is_meta, etc. for disk persistence
         """
         content_key = "content" if use_content_key else "content_blocks"
         message_dict = {
@@ -410,10 +393,38 @@ class Message:
         if self.original_text:
             message_dict["original_text"] = self.original_text
 
-        if self.message:
-            usage = self.message.get("usage")
-            if usage:
-                message_dict["usage"] = usage
+        if self.usage:
+            message_dict["usage"] = {
+                "input_tokens": self.usage.input_tokens,
+                "output_tokens": self.usage.output_tokens,
+            }
+
+        if self.stop_reason:
+            message_dict["stop_reason"] = self.stop_reason
+
+        # Persistence-specific fields
+        if include_persistence_fields:
+            message_dict["type"] = self.type.value
+            message_dict["timestamp"] = self.timestamp.isoformat()
+            message_dict["is_meta"] = self.is_meta
+            message_dict["is_compact_summary"] = self.is_compact_summary
+            message_dict["is_visible_in_transcript_only"] = self.is_visible_in_transcript_only
+
+            if self.parent_id:
+                message_dict["parent_id"] = self.parent_id
+
+            if self.subtype:
+                message_dict["subtype"] = self.subtype
+
+            if self.file_expansions:
+                message_dict["file_expansions"] = [
+                    {
+                        "file_path": exp.file_path,
+                        "content": exp.content,
+                        "display_path": exp.display_path,
+                    }
+                    for exp in self.file_expansions
+                ]
 
         return message_dict
 

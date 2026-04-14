@@ -219,10 +219,8 @@ def test_filter_compacted_messages():
     summary = Message.assistant_message([TextContent(text="## Goal\nTest summary")])
     summary.uuid = "summary-1"
     summary.is_compact_summary = True
-    summary.message = {
-        "parent_id": "user-2",
-        "stop_reason": "stop",
-    }
+    summary.parent_id = "user-2"
+    summary.stop_reason = "stop"
     
     user3 = Message.user_message("Continue conversation")
     user3.uuid = "user-3"
@@ -237,12 +235,10 @@ def test_filter_compacted_messages():
     for msg in messages:
         if (msg.type == MessageRole.ASSISTANT and 
             msg.is_compact_summary and 
-            msg.message and 
-            msg.message.get("stop_reason") and
-            not msg.message.get("error")):
-            parent_id = msg.message.get("parent_id")
-            if parent_id:
-                completed_parent_ids.add(parent_id)
+            msg.stop_reason and
+            not msg.stop_reason.startswith("error")):
+            if msg.parent_id:
+                completed_parent_ids.add(msg.parent_id)
     
     assert "user-2" in completed_parent_ids
     

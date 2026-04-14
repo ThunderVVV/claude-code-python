@@ -5,7 +5,11 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from cc_code.core.messages import Message
+    from cc_code.core.instruction import InstructionService
 
 
 @dataclass
@@ -49,12 +53,11 @@ class ToolContext:
     working_directory: str
     project_root: str
     session_id: str
-    permissions: Dict[str, bool] = field(default_factory=dict)
     cancel_event: Optional[asyncio.Event] = None
     # For nearby instruction loading
-    instruction_service: Optional[Any] = None  # InstructionService type (avoid circular import)
+    instruction_service: Optional["InstructionService"] = None
     message_id: Optional[str] = None  # Current assistant message ID
-    messages: Optional[List[Any]] = None  # Current conversation messages
+    messages: Optional[List["Message"]] = None  # Current conversation messages
 
     def get_cwd(self) -> str:
         """Get current working directory"""

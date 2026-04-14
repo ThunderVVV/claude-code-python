@@ -189,7 +189,7 @@ def message_to_dict(message, working_directory: str = "") -> dict:
         has_web_reference,
     )
 
-    # Get basic message dict from the message's own method
+    # Get basic message dict from the message's unified to_dict method
     message_dict = message.to_dict()
 
     # Add file expansions if needed
