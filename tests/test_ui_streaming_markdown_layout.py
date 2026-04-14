@@ -4,9 +4,9 @@ import asyncio
 
 from textual.app import App
 
-from claude_code.ui.message_widgets import MessageList
-from claude_code.ui.screens import REPLScreen
-from claude_code.ui.styles import TUI_CSS
+from cc_code.ui.message_widgets import MessageList
+from cc_code.ui.screens import REPLScreen
+from cc_code.ui.styles import TUI_CSS
 
 
 class _StreamingMarkdownLayoutApp(App[None]):

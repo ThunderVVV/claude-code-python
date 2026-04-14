@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from claude_code.core.tools import ToolContext
-from claude_code.tools.bash_tool import BashTool
+from cc_code.core.tools import ToolContext
+from cc_code.tools.bash_tool import BashTool
 
 
 async def _run_bash(command: str) -> str:

@@ -1,7 +1,7 @@
 """Tests for session compaction functionality."""
 
 import pytest
-from claude_code.core.messages import (
+from cc_code.core.messages import (
     Message,
     MessageRole,
     TextContent,
@@ -9,7 +9,7 @@ from claude_code.core.messages import (
     ToolUseContent,
     Usage,
 )
-from claude_code.core.compaction import (
+from cc_code.core.compaction import (
     SessionCompaction,
     CompactionResult,
     CompactionConfig,

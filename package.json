@@ -1,0 +1,30 @@
+{
+  "name": "@thundervvv/cc-py",
+  "version": "0.3.0",
+  "description": "CC Code Python - AI programming assistant",
+  "main": "bin/cc-py.js",
+  "bin": {
+    "cc-py": "./bin/cc-py.js"
+  },
+  "files": [
+    "bin/",
+    "binary/"
+  ],
+  "keywords": [
+    "ai",
+    "assistant",
+    "code",
+    "tui"
+  ],
+  "author": "CC Code Python",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ThunderVVV/claude-code-python.git"
+  },
+  "os": ["darwin", "linux"],
+  "cpu": ["x64", "arm64"]
+}

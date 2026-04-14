@@ -4,9 +4,9 @@ import asyncio
 
 from textual.app import App
 
-from claude_code.ui.screens import REPLScreen, TranscriptContainer
-from claude_code.ui.styles import TUI_CSS
-from claude_code.ui.transcript_mode_modal import ProgressStatusModal
+from cc_code.ui.screens import REPLScreen, TranscriptContainer
+from cc_code.ui.styles import TUI_CSS
+from cc_code.ui.transcript_mode_modal import ProgressStatusModal
 
 
 class _StubToggleEvent:

@@ -1,14 +1,14 @@
 
-# Claude Code Python
+# CC Code Python
 
 > Code Author: GPT-5.4 & GLM-5 & Doubao-Seed-Code-2.0
 
 > WARNING: 本项目绝大部分为AI生成代码
 
-1. 此项目仅用于个人探究 Claude Code 基本工具调用原理、系统提示词、工具提示词设计，仅用于个人学习，不保证更新和维护。
+1. 此项目仅用于个人探究 CC Code 基本工具调用原理、系统提示词、工具提示词设计，仅用于个人学习，不保证更新和维护。
 2. 此项目的部分前端组件(例如代码diff view)来源于 [toad](https://github.com/batrachianai/toad)，也是一个Python AI TUI。
 
-`claude-code-python` 是根据 Claude Code 提示词构建的 Python AI 编程终端，当前聚焦核心 agent 能力：Agent核心循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
+`cc-py` 是根据 CC Code 提示词构建的 Python AI 编程终端，当前聚焦核心 agent 能力：Agent核心循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
 
 
 <table>
@@ -17,16 +17,16 @@
     <td align="center"><b>Code Diff渲染</b></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/tui_welcome.png" alt="Claude Code Python TUI - 欢迎界面"/></td>
-    <td><img src="docs/assets/tui_example.png" alt="Claude Code Python TUI - Code Diff渲染"/></td>
+    <td><img src="docs/assets/tui_welcome.png" alt="CC Code Python TUI - 欢迎界面"/></td>
+    <td><img src="docs/assets/tui_example.png" alt="CC Code Python TUI - Code Diff渲染"/></td>
   </tr>
   <tr>
     <td align="center"><b>Sessions 管理</b></td>
     <td align="center"><b>Markdown 渲染</b></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/tui_sessions.png" alt="Claude Code Python TUI - Sessions 管理"/></td>
-    <td><img src="docs/assets/tui_markdown.png" alt="Claude Code Python TUI - Markdown 渲染"/></td>
+    <td><img src="docs/assets/tui_sessions.png" alt="CC Code Python TUI - Sessions 管理"/></td>
+    <td><img src="docs/assets/tui_markdown.png" alt="CC Code Python TUI - Markdown 渲染"/></td>
   </tr>
 </table>
 
@@ -47,7 +47,7 @@
 - **高性能 Markdown 渲染**：TUI 使用虚拟化 Markdown 组件，针对长输出和流式追加做了性能优化，同时保留文本选择、复制和目录跳转能力
 - **内联 Diff 展示**：`Edit` 和 `Write` 工具结果以 diff 格式呈现
 - **多行输入支持**：Enter 提交，Shift+Enter 换行
-- **输入历史导航**：上下键导航历史输入，持久化到 `~/.claude-code-python/input_history.json`
+- **输入历史导航**：上下键导航历史输入，持久化到 `~/.cc-py/input_history.json`
 - **文件引用扩展**：支持 `@file_path` 语法在消息中引用文件内容，自动展开并显示
 - **@web 搜索**：支持 `@web` 语法触发 Web 搜索能力（需配置 tavily skills，详见下方说明）
 
@@ -64,7 +64,7 @@
 </p>
 
 ### TUI Session 管理
-- **Session 持久化**：每次 TUI 对话自动分配唯一 session ID，持久化到 `~/.claude-code-python/sessions/`
+- **Session 持久化**：每次 TUI 对话自动分配唯一 session ID，持久化到 `~/.cc-py/sessions/`
 - **Session 恢复**：通过 `--resume <session_id>` 或 `--sessions` 选择恢复历史会话
 - **Session 切换**：TUI 内使用 `/sessions` 命令切换到其他保存的会话
 - **新建 Session**：TUI 内使用 `/clear` 命令开始新会话，无需重启应用
@@ -90,16 +90,16 @@ brew install ripgrep
 sudo apt-get install ripgrep
 ```
 
-### 安装 claude-code-python
+### 安装 cc-py
 
 ```bash
-cd claude-code-python
+cd cc-py
 pip install -e .
 ```
 
 ## 配置
 
-配置统一保存在 `~/.claude-code-python/settings.json`。
+配置统一保存在 `~/.cc-py/settings.json`。
 
 示例：
 
@@ -122,10 +122,6 @@ pip install -e .
 - `current_model`：当前默认模型配置 ID
 - `theme`：`cc-py` 的 TUI 主题，默认 `atom-one-dark`, 可选 `tokyo-night`等其他textual支持主题
 - `models.<id>`：每个模型固定包含 `api_key`、`api_url`、`model_name`、`context`
-
-兼容迁移：
-- 首次启动时，如果 `settings.json` 不存在，程序会尝试从项目根目录旧 `.env` 自动迁移
-- 注释掉的历史模型配置也会一并迁入 `models`
 
 ## 运行
 
@@ -215,14 +211,14 @@ cc-api --debug
 
 ```text
 TUI 路径
-REPLScreen -> ClaudeCodeHttpClient --HTTP--> cc-api -> QueryEngine -> OpenAIClient
+REPLScreen -> CCCodeHttpClient --HTTP--> cc-api -> QueryEngine -> OpenAIClient
 
 Web 路径
 Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 ```
 
 - `cc-api` 负责 TUI 模式的 FastAPI 后端，也负责浏览器界面和内置 API
-- `cc-py` 通过 `ClaudeCodeHttpClient` 连接 API 服务器
+- `cc-py` 通过 `CCCodeHttpClient` 连接 API 服务器
 - 两条路径共享核心提示词、消息模型、工具实现和 OpenAI-compatible 配置
 
 **启动命令：**

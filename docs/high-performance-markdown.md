@@ -334,7 +334,7 @@ def _get_bq_depth_style(self, depth: int) -> Style:
 ### 基础用法
 
 ```python
-from claude_code.ui.patched_markdown import Markdown
+from cc_code.ui.patched_markdown import Markdown
 
 # 创建组件
 markdown_widget = Markdown()
@@ -358,7 +358,7 @@ print("Hello, World!")
 ### 流式输出（AI 对话）
 
 ```python
-from claude_code.ui.streaming_markdown import StreamingMarkdownWidget
+from cc_code.ui.streaming_markdown import StreamingMarkdownWidget
 
 # 创建流式组件
 widget = StreamingMarkdownWidget(

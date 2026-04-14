@@ -1,0 +1,118 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""PyInstaller spec file for CC Code Python"""
+
+import os
+import sys
+from pathlib import Path
+
+block_cipher = None
+
+project_root = Path(SPECPATH)
+cc_code_dir = project_root / "cc_code"
+
+a = Analysis(
+    ["cc_code/cli.py"],
+    pathex=[str(project_root)],
+    binaries=[],
+    datas=[
+        (str(cc_code_dir / "web" / "static"), "cc_code/web/static"),
+    ],
+    hiddenimports=[
+        "cc_code",
+        "cc_code.cli",
+        "cc_code.api.cli",
+        "cc_code.api.server",
+        "cc_code.client.http_client",
+        "cc_code.core.settings",
+        "cc_code.core.tools",
+        "cc_code.core.messages",
+        "cc_code.core.query_engine",
+        "cc_code.services.openai_client",
+        "cc_code.tools",
+        "cc_code.tools.read_tool",
+        "cc_code.tools.write_tool",
+        "cc_code.tools.edit_tool",
+        "cc_code.tools.glob_tool",
+        "cc_code.tools.grep_tool",
+        "cc_code.tools.bash_tool",
+        "cc_code.ui.app",
+        "cc_code.ui.widgets",
+        "cc_code.ui.screens",
+        "cc_code.utils.logging_config",
+        "textual",
+        "textual.app",
+        "textual.widgets",
+        "textual.containers",
+        "rich",
+        "rich.syntax",
+        "rich.markdown",
+        "httpx",
+        "httpx._transports",
+        "httpx._transports.default",
+        "httpcore",
+        "httpcore._backends",
+        "httpcore._backends.sync",
+        "httpcore._backends.auto",
+        "click",
+        "dotenv",
+        "openai",
+        "openai.types",
+        "openai.resources",
+        "aiohttp",
+        "fastapi",
+        "fastapi.routing",
+        "fastapi.middleware",
+        "uvicorn",
+        "uvicorn.protocols",
+        "uvicorn.protocols.http",
+        "uvicorn.protocols.websockets",
+        "uvicorn.lifespan",
+        "uvicorn.lifespan.on",
+        "pydantic",
+        "pydantic.fields",
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        "tkinter",
+        "matplotlib",
+        "numpy",
+        "pandas",
+        "scipy",
+        "PIL",
+        "cv2",
+        "pytest",
+        "black",
+        "ruff",
+        "mypy",
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name="cc-py",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)

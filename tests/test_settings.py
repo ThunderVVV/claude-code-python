@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from claude_code.core.settings import AppSettings, ModelSettings
-from claude_code.core.settings import (
+from cc_code.core.settings import AppSettings, ModelSettings
+from cc_code.core.settings import (
     DEFAULT_THEME_NAME,
     SettingsStore,
     migrate_env_to_settings,
 )
-import claude_code.ui.app as ui_app
+import cc_code.ui.app as ui_app
 
 
 def test_settings_migrates_legacy_env_with_commented_models(tmp_path: Path) -> None:
@@ -17,16 +17,16 @@ def test_settings_migrates_legacy_env_with_commented_models(tmp_path: Path) -> N
     env_path.write_text(
         "\n".join(
             [
-                "# CLAUDE_CODE_API_URL=https://cloud.infini-ai.com/maas/coding/v1",
-                "# CLAUDE_CODE_API_KEY=test-key-1",
-                "# CLAUDE_CODE_MODEL=glm-5",
-                "# CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000",
+                "# CC_CODE_API_URL=https://cloud.infini-ai.com/maas/coding/v1",
+                "# CC_CODE_API_KEY=test-key-1",
+                "# CC_CODE_MODEL=glm-5",
+                "# CC_CODE_MAX_CONTEXT_TOKENS=200000",
                 "",
-                "CLAUDE_CODE_API_URL=https://integrate.api.nvidia.com/v1",
-                "CLAUDE_CODE_API_KEY=test-key-2",
-                "CLAUDE_CODE_MODEL=openai/gpt-oss-120b",
-                "CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000",
-                "CLAUDE_CODE_THEME=atom-one-dark",
+                "CC_CODE_API_URL=https://integrate.api.nvidia.com/v1",
+                "CC_CODE_API_KEY=test-key-2",
+                "CC_CODE_MODEL=openai/gpt-oss-120b",
+                "CC_CODE_MAX_CONTEXT_TOKENS=200000",
+                "CC_CODE_THEME=atom-one-dark",
             ]
         ),
         encoding="utf-8",
@@ -41,7 +41,7 @@ def test_settings_migrates_legacy_env_with_commented_models(tmp_path: Path) -> N
     assert settings.models["openai-gpt-oss-120b"].api_url == "https://integrate.api.nvidia.com/v1"
 
 
-def test_claude_code_app_uses_theme_from_settings(tmp_path: Path) -> None:
+def test_cc_code_app_uses_theme_from_settings(tmp_path: Path) -> None:
     settings_path = tmp_path / "settings.json"
     SettingsStore(settings_path).save(
         AppSettings(
@@ -61,14 +61,14 @@ def test_claude_code_app_uses_theme_from_settings(tmp_path: Path) -> None:
     original_settings_store = ui_app.SettingsStore
     ui_app.SettingsStore = lambda: SettingsStore(settings_path)  # type: ignore[assignment]
     try:
-        app = ui_app.ClaudeCodeApp(client=object(), working_directory="/tmp")
+        app = ui_app.CCCodeApp(client=object(), working_directory="/tmp")
     finally:
         ui_app.SettingsStore = original_settings_store
 
     assert app.theme == "atom-one-dark"
 
 
-def test_claude_code_app_falls_back_to_default_theme(tmp_path: Path) -> None:
+def test_cc_code_app_falls_back_to_default_theme(tmp_path: Path) -> None:
     settings_path = tmp_path / "settings.json"
     SettingsStore(settings_path).save(
         AppSettings(
@@ -88,7 +88,7 @@ def test_claude_code_app_falls_back_to_default_theme(tmp_path: Path) -> None:
     original_settings_store = ui_app.SettingsStore
     ui_app.SettingsStore = lambda: SettingsStore(settings_path)  # type: ignore[assignment]
     try:
-        app = ui_app.ClaudeCodeApp(client=object(), working_directory="/tmp")
+        app = ui_app.CCCodeApp(client=object(), working_directory="/tmp")
     finally:
         ui_app.SettingsStore = original_settings_store
 

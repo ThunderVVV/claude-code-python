@@ -2,7 +2,7 @@
 
 ## Source Of Truth
 
-- This repository is a Python port of the official TypeScript Claude Code project.
+- This repository is a Python port of the official TypeScript CC Code project.
 - When behavior is ambiguous, align with the TypeScript implementation before adding Python-specific logic.
 - Tool descriptions, system prompts, and prompt-building helpers must stay exactly aligned with the TypeScript version.
 
@@ -12,7 +12,7 @@ This project uses a frontend-backend separation architecture with HTTP/FastAPI c
 
 **Frontend (TUI Client):**
 - `REPLScreen` - Textual TUI interface
-- `ClaudeCodeHttpClient` - HTTP client
+- `CCCodeHttpClient` - HTTP client
 
 **Backend (FastAPI Server):**
 - `FastAPI` server with REST API endpoints
@@ -22,16 +22,16 @@ This project uses a frontend-backend separation architecture with HTTP/FastAPI c
 
 **Communication Flow:**
 ```
-REPLScreen -> ClaudeCodeHttpClient --HTTP--> FastAPI Server -> QueryEngine -> OpenAIClient
+REPLScreen -> CCCodeHttpClient --HTTP--> FastAPI Server -> QueryEngine -> OpenAIClient
 ```
 
 **Key Directories:**
-- `claude_code/ui/` - Frontend TUI (Textual)
-- `claude_code/client/` - HTTP client
-- `claude_code/api/` - FastAPI backend server
-- `claude_code/core/` - Core logic (QueryEngine, tools, messages)
-- `claude_code/services/` - OpenAI client
-- `claude_code/web/` - Web static assets
+- `cc_code/ui/` - Frontend TUI (Textual)
+- `cc_code/client/` - HTTP client
+- `cc_code/api/` - FastAPI backend server
+- `cc_code/core/` - Core logic (QueryEngine, tools, messages)
+- `cc_code/services/` - OpenAI client
+- `cc_code/web/` - Web static assets
 
 ## Repository Hygiene
 
@@ -45,10 +45,10 @@ REPLScreen -> ClaudeCodeHttpClient --HTTP--> FastAPI Server -> QueryEngine -> Op
 
 ### TUI Logging
 
-**IMPORTANT:** All TUI debug logs must use `tui_log()` function from `claude_code.utils.logging_config`, not `print()` or standard `logging`.
+**IMPORTANT:** All TUI debug logs must use `tui_log()` function from `cc_code.utils.logging_config`, not `print()` or standard `logging`.
 
 ```python
-from claude_code.utils.logging_config import tui_log
+from cc_code.utils.logging_config import tui_log
 
 tui_log(f"Debug message: {variable}")
 ```

@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 
 from textual.app import App
-from claude_code.ui.autocomplete import AutocompletePopup, AutocompleteMode
-from claude_code.ui.screens import REPLScreen
-from claude_code.ui.widgets import InputTextArea
+from cc_code.ui.autocomplete import AutocompletePopup, AutocompleteMode
+from cc_code.ui.screens import REPLScreen
+from cc_code.ui.widgets import InputTextArea
 
 
 class _AutocompleteTestApp(App[None]):

@@ -17,7 +17,7 @@
 | 文件名 | 是否默认启用 | 说明 |
 |-------|-------------|------|
 | `AGENTS.md` | 始终启用 | 代理指令配置 |
-| `CLAUDE.md` | 默认启用 | Claude 指令配置（可通过环境变量禁用） |
+| `CLAUDE.md` | 默认启用 | CC 指令配置（可通过环境变量禁用） |
 | `CONTEXT.md` | 已弃用 | 上下文配置（保留兼容性） |
 
 ---
@@ -122,7 +122,7 @@ Instructions from: /path/to/CLAUDE.md
 
 ### 1. instruction.py - 核心加载模块
 
-文件路径：`claude_code/core/instruction.py`
+文件路径：`cc_code/core/instruction.py`
 
 ```python
 class InstructionService:
@@ -177,7 +177,7 @@ class InstructionService:
 
 ### 2. prompts.py - 系统提示注入点
 
-文件路径：`claude_code/core/prompts.py`
+文件路径：`cc_code/core/prompts.py`
 
 ```python
 def create_default_system_prompt(
@@ -209,7 +209,7 @@ async def create_system_prompt_with_instructions(
 
 ### 3. query_engine.py - 引擎集成
 
-文件路径：`claude_code/core/query_engine.py`
+文件路径：`cc_code/core/query_engine.py`
 
 ```python
 class QueryEngine:
@@ -247,14 +247,14 @@ class QueryEngine:
 ├── .claude-code-python/
 │   └── settings.json   # 主配置文件
 ├── AGENTS.md           # 项目级代理指令
-├── CLAUDE.md           # 项目级 Claude 指令
+├── CLAUDE.md           # 项目级 CC 指令
 └── CONTEXT.md          # （已弃用）
 
 全局配置/
 ├── ~/.config/opencode/
 │   └── AGENTS.md       # 全局代理指令
 └── ~/.claude/
-    └── CLAUDE.md       # 全局 Claude 指令
+    └── CLAUDE.md       # 全局 CC 指令
 ```
 
 ---

@@ -53,7 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added transient progress modal during transcript mode switches to hide layout flicker
 - Added streaming context awareness: Edit/Write blocks stay expanded while assistant is streaming
 - Added mode indicator in context usage bar (shows "Mode: compact/expanded (ctrl+o to toggle)")
-- Added `claude_code/ui/transcript_mode_modal.py` - ProgressStatusModal for UI operations
+- Added `cc_code/ui/transcript_mode_modal.py` - ProgressStatusModal for UI operations
 - Added `tests/test_ui_tool_result_scroll_lock.py` - Tests for scroll lock and mode switching
 - Updated `ToolResultLogWidget` with pointer scroll activation/deactivation logic
 - Updated `ThinkingBlockWidget` and `ToolUseWidget` with transcript collapsible mode support
@@ -99,7 +99,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### Session Compaction (/compact command)
 - Added `/compact` and `/summarize` commands to compress conversation history
-- Implemented compaction logic in `claude_code/core/compaction.py` with message summarization
+- Implemented compaction logic in `cc_code/core/compaction.py` with message summarization
 - Added `_filter_compacted_messages()` and `_handle_compact()` methods in `QueryEngine`
 - Added `CompactRequest` and `compact_stream()` in server API
 - Added `stream_compact()` method in HTTP client
@@ -123,7 +123,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Updated existing UI tests to cover new autofocus and output branch behavior
 
 #### Instruction Loading (CLAUDE.md, AGENTS.md)
-- Added `claude_code/core/instruction.py` - Instruction loading service for CLAUDE.md, AGENTS.md, and custom instruction files
+- Added `cc_code/core/instruction.py` - Instruction loading service for CLAUDE.md, AGENTS.md, and custom instruction files
 - Added automatic discovery and loading of project-level instruction files (searching upward from cwd)
 - Added global-level instruction loading from `~/.config/opencode/` and `~/.claude/`
 - Added support for custom instruction files/URLs via settings.json
@@ -151,7 +151,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### TUI Model Management Refactoring
 - Refactored TUI to fetch model information from server API instead of local settings
 - Added `GET /api/models` endpoint to list all available models from server
-- Added `ClaudeCodeHttpClient.list_models()` method for fetching model list
+- Added `CCCodeHttpClient.list_models()` method for fetching model list
 - `ModelSelectModal` now receives models from server response instead of local `AppSettings`
 - Chat requests now include optional `model` parameter to specify model per request
 - Model info is fetched on TUI startup and after session switches
@@ -173,8 +173,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Removed `GET /api/revert_state/{session_id}` endpoint - not used by any frontend (TUI or Web)
 - Removed `POST /api/unrevert` endpoint - not used by any frontend (TUI or Web)
 - Removed `UnrevertRequest` model from API server
-- Removed `ClaudeCodeHttpClient.get_revert_state()` method
-- Removed `ClaudeCodeHttpClient.unrevert()` method
+- Removed `CCCodeHttpClient.get_revert_state()` method
+- Removed `CCCodeHttpClient.unrevert()` method
 - Removed `SessionRevertService.unrevert()` method from core revert service
 - Kept internal `QueryEngine` revert state methods (`get_revert_state`, `set_revert_state`, `clear_revert_state`) as they are used by the revert workflow
 - Total code reduction: ~87 lines of unused code
@@ -182,7 +182,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added - 2026-04-13
 
 #### High-Performance TUI Markdown Renderer
-- Added `claude_code/ui/patched_markdown.py`, a virtualized Markdown renderer for the TUI transcript based on the implementation direction from `0x7c13/textual#2`
+- Added `cc_code/ui/patched_markdown.py`, a virtualized Markdown renderer for the TUI transcript based on the implementation direction from `0x7c13/textual#2`
 - Replaced the heavier widget-tree markdown path with a `ScrollView` / Line API based renderer for better large-output performance
 - Preserved core Textual markdown behavior including headings, lists, blockquotes, tables, code fences, links, and table of contents integration
 - Source reference: https://github.com/0x7c13/textual/pull/2/changes
@@ -190,7 +190,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed - 2026-04-13
 
 #### TUI Markdown Text Selection
-- Fixed `claude_code/ui/patched_markdown.py` so virtualized markdown text can be selected and copied again
+- Fixed `cc_code/ui/patched_markdown.py` so virtualized markdown text can be selected and copied again
 - Added Textual selection offset metadata in `render_line()` via `Strip.apply_offsets(...)` so the compositor can map mouse drags to text coordinates
 - Added markdown-specific `get_selection()` and `selection_updated()` handling for the custom `ScrollView` renderer
 - Added selection highlight rendering for the custom markdown line pipeline so drag selection is visible in the transcript
@@ -208,7 +208,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### Configuration System Migration
 - Migrated from `.env` file to unified `~/.claude-code-python/settings.json` for all configuration
-- Created `claude_code/core/settings.py` - Centralized settings management with model profiles
+- Created `cc_code/core/settings.py` - Centralized settings management with model profiles
 - Settings now support multiple model configurations with unique IDs
 - Added automatic migration from legacy `.env` to `settings.json` on first run
 - Removed environment variable dependencies (`CLAUDE_CODE_API_URL`, `CLAUDE_CODE_API_KEY`, `CLAUDE_CODE_MODEL`, `CLAUDE_CODE_THEME`)
@@ -221,7 +221,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Real-time Model Switching
 - Added `/model` command in TUI to display current model and available models
 - Added `/model <model_id>` command to switch model in real-time during session
-- Created `claude_code/ui/model_select_modal.py` - Modal for selecting models
+- Created `cc_code/ui/model_select_modal.py` - Modal for selecting models
 - Added API endpoint `POST /api/model` for model switching
 - Session persistence now includes `model_id` to remember model choice per session
 - Added `switch_model()` method to `QueryEngine` for dynamic model reconfiguration
@@ -229,7 +229,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Welcome widget updates model name when model is switched
 
 #### Command Autocomplete
-- Created `claude_code/ui/autocomplete.py` - Autocomplete system for TUI input
+- Created `cc_code/ui/autocomplete.py` - Autocomplete system for TUI input
 - Added autocomplete popup for slash commands (`/help`, `/model`, `/rewind`, `/sessions`, `/clear`, `/exit`)
 - Added autocomplete popup for `@` references (`@web` and file paths)
 - Implemented keyboard navigation (↑/↓/Enter/Tab/Esc) in autocomplete popup
@@ -261,9 +261,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### File Rewind/Revert Feature
 - Added `/rewind` command in TUI to revert file changes to a previous conversation point
-- Created `claude_code/core/snapshot.py` - Git-based independent snapshot system for tracking file changes during tool execution
-- Created `claude_code/core/revert.py` - Session revert service supporting undo/redo of file changes
-- Created `claude_code/ui/rewind_modal.py` - TUI modal for selecting a message to rewind to
+- Created `cc_code/core/snapshot.py` - Git-based independent snapshot system for tracking file changes during tool execution
+- Created `cc_code/core/revert.py` - Session revert service supporting undo/redo of file changes
+- Created `cc_code/ui/rewind_modal.py` - TUI modal for selecting a message to rewind to
 - Added `PatchContent` and `StepStartContent` message blocks for tracking file modifications
 - Added API endpoints: `/revert`, `/unrevert`, `/revert_state/{session_id}`, `/snapshot_status/{session_id}`
 - Session persistence now includes `revert_state` and `total_diff` for tracking file change history
@@ -279,7 +279,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed - 2026-04-12
 
 #### Web UI / API Mount Compatibility
-- Added `create_app(api_prefix=...)` in `claude_code.api.server` so the FastAPI backend can run directly or be mounted under `/api`
+- Added `create_app(api_prefix=...)` in `cc_code.api.server` so the FastAPI backend can run directly or be mounted under `/api`
 - Fixed browser UI startup by mounting the unprefixed API app without double-prefixing browser routes
 - Restored `web_enabled` serialization from `@web` in `message_to_dict()` so web-enabled messages serialize correctly
 - Added tests for direct and mounted API route layouts plus `@web` serialization
@@ -294,7 +294,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Removed stale `[SERVER]` prefixes from API server logs so the emitted format now reflects the actual module source
 
 #### HTTP API Runtime Migration
-- Replaced the old gRPC client/server stack with `ClaudeCodeHttpClient` and the standalone `cc-api` FastAPI server for the TUI path
+- Replaced the old gRPC client/server stack with `CCCodeHttpClient` and the standalone `cc-api` FastAPI server for the TUI path
 - Refactored the browser UI to share the same FastAPI API layer while serving the Vue frontend from one process
 - Added/updated CLI entry points and package metadata to match the HTTP-based runtime
 - Fully removed the obsolete gRPC proto/client/server implementation and generation script from the active codebase
@@ -424,7 +424,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Simplified API by consolidating to single class with clear method names
 
 #### Extract Streaming Markdown Component to Separate Module
-- Created new `claude_code/ui/streaming_markdown.py` module for streaming markdown widgets
+- Created new `cc_code/ui/streaming_markdown.py` module for streaming markdown widgets
 - Moved `TranscriptMarkdownWidget` and `StreamingTextWidget` from `message_widgets.py` to dedicated module
 - Updated `message_widgets.py` to import from new module
 - Updated `ui/__init__.py` to export markdown components from new location
@@ -432,7 +432,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - No functional changes - purely structural refactoring for better maintainability
 
 #### Tooltip Global Disable via Monkey Patch
-- Added monkey patch in `claude_code/__init__.py` to override `textual.widget.Widget.with_tooltip` method
+- Added monkey patch in `cc_code/__init__.py` to override `textual.widget.Widget.with_tooltip` method
 - All tooltip calls now set `self.tooltip = None` globally, effectively disabling all tooltips
 - Removed `_clear_tooltips()` and `_schedule_tooltip_cleanup()` methods from `TranscriptMarkdownWidget` as they are no longer needed
 - Simplified tooltip management by using a single global patch instead of per-instance cleanup
@@ -530,13 +530,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Interrupt operations sent to server via gRPC
 
 #### Removed Redundant Code
-- Deleted `claude_code/client/grpc_engine.py` (no longer needed)
+- Deleted `cc_code/client/grpc_engine.py` (no longer needed)
 - Removed `RequestStartEvent` (simplified event flow)
 - Removed `FrontendSnapshot` class and frontend state capture logic
 - Removed `sync_from_message()` method
 
 #### Added Utility Module
-- Added `claude_code/utils/logging_config.py` for unified logging configuration
+- Added `cc_code/utils/logging_config.py` for unified logging configuration
 - Provides `setup_server_logging()`, `setup_client_logging()` and `log_full_exception()` functions
 
 #### Proto Updates
@@ -545,9 +545,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `proto/__init__.py` now uses dynamic path import
 
 #### UI Refactor
-- `ClaudeCodeApp` now receives `ClaudeCodeClient` instead of `QueryEngine`
+- `CCCodeApp` now receives `CCCodeClient` instead of `QueryEngine`
 - `REPLScreen` completely refactored as stateless frontend, all state managed via gRPC
-- `SessionResumeModal` now uses `ClaudeCodeClient` to fetch session list
+- `SessionResumeModal` now uses `CCCodeClient` to fetch session list
 - Simplified interrupt handling: sends interrupt signal to server instead of local rollback
 
 #### QueryEngine Improvements
@@ -598,7 +598,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### File Expansion For User Messages
 - Implemented file expansion feature allowing users to reference files in messages using `@file_path` syntax
-- Created `claude_code/core/file_expansion.py` module with `FileExpander` class for handling file references
+- Created `cc_code/core/file_expansion.py` module with `FileExpander` class for handling file references
 - Added automatic file content embedding when user messages contain file references
 - TUI now displays expanded files with visual indicators showing file names and line counts
 - Added CSS styles for file expansion display in TUI
@@ -624,7 +624,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### Test Suite Consolidation
 - Removed redundant test files from root directory (`test_cli.py`, `test_core.py`, `test_tui.py`)
-- Moved essential test logic into `claude_code/core/query_engine.py` and `claude_code/ui/screens.py` as inline methods
+- Moved essential test logic into `cc_code/core/query_engine.py` and `cc_code/ui/screens.py` as inline methods
 - Reduced test code by 3374 lines while preserving core functionality testing
 
 #### Session Timestamp Timezone
@@ -697,7 +697,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### TUI Context And Diff Presentation
 - Added a context usage line beneath the TUI input showing used tokens / configured max context / percentage
-- Added `claude_code/ui/diff_view.py`, adapted from Toad, for inline file diff rendering in the TUI
+- Added `cc_code/ui/diff_view.py`, adapted from Toad, for inline file diff rendering in the TUI
 - `Edit` and `Write` tool results now render inline diffs instead of raw replacement/content payload previews
 - Added headless TUI regression coverage for context usage, diff rendering, auto-expand behavior, and markdown fence spacing
 
@@ -732,9 +732,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Removed - 2026-04-08
 
 #### Duplicate Tool Definitions Cleanup
-- Removed `claude_code/tools/file_tools.py` (650 lines) - contained duplicate tool definitions
+- Removed `cc_code/tools/file_tools.py` (650 lines) - contained duplicate tool definitions
 - All tools are already defined in separate files: `read_tool.py`, `write_tool.py`, `edit_tool.py`, `glob_tool.py`, `grep_tool.py`
-- Updated imports in `cli.py`, `test_core.py`, and debug scripts to use `from claude_code.tools import ...` instead of `from claude_code.tools.file_tools import ...`
+- Updated imports in `cli.py`, `test_core.py`, and debug scripts to use `from cc_code.tools import ...` instead of `from cc_code.tools.file_tools import ...`
 - No functional changes - purely code cleanup to eliminate redundancy
 
 ### Changed - 2026-04-08
@@ -756,14 +756,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Refactored - 2026-04-08
 
 #### TUI Module Split
-- Split 1349-line `claude_code/ui/app.py` into multiple modules for better maintainability:
-  - `claude_code/ui/constants.py` - Theme colors (CLAUDE_ORANGE, etc.)
-  - `claude_code/ui/styles.py` - TUI CSS definitions
-  - `claude_code/ui/utils.py` - Text sanitization and tool summarization functions
-  - `claude_code/ui/widgets.py` - Clawd and WelcomeWidget
-  - `claude_code/ui/message_widgets.py` - MessageList, MessageWidget, AssistantMessageWidget, ToolUseWidget, StreamingTextWidget
-  - `claude_code/ui/screens.py` - REPLScreen
-  - `claude_code/ui/app.py` - ClaudeCodeApp (simplified main app)
+- Split 1349-line `cc_code/ui/app.py` into multiple modules for better maintainability:
+  - `cc_code/ui/constants.py` - Theme colors (CLAUDE_ORANGE, etc.)
+  - `cc_code/ui/styles.py` - TUI CSS definitions
+  - `cc_code/ui/utils.py` - Text sanitization and tool summarization functions
+  - `cc_code/ui/widgets.py` - Clawd and WelcomeWidget
+  - `cc_code/ui/message_widgets.py` - MessageList, MessageWidget, AssistantMessageWidget, ToolUseWidget, StreamingTextWidget
+  - `cc_code/ui/screens.py` - REPLScreen
+  - `cc_code/ui/app.py` - CCCodeApp (simplified main app)
 - Added proper `__init__.py` exports for backwards compatibility
 - **No functional changes** - purely structural refactoring
 
@@ -826,7 +826,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 #### System Prompt (aligned with TypeScript version)
 
-- Created new `claude_code/core/prompts.py` module with complete system prompt sections:
+- Created new `cc_code/core/prompts.py` module with complete system prompt sections:
   - `get_simple_intro_section()` - Introduction with security guidelines
   - `get_simple_system_section()` - System behavior description
   - `get_simple_doing_tasks_section()` - Task execution guidelines
@@ -841,7 +841,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- `claude_code/core/prompts.py` - New module containing all system prompt definitions
+- `cc_code/core/prompts.py` - New module containing all system prompt definitions
 - `.gitignore` - Standard Python gitignore (excluding `__pycache__/`, `.env`, etc.)
 - `CHANGELOG.md` - This file
 
@@ -858,14 +858,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- Core message types and data models (`claude_code/core/messages.py`)
-- Tool system base classes (`claude_code/core/tools.py`)
-- Query engine with streaming support (`claude_code/core/query_engine.py`)
-- OpenAI-compatible API client (`claude_code/services/openai_client.py`)
-- File tools: Read, Write, Edit, Glob, Grep (`claude_code/tools/file_tools.py`)
-- Bash tool with sandbox support (`claude_code/tools/bash_tool.py`)
-- CLI interface with Click (`claude_code/cli.py`)
-- TUI interface with Textual (`claude_code/ui/app.py`)
+- Core message types and data models (`cc_code/core/messages.py`)
+- Tool system base classes (`cc_code/core/tools.py`)
+- Query engine with streaming support (`cc_code/core/query_engine.py`)
+- OpenAI-compatible API client (`cc_code/services/openai_client.py`)
+- File tools: Read, Write, Edit, Glob, Grep (`cc_code/tools/file_tools.py`)
+- Bash tool with sandbox support (`cc_code/tools/bash_tool.py`)
+- CLI interface with Click (`cc_code/cli.py`)
+- TUI interface with Textual (`cc_code/ui/app.py`)
 - Configuration via environment variables and `.env` files
 - Basic test suite (`tests/`)
 

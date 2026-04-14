@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from claude_code.core.instruction import (
+from cc_code.core.instruction import (
     InstructionConfig,
     InstructionService,
     LoadedInstruction,
@@ -60,7 +60,7 @@ async def test_priority_agents_over_claude():
         agents_md.write_text("# Agent Instructions")
         
         claude_md = Path(tmpdir) / "CLAUDE.md"
-        claude_md.write_text("# Claude Instructions")
+        claude_md.write_text("# CC Instructions")
         
         # Create service and load instructions
         service = InstructionService()
@@ -131,7 +131,7 @@ async def test_disable_claude_prompt():
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create CLAUDE.md
         claude_md = Path(tmpdir) / "CLAUDE.md"
-        claude_md.write_text("# Claude Instructions")
+        claude_md.write_text("# CC Instructions")
         
         # Create AGENTS.md
         agents_md = Path(tmpdir) / "AGENTS.md"
@@ -202,17 +202,17 @@ async def test_env_config():
     assert not config.disable_project_config
     
     # Test with environment variable set
-    old_env = os.environ.get("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT")
+    old_env = os.environ.get("OPENCODE_DISABLE_CC_CODE_PROMPT")
     try:
-        os.environ["OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"] = "true"
+        os.environ["OPENCODE_DISABLE_CC_CODE_PROMPT"] = "true"
         config = InstructionConfig.from_env()
         assert "CLAUDE.md" not in config.files
         assert config.disable_claude_prompt
     finally:
         if old_env is not None:
-            os.environ["OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"] = old_env
+            os.environ["OPENCODE_DISABLE_CC_CODE_PROMPT"] = old_env
         else:
-            os.environ.pop("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT", None)
+            os.environ.pop("OPENCODE_DISABLE_CC_CODE_PROMPT", None)
 
 
 @pytest.mark.asyncio
@@ -279,7 +279,7 @@ async def test_deduplication():
 @pytest.mark.asyncio
 async def test_system_prompt_integration():
     """Test that instructions are integrated into system prompt."""
-    from claude_code.core.prompts import create_default_system_prompt
+    from cc_code.core.prompts import create_default_system_prompt
     
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create CLAUDE.md
@@ -307,7 +307,7 @@ async def test_system_prompt_integration():
 @pytest.mark.asyncio
 async def test_async_system_prompt():
     """Test the async system prompt creation with auto-loading."""
-    from claude_code.core.prompts import create_system_prompt_with_instructions
+    from cc_code.core.prompts import create_system_prompt_with_instructions
     
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create AGENTS.md
@@ -449,7 +449,7 @@ async def test_nearby_instruction_from_previous_messages():
         service = InstructionService()
         
         # Simulate a previous message that loaded the instruction
-        from claude_code.core.messages import Message, ToolResultContent
+        from cc_code.core.messages import Message, ToolResultContent
         prev_msg = Message.tool_result_message(
             tool_use_id="prev-tool",
             content="file content",

@@ -5,7 +5,7 @@ from textual.app import App, ComposeResult
 from textual.events import Click
 from textual.widgets import Collapsible
 
-from claude_code.ui.message_widgets import (
+from cc_code.ui.message_widgets import (
     FlushCollapsibleTitle,
     ToolResultBlockWidget,
     ToolUseWidget,

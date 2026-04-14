@@ -1,4 +1,4 @@
-from claude_code.ui.streaming_markdown import StreamingMarkdownWidget
+from cc_code.ui.streaming_markdown import StreamingMarkdownWidget
 
 
 def test_streaming_markdown_uses_balanced_block_spacing() -> None:

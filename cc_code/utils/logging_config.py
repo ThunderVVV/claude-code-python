@@ -1,0 +1,103 @@
+"""Logging configuration utilities for CC Code Python"""
+
+from __future__ import annotations
+
+import logging
+import os
+import traceback
+from datetime import datetime
+from pathlib import Path
+
+
+_LOG_TAG_RULES: tuple[tuple[str, str], ...] = (
+    ("cc_code.api.", "FASTAPI"),
+    ("cc_code.client.http_client", "CLIENT"),
+    ("cc_code.client.", "CLIENT"),
+    ("cc_code.ui.", "TUI"),
+    ("cc_code.cli", "TUI"),
+    ("cc_code.core.", "ENGINE"),
+    ("cc_code.services.", "ENGINE"),
+)
+
+
+def _resolve_log_tag(logger_name: str, default_tag: str) -> str:
+    for prefix, tag in _LOG_TAG_RULES:
+        if logger_name.startswith(prefix):
+            return tag
+    return default_tag
+
+
+_TUI_LOG_PATH = os.path.expanduser("~/.cc-py/tui.log")
+
+
+def tui_log(message: str, level: str = "INFO") -> None:
+    """Direct file logging for TUI - bypasses Python logging entirely."""
+    os.makedirs(os.path.dirname(_TUI_LOG_PATH), exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+    line = f"{timestamp} [TUI] {level} - {message}\n"
+    with open(_TUI_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(line)
+
+
+class _SourceTagFilter(logging.Filter):
+    def __init__(self, default_tag: str):
+        super().__init__()
+        self._default_tag = default_tag
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.source_tag = _resolve_log_tag(record.name, self._default_tag)
+        return True
+
+
+def setup_server_logging(log_dir: str = ".logs", debug: bool = True) -> None:
+    """Configure logging for the API server."""
+    _setup_logging(log_dir, debug, "cc-api")
+
+
+def setup_client_logging(log_dir: str = ".logs", debug: bool = True) -> None:
+    """Configure logging for the HTTP/TUI client."""
+    os.makedirs(os.path.dirname(_TUI_LOG_PATH), exist_ok=True)
+    with open(_TUI_LOG_PATH, "w", encoding="utf-8") as f:
+        f.write("TUI logging initialized")
+    _setup_logging(log_dir, debug, "cc-py")
+
+
+def _setup_logging(log_dir: str, debug: bool, default_tag: str) -> None:
+    """Internal logging setup."""
+    log_format = "%(asctime)s [%(source_tag)s] %(name)s - %(levelname)s - %(message)s"
+    source_tag_filter = _SourceTagFilter(default_tag)
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.WARNING)
+
+    cc_logger = logging.getLogger("cc_code")
+    cc_logger.setLevel(logging.DEBUG)
+
+    if debug:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_path = Path(log_dir) / f"cc-code_{timestamp}_{default_tag.lower()}.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter(log_format))
+        file_handler.addFilter(source_tag_filter)
+        cc_logger.addHandler(file_handler)
+
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.DEBUG)
+        console_handler.setFormatter(logging.Formatter(log_format))
+        console_handler.addFilter(source_tag_filter)
+        cc_logger.addHandler(console_handler)
+    else:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(logging.Formatter(log_format))
+        console_handler.addFilter(source_tag_filter)
+        cc_logger.addHandler(console_handler)
+
+
+def log_full_exception(logger: logging.Logger, message: str, exc: Exception) -> None:
+    """Log an exception with full traceback at DEBUG level."""
+    tb = traceback.format_exc()
+    logger.debug(f"{exc}: {message}\n{tb}")

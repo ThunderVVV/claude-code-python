@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-WEB_FRONTEND_SOURCE = Path("claude_code/web/static/index.html").read_text(
+WEB_FRONTEND_SOURCE = Path("cc_code/web/static/index.html").read_text(
     encoding="utf-8"
 )
 

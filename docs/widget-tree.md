@@ -72,12 +72,12 @@ REPLScreen (Screen)
 
 | 组件 | 文件 |
 |------|------|
-| REPLScreen | `claude_code/ui/screens.py` |
-| MessageList | `claude_code/ui/message_widgets.py` |
-| MessageWidget | `claude_code/ui/message_widgets.py` |
-| AssistantMessageWidget | `claude_code/ui/message_widgets.py` |
-| WelcomeWidget | `claude_code/ui/widgets.py` |
-| InputTextArea | `claude_code/ui/widgets.py` |
+| REPLScreen | `cc_code/ui/screens.py` |
+| MessageList | `cc_code/ui/message_widgets.py` |
+| MessageWidget | `cc_code/ui/message_widgets.py` |
+| AssistantMessageWidget | `cc_code/ui/message_widgets.py` |
+| WelcomeWidget | `cc_code/ui/widgets.py` |
+| InputTextArea | `cc_code/ui/widgets.py` |
 
 ## 自动滚动相关说明
 

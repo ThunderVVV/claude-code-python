@@ -47,3 +47,6 @@ ENV/
 .DS_Store
 Thumbs.db
 .omx/
+
+# Build outputs
+binary/

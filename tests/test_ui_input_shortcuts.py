@@ -4,7 +4,7 @@ import asyncio
 
 from textual import events
 
-from claude_code.ui.widgets import InputTextArea
+from cc_code.ui.widgets import InputTextArea
 
 
 async def _dispatch_key(widget: InputTextArea, key: str) -> None:
