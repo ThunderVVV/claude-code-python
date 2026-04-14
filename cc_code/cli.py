@@ -249,11 +249,14 @@ def api_cmd(host: str, port: int, debug: bool) -> None:
     registry.register(GrepTool())
     registry.register(BashTool())
 
-    from cc_code.api.server import app, set_global_dependencies
+    from cc_code.api.server import create_app
 
     import uvicorn
 
-    set_global_dependencies(settings_store, registry)
+    app = create_app(
+        settings_store=settings_store,
+        tool_registry=registry,
+    )
 
     click.echo(
         click.style(f"Starting CC Code FastAPI server on {host}:{port}", fg="green")

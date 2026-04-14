@@ -71,10 +71,13 @@ def main(
 
     tool_registry = create_tool_registry()
 
-    from cc_code.api.server import set_global_dependencies, app
+    from cc_code.api.server import create_app
     import uvicorn
 
-    set_global_dependencies(settings_store, tool_registry)
+    app = create_app(
+        settings_store=settings_store,
+        tool_registry=tool_registry,
+    )
 
     click.echo(
         click.style(f"Starting CC Code FastAPI server on {host}:{port}", fg="green")

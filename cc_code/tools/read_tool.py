@@ -155,10 +155,15 @@ Usage:
                         project_root=context.project_root,
                     )
                     if instructions:
-                        nearby_instructions = [inst.path for inst in instructions]
-                        # Append nearby instructions to the result
+                        # instructions is now a list of formatted strings
+                        nearby_instructions = []
                         for inst in instructions:
-                            result += f"\n\n---\n{inst.format()}"
+                            # Extract path from "Instructions from: <path>\n<content>"
+                            lines = inst.split('\n', 1)
+                            if lines[0].startswith("Instructions from: "):
+                                path = lines[0][len("Instructions from: "):]
+                                nearby_instructions.append(path)
+                            result += f"\n\n---\n{inst}"
                         logger.debug(f"Appended {len(instructions)} nearby instructions to Read result")
                 except Exception as e:
                     logger.warning(f"Failed to load nearby instructions: {e}")

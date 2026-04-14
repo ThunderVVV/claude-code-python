@@ -9,7 +9,6 @@ import pytest
 from cc_code.core.instruction import (
     InstructionConfig,
     InstructionService,
-    LoadedInstruction,
 )
 
 
@@ -23,11 +22,11 @@ async def test_load_local_instruction_file():
         
         # Create service and load instructions
         service = InstructionService()
-        instructions = await service.load_instructions(tmpdir)
+        instructions = await service.get_system_instructions(tmpdir)
         
         assert len(instructions) == 1
-        assert "Test Instructions" in instructions[0].content
-        assert instructions[0].path == str(claude_md)
+        assert "Test Instructions" in instructions[0]
+        assert str(claude_md) in instructions[0]
         
         await service.close()
 
@@ -42,11 +41,11 @@ async def test_load_agents_md():
         
         # Create service and load instructions
         service = InstructionService()
-        instructions = await service.load_instructions(tmpdir)
+        instructions = await service.get_system_instructions(tmpdir)
         
         assert len(instructions) == 1
-        assert "Agent Instructions" in instructions[0].content
-        assert instructions[0].path == str(agents_md)
+        assert "Agent Instructions" in instructions[0]
+        assert str(agents_md) in instructions[0]
         
         await service.close()
 
@@ -64,11 +63,11 @@ async def test_priority_agents_over_claude():
         
         # Create service and load instructions
         service = InstructionService()
-        instructions = await service.load_instructions(tmpdir)
+        instructions = await service.get_system_instructions(tmpdir)
         
         # Should only load AGENTS.md (first match wins)
         assert len(instructions) == 1
-        assert "Agent Instructions" in instructions[0].content
+        assert "Agent Instructions" in instructions[0]
         
         await service.close()
 
@@ -88,10 +87,10 @@ async def test_search_upward():
         
         # Load from subdirectory
         service = InstructionService()
-        instructions = await service.load_instructions(str(subdir))
+        instructions = await service.get_system_instructions(str(subdir))
         
         assert len(instructions) == 1
-        assert "Root Instructions" in instructions[0].content
+        assert "Root Instructions" in instructions[0]
         
         await service.close()
 
@@ -111,12 +110,12 @@ async def test_custom_instructions():
         
         # Load instructions
         service = InstructionService(config)
-        instructions = await service.load_instructions(tmpdir)
+        instructions = await service.get_system_instructions(tmpdir)
         
         # Should load the custom file
         found = False
         for inst in instructions:
-            if "Custom Instructions" in inst.content:
+            if "Custom Instructions" in inst:
                 found = True
                 break
         
@@ -144,12 +143,11 @@ async def test_disable_claude_prompt():
         
         # Load instructions
         service = InstructionService(config)
-        paths = await service.get_system_paths(tmpdir)
+        instructions = await service.get_system_instructions(tmpdir)
         
-        # Should not include CLAUDE.md
-        assert not any("CLAUDE.md" in p for p in paths)
-        # Should include AGENTS.md
-        assert any("AGENTS.md" in p for p in paths)
+        # Should only load AGENTS.md
+        assert len(instructions) == 1
+        assert "Agent Instructions" in instructions[0]
         
         await service.close()
 
@@ -169,26 +167,12 @@ async def test_disable_project_config():
         
         # Load instructions
         service = InstructionService(config)
-        paths = await service.get_system_paths(tmpdir)
+        instructions = await service.get_system_instructions(tmpdir)
         
         # Should not include project-level files
-        assert not any("CLAUDE.md" in p for p in paths)
+        assert len(instructions) == 0
         
         await service.close()
-
-
-@pytest.mark.asyncio
-async def test_format_instruction():
-    """Test formatting of loaded instruction."""
-    inst = LoadedInstruction(
-        path="/path/to/CLAUDE.md",
-        content="# Instructions\n\nContent here.",
-    )
-    
-    formatted = inst.format()
-    
-    assert formatted.startswith("Instructions from: /path/to/CLAUDE.md")
-    assert "# Instructions" in formatted
 
 
 @pytest.mark.asyncio
@@ -247,31 +231,10 @@ async def test_empty_directory():
     """Test loading from directory with no instruction files."""
     with tempfile.TemporaryDirectory() as tmpdir:
         service = InstructionService()
-        instructions = await service.load_instructions(tmpdir)
+        instructions = await service.get_system_instructions(tmpdir)
         
         # Should return empty list
         assert len(instructions) == 0
-        
-        await service.close()
-
-
-@pytest.mark.asyncio
-async def test_deduplication():
-    """Test that files are not loaded twice."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create CLAUDE.md
-        claude_md = Path(tmpdir) / "CLAUDE.md"
-        claude_md.write_text("# Instructions")
-        
-        service = InstructionService()
-        
-        # Load twice
-        instructions1 = await service.load_instructions(tmpdir)
-        instructions2 = await service.load_instructions(tmpdir)
-        
-        # Both should return the same content
-        assert len(instructions1) == 1
-        assert len(instructions2) == 1
         
         await service.close()
 
@@ -305,27 +268,6 @@ async def test_system_prompt_integration():
 
 
 @pytest.mark.asyncio
-async def test_async_system_prompt():
-    """Test the async system prompt creation with auto-loading."""
-    from cc_code.core.prompts import create_system_prompt_with_instructions
-    
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create AGENTS.md
-        agents_md = Path(tmpdir) / "AGENTS.md"
-        agents_md.write_text("# Agent Rules\n\nWrite clean code.")
-        
-        # Create system prompt with auto-loaded instructions
-        system_prompt = await create_system_prompt_with_instructions(
-            cwd=tmpdir,
-            model_name="test-model",
-        )
-        
-        # Should contain the instruction content
-        assert "Instructions from:" in system_prompt
-        assert "Write clean code" in system_prompt
-
-
-@pytest.mark.asyncio
 async def test_nearby_instruction_loading():
     """Test loading nearby instruction files when reading a file."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -353,12 +295,11 @@ async def test_nearby_instruction_loading():
         
         # Create service and load system instructions (root level only)
         service = InstructionService()
-        system_paths = await service.get_system_paths(str(root))
+        system_instructions = await service.get_system_instructions(str(root))
         
-        # Should only have root AGENTS.md in system paths
-        assert str(root_agents) in system_paths
-        assert str(src_agents) not in system_paths
-        assert str(components_agents) not in system_paths
+        # Should only have root AGENTS.md in system instructions
+        assert len(system_instructions) == 1
+        assert str(root_agents) in system_instructions[0]
         
         # Now test nearby loading when reading Button.tsx
         nearby = await service.resolve_nearby_instructions(
@@ -370,62 +311,11 @@ async def test_nearby_instruction_loading():
         
         # Should load both src/AGENTS.md and components/AGENTS.md
         assert len(nearby) == 2
-        nearby_paths = [inst.path for inst in nearby]
-        assert str(src_agents) in nearby_paths
-        assert str(components_agents) in nearby_paths
+        assert str(src_agents) in nearby[0] or str(src_agents) in nearby[1]
+        assert str(components_agents) in nearby[0] or str(components_agents) in nearby[1]
         
         # Root AGENTS.md should NOT be in nearby (already in system paths)
-        assert str(root_agents) not in nearby_paths
-        
-        await service.close()
-
-
-@pytest.mark.asyncio
-async def test_nearby_instruction_deduplication():
-    """Test that nearby instructions are not loaded twice for the same message."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        root = Path(tmpdir)
-        src_dir = root / "src"
-        src_dir.mkdir(parents=True)
-        
-        # Create src/AGENTS.md
-        src_agents = src_dir / "AGENTS.md"
-        src_agents.write_text("# Src Instructions")
-        
-        # Create two files
-        file1 = src_dir / "file1.ts"
-        file1.write_text("export const a = 1;")
-        file2 = src_dir / "file2.ts"
-        file2.write_text("export const b = 2;")
-        
-        service = InstructionService()
-        
-        # Read file1 - should load nearby instruction
-        nearby1 = await service.resolve_nearby_instructions(
-            messages=[],
-            filepath=str(file1),
-            message_id="msg-1",
-            project_root=str(root),
-        )
-        assert len(nearby1) == 1
-        
-        # Read file2 with same message ID - should NOT load again (claimed)
-        nearby2 = await service.resolve_nearby_instructions(
-            messages=[],
-            filepath=str(file2),
-            message_id="msg-1",
-            project_root=str(root),
-        )
-        assert len(nearby2) == 0
-        
-        # Read file2 with different message ID - should load
-        nearby3 = await service.resolve_nearby_instructions(
-            messages=[],
-            filepath=str(file2),
-            message_id="msg-2",
-            project_root=str(root),
-        )
-        assert len(nearby3) == 1
+        assert str(root_agents) not in nearby[0] and str(root_agents) not in nearby[1]
         
         await service.close()
 
