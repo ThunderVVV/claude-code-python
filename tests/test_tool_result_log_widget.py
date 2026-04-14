@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from textual.app import App, ComposeResult
 from textual.events import Click
+from textual.widgets import Collapsible
 
 from claude_code.ui.message_widgets import (
     FlushCollapsibleTitle,
@@ -123,6 +124,10 @@ def test_tool_use_widget_title_highlights_leading_action_word():
 
 async def _run_tool_use_widget_renders_static_result_preview() -> None:
     async with ToolUseResultTestApp().run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+
+        collapsible = pilot.app.query_one(Collapsible)
+        collapsible.collapsed = False
         await pilot.pause()
 
         block = pilot.app.query_one(ToolResultBlockWidget)

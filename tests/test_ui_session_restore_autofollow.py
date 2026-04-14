@@ -10,6 +10,16 @@ from claude_code.ui.screens import REPLScreen
 from claude_code.ui.styles import TUI_CSS
 
 
+class _StubMouseScrollUpEvent:
+    def __init__(self) -> None:
+        self.ctrl = False
+        self.shift = False
+        self.stopped = False
+
+    def stop(self) -> None:
+        self.stopped = True
+
+
 class _SessionRestoreAutofollowApp(App[None]):
     CSS = TUI_CSS
 
@@ -50,12 +60,16 @@ async def _run_session_restore_autofollow_test() -> None:
             message: Message | None = None,
             auto_follow: bool = True,
             should_stream_live=None,
+            tool_streaming_context: bool = True,
+            before_widget=None,
         ):
             recorded_auto_follow.append(auto_follow)
             return await original_create_streaming_widget(
                 message=message,
                 auto_follow=auto_follow,
                 should_stream_live=should_stream_live,
+                tool_streaming_context=tool_streaming_context,
+                before_widget=before_widget,
             )
 
         message_list.add_message = tracked_add_message
@@ -100,30 +114,63 @@ async def _run_session_restore_lazy_loading_test() -> None:
         assert screen._session_restore_lazy_load_enabled is True
 
         content_area = screen.query_one("#content-area")
-        content_area.scroll_to(
-            y=0,
-            animate=False,
-            force=True,
-            immediate=True,
-        )
-        await pilot.pause()
-        await pilot.pause()
+        for expected in (25, 30, 35, 40, 45, 50, 55):
+            content_area.scroll_to(
+                y=2,
+                animate=False,
+                force=True,
+                immediate=True,
+            )
+            await pilot.pause()
+            content_area.scroll_to(
+                y=0,
+                animate=False,
+                force=True,
+                immediate=True,
+            )
+            await pilot.pause()
+            await pilot.pause()
+            assert len(message_list._message_widgets) == expected
 
-        assert len(message_list._message_widgets) == 40
-        assert screen._session_restore_lazy_load_enabled is True
-
-        content_area.scroll_to(
-            y=0,
-            animate=False,
-            force=True,
-            immediate=True,
-        )
-        await pilot.pause()
-        await pilot.pause()
-
-        assert len(message_list._message_widgets) == 55
         assert screen._session_restore_lazy_load_enabled is False
 
 
 def test_session_restore_lazy_loads_history_while_scrolling_up() -> None:
     asyncio.run(_run_session_restore_lazy_loading_test())
+
+
+async def _run_session_restore_top_scroll_event_test() -> None:
+    app = _SessionRestoreAutofollowApp()
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+
+        screen = app.screen
+        message_list = screen.query_one("#message-list", MessageList)
+        screen._hide_welcome_widget()
+        await pilot.pause()
+
+        messages = [Message.user_message(f"message {index}") for index in range(55)]
+        initial_messages = screen._prepare_session_restore_initial_messages(messages)
+
+        await screen._render_messages(message_list, initial_messages)
+        screen._anchor_transcript_after_refresh()
+        await pilot.pause()
+
+        assert len(message_list._message_widgets) == 20
+
+        content_area = screen.query_one("#content-area")
+        content_area.scroll_to(y=0, animate=False, force=True, immediate=True)
+        await pilot.pause()
+        await pilot.pause()
+        assert len(message_list._message_widgets) == 25
+
+        # At top, another wheel-up should still request loading more history.
+        content_area._on_mouse_scroll_up(_StubMouseScrollUpEvent())
+        await pilot.pause()
+        await pilot.pause()
+        assert len(message_list._message_widgets) == 30
+
+
+def test_session_restore_lazy_loads_when_mouse_wheels_up_at_top() -> None:
+    asyncio.run(_run_session_restore_top_scroll_event_test())

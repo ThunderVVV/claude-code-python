@@ -275,6 +275,8 @@ class ToolUseWidget(VerticalGroup):
         self._collapsible: Optional[Collapsible] = None
         self._container: Optional[VerticalGroup] = None
         self._did_auto_expand = False
+        self._details_dirty = True
+        self._details_rendered = False
         self.add_class("tool-use-block")
 
     def compose(self) -> ComposeResult:
@@ -288,7 +290,9 @@ class ToolUseWidget(VerticalGroup):
             self._collapsible = collapsible
             with VerticalGroup(classes="tool-detail-body") as container:
                 self._container = container
-                yield from self._compose_details()
+                # Details are mounted lazily only when expanded, to avoid
+                # expensive diff/markdown rendering for collapsed tool blocks.
+                yield Static("", classes="tool-detail-placeholder", markup=False)
 
     def set_result(self, result: str, is_error: bool) -> None:
         """Attach the tool result to the existing tool-use block."""
@@ -305,8 +309,8 @@ class ToolUseWidget(VerticalGroup):
             self._collapsible.title = self._build_title()
             self._auto_expand_once()
             self.apply_transcript_collapsible_mode()
-        if self._container and self._container.is_mounted:
-            self._render_details()
+        self._details_dirty = True
+        self._render_details_if_needed()
 
     def update_tool_input(self, tool_name: str, tool_input: dict) -> None:
         """Refresh the tool summary/details when fuller input arrives later."""
@@ -316,8 +320,8 @@ class ToolUseWidget(VerticalGroup):
             self._collapsible.title = self._build_title()
             self._auto_expand_once()
             self.apply_transcript_collapsible_mode()
-        if self._container and self._container.is_mounted:
-            self._render_details()
+        self._details_dirty = True
+        self._render_details_if_needed()
 
     def on_mount(self) -> None:
         """Refresh after mount in case results arrived early."""
@@ -325,8 +329,13 @@ class ToolUseWidget(VerticalGroup):
             self._collapsible.title = self._build_title()
             self._auto_expand_once()
             self.apply_transcript_collapsible_mode()
-        if self._container and self._container.is_mounted and self._result:
-            self._render_details()
+        self._render_details_if_needed()
+
+    def on_collapsible_expanded(self, event: Collapsible.Expanded) -> None:
+        """Render deferred details when the tool block is expanded."""
+        if not self._collapsible or event.collapsible is not self._collapsible:
+            return
+        self._render_details_if_needed()
 
     def _build_title(self) -> Content:
         """Return the current single-line title for the tool call."""
@@ -396,8 +405,10 @@ class ToolUseWidget(VerticalGroup):
 
     def _compose_details(self) -> ComposeResult:
         """Compose the detail widgets."""
+        diff_view = self._build_diff_view()
+
         # Input parameters
-        exclude_keys = self._get_input_exclusions()
+        exclude_keys = self._get_input_exclusions(diff_view)
         detail_lines = format_tool_input_details(self.tool_input, exclude_keys)
         if detail_lines:
             for line in detail_lines:
@@ -406,7 +417,6 @@ class ToolUseWidget(VerticalGroup):
             yield Static("Waiting for parameters", classes="tool-param", markup=False)
 
         # Diff view or output
-        diff_view = self._build_diff_view()
         if diff_view is not None:
             yield diff_view
         elif self._result is not None:
@@ -419,9 +429,9 @@ class ToolUseWidget(VerticalGroup):
         """Compose the collapsible tool-result block."""
         yield ToolResultBlockWidget(self._output_lines)
 
-    def _get_input_exclusions(self) -> set[str]:
+    def _get_input_exclusions(self, diff_view: DiffView | None) -> set[str]:
         """Hide raw diff payloads once a diff view is available."""
-        if self._build_diff_view() is None:
+        if diff_view is None:
             return set()
         if self.tool_name == "Edit":
             return {"old_string", "new_string"}
@@ -497,6 +507,20 @@ class ToolUseWidget(VerticalGroup):
             child.remove()
         for widget in self._compose_details():
             self._container.mount(widget)
+        self._details_rendered = True
+        self._details_dirty = False
+
+    def _render_details_if_needed(self) -> None:
+        """Render details only when visible or explicitly expanded."""
+        if not self._container or not self._container.is_mounted:
+            return
+        if not self._collapsible:
+            return
+        if self._collapsible.collapsed:
+            return
+        if self._details_rendered and not self._details_dirty:
+            return
+        self._render_details()
 
 
 class MessageWidget(VerticalGroup):
@@ -510,12 +534,14 @@ class MessageWidget(VerticalGroup):
         message: Optional[Message] = None,
         streaming: bool = False,
         should_stream_live: Callable[[], bool] | None = None,
+        tool_streaming_context: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self._streaming = streaming
         self._message = message
         self._should_stream_live = should_stream_live
+        self._tool_streaming_context = tool_streaming_context
 
         # Internal state for streaming
         self._thinking_content: str = ""
@@ -669,7 +695,7 @@ class MessageWidget(VerticalGroup):
                     tool_name=tool_use.name,
                     tool_input=tool_use.input,
                     tool_use_id=tool_use.id,
-                    streaming_context=True,
+                    streaming_context=self._tool_streaming_context,
                 )
                 if tool_use.id:
                     self._tool_widgets_by_id[tool_use.id] = tool_widget
@@ -755,7 +781,7 @@ class MessageWidget(VerticalGroup):
                 tool_name=tool_use.name,
                 tool_input=tool_use.input,
                 tool_use_id=tool_use.id,
-                streaming_context=True,
+                streaming_context=self._tool_streaming_context,
             )
             if tool_use.id:
                 self._tool_widgets_by_id[tool_use.id] = tool_widget
@@ -869,6 +895,7 @@ class MessageList(VerticalGroup):
         message: Optional[Message] = None,
         auto_follow: bool = True,
         should_stream_live: Callable[[], bool] | None = None,
+        tool_streaming_context: bool = True,
         before_widget: Optional[MessageWidget] = None,
     ) -> MessageWidget:
         """Create a new streaming message widget for assistant responses"""
@@ -876,6 +903,7 @@ class MessageList(VerticalGroup):
             message=message,
             streaming=True,
             should_stream_live=should_stream_live,
+            tool_streaming_context=tool_streaming_context,
         )
         await self._mount_message_widget(
             widget,

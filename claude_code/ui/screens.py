@@ -7,6 +7,7 @@ import json
 import os
 import re
 import logging
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -70,12 +71,9 @@ class TranscriptContainer(ScrollableContainer):
 
     FOCUS_ON_CLICK = False
 
-    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
-        """Notify the screen when the user scrolls upward near transcript top."""
-        super().watch_scroll_y(old_value, new_value)
-        if new_value >= old_value:
-            return
-        if new_value > 1:
+    def _notify_top_scroll_intent(self) -> None:
+        """Notify screen when the user indicates intent to load older history."""
+        if self.scroll_y > 1:
             return
         try:
             callback = getattr(self.screen, "_on_transcript_scrolled_to_top", None)
@@ -83,6 +81,23 @@ class TranscriptContainer(ScrollableContainer):
                 callback()
         except Exception:
             pass
+
+    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        """Notify the screen when the user scrolls upward near transcript top."""
+        super().watch_scroll_y(old_value, new_value)
+        if new_value >= old_value:
+            return
+        self._notify_top_scroll_intent()
+
+    def _on_mouse_scroll_up(self, event) -> None:
+        """Trigger lazy-load intent even when already pinned at scroll top."""
+        super()._on_mouse_scroll_up(event)
+        self._notify_top_scroll_intent()
+
+    def _on_scroll_up(self, event) -> None:
+        """Handle keyboard/page scroll-up as a lazy-load trigger."""
+        super()._on_scroll_up(event)
+        self._notify_top_scroll_intent()
 
 
 class REPLScreen(Screen):
@@ -97,7 +112,7 @@ class REPLScreen(Screen):
 
     AUTO_FOCUS = "#user-input"
     SESSION_HISTORY_INITIAL_RENDER_COUNT = 20
-    SESSION_HISTORY_LOAD_BATCH_SIZE = 20
+    SESSION_HISTORY_LOAD_BATCH_SIZE = 5
 
     def __init__(
         self,
@@ -1003,7 +1018,11 @@ class REPLScreen(Screen):
                             if len(session_info.messages) > 0
                             else []
                         )
-                        await self._render_messages(message_list, messages_to_render)
+                        await self._render_messages(
+                            message_list,
+                            messages_to_render,
+                            auto_follow_each=False,
+                        )
                         self._anchor_transcript_after_refresh()
 
                         last_msg = (
@@ -1092,7 +1111,11 @@ class REPLScreen(Screen):
                 messages = messages[:-1]
 
             initial_messages = self._prepare_session_restore_initial_messages(messages)
-            await self._render_messages(message_list, initial_messages)
+            await self._render_messages(
+                message_list,
+                initial_messages,
+                auto_follow_each=False,
+            )
             self._anchor_transcript_after_refresh()
 
             self._refresh_context_usage_label()
@@ -1271,40 +1294,42 @@ class REPLScreen(Screen):
         tool_widget_context: dict[str, ToolUseWidget] = {}
         insert_before = message_list.first_message_widget()
 
-        for message in messages:
-            if message.type == MessageRole.ASSISTANT:
-                assistant_widget = await message_list.create_streaming_widget(
-                    message=message,
+        with self.app.batch_update():
+            for message in messages:
+                if message.type == MessageRole.ASSISTANT:
+                    assistant_widget = await message_list.create_streaming_widget(
+                        message=message,
+                        auto_follow=False,
+                        tool_streaming_context=False,
+                        before_widget=insert_before,
+                    )
+                    tool_widget_context = assistant_widget.get_tool_widgets()
+                    continue
+
+                if message.type == MessageRole.TOOL:
+                    tool_result = next(
+                        (
+                            block
+                            for block in message.content
+                            if isinstance(block, ToolResultContent)
+                        ),
+                        None,
+                    )
+                    if tool_result is None:
+                        continue
+
+                    tool_widget = tool_widget_context.get(tool_result.tool_use_id)
+                    if tool_widget is not None:
+                        tool_widget.set_result(tool_result.content, tool_result.is_error)
+                    continue
+
+                assistant_widget = None
+                tool_widget_context = {}
+                await message_list.add_message(
+                    message,
                     auto_follow=False,
                     before_widget=insert_before,
                 )
-                tool_widget_context = assistant_widget.get_tool_widgets()
-                continue
-
-            if message.type == MessageRole.TOOL:
-                tool_result = next(
-                    (
-                        block
-                        for block in message.content
-                        if isinstance(block, ToolResultContent)
-                    ),
-                    None,
-                )
-                if tool_result is None:
-                    continue
-
-                tool_widget = tool_widget_context.get(tool_result.tool_use_id)
-                if tool_widget is not None:
-                    tool_widget.set_result(tool_result.content, tool_result.is_error)
-                continue
-
-            assistant_widget = None
-            tool_widget_context = {}
-            await message_list.add_message(
-                message,
-                auto_follow=False,
-                before_widget=insert_before,
-            )
 
     async def _load_more_session_history(self) -> None:
         """Lazy-load earlier session messages when the user scrolls upward."""
@@ -1368,41 +1393,48 @@ class REPLScreen(Screen):
         self,
         message_list: MessageList,
         messages: list[Message],
+        auto_follow_each: bool = True,
     ) -> None:
         """Render a list of messages."""
         assistant_widget: Optional[MessageWidget] = None
         tool_widget_context: dict[str, ToolUseWidget] = {}
         message_list.reset_auto_follow_output()
 
-        for message in messages:
-            auto_follow = self._should_follow_transcript()
-
-            if message.type == MessageRole.ASSISTANT:
-                assistant_widget = await message_list.create_streaming_widget(
-                    message=message, auto_follow=auto_follow
+        context = nullcontext() if auto_follow_each else self.app.batch_update()
+        with context:
+            for message in messages:
+                auto_follow = (
+                    self._should_follow_transcript() if auto_follow_each else False
                 )
-                tool_widget_context = assistant_widget.get_tool_widgets()
-                continue
 
-            if message.type == MessageRole.TOOL:
-                tool_result = next(
-                    (
-                        block
-                        for block in message.content
-                        if isinstance(block, ToolResultContent)
-                    ),
-                    None,
-                )
-                if tool_result is None:
+                if message.type == MessageRole.ASSISTANT:
+                    assistant_widget = await message_list.create_streaming_widget(
+                        message=message,
+                        auto_follow=auto_follow,
+                        tool_streaming_context=False,
+                    )
+                    tool_widget_context = assistant_widget.get_tool_widgets()
                     continue
 
-                tool_widget = tool_widget_context.get(tool_result.tool_use_id)
-                if tool_widget is not None:
-                    tool_widget.set_result(tool_result.content, tool_result.is_error)
-                    message_list.schedule_scroll_to_latest(auto_follow)
+                if message.type == MessageRole.TOOL:
+                    tool_result = next(
+                        (
+                            block
+                            for block in message.content
+                            if isinstance(block, ToolResultContent)
+                        ),
+                        None,
+                    )
+                    if tool_result is None:
+                        continue
 
-                continue
+                    tool_widget = tool_widget_context.get(tool_result.tool_use_id)
+                    if tool_widget is not None:
+                        tool_widget.set_result(tool_result.content, tool_result.is_error)
+                        message_list.schedule_scroll_to_latest(auto_follow)
 
-            assistant_widget = None
-            tool_widget_context = {}
-            await message_list.add_message(message, auto_follow=auto_follow)
+                    continue
+
+                assistant_widget = None
+                tool_widget_context = {}
+                await message_list.add_message(message, auto_follow=auto_follow)
