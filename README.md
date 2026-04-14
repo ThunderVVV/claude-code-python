@@ -120,7 +120,7 @@ pip install -e .
 
 说明：
 - `current_model`：当前默认模型配置 ID
-- `theme`：`cc-py` 的 TUI 主题，默认 `atom-one-dark`
+- `theme`：`cc-py` 的 TUI 主题，默认 `atom-one-dark`, 可选 `tokyo-night`等其他textual支持主题
 - `models.<id>`：每个模型固定包含 `api_key`、`api_url`、`model_name`、`context`
 
 兼容迁移：

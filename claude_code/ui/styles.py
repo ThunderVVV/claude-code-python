@@ -123,8 +123,8 @@ WelcomeWidget:focus {
     max-height: 10;
     background: transparent;
     color: $foreground;
-    border-top: solid $surface;
-    border-bottom: solid $surface;
+    border-top: solid $foreground 80%;
+    border-bottom: solid $foreground 80%;
     border-left: none;
     border-right: none;
     padding: 0 1;
