@@ -204,13 +204,8 @@ class CompactRequest(BaseModel):
 
 def _normalize_api_prefix(api_prefix: str) -> str:
     """Normalize an optional API prefix for route registration."""
-    prefix = api_prefix.strip()
-    if not prefix or prefix == "/":
-        return ""
-    prefix = prefix.rstrip("/")
-    if not prefix.startswith("/"):
-        prefix = f"/{prefix}"
-    return prefix
+    prefix = api_prefix.strip().strip("/")
+    return f"/{prefix}" if prefix else ""
 
 
 def serialize_file_expansions(file_expansions: list[FileExpansion]) -> list[dict]:
@@ -263,8 +258,8 @@ def build_visible_file_expansions(
     return expansions
 
 
-# Content block converters
 def content_block_to_dict(block) -> dict:
+    """Convert content block to dictionary for JSON serialization."""
     if isinstance(block, TextContent):
         return {"type": "text", "text": block.text}
     elif isinstance(block, ThinkingContent):
@@ -326,6 +321,7 @@ def message_to_dict(message, working_directory: str = "") -> dict:
 
 
 def event_to_dict(event, working_directory: str = "") -> dict:
+    """Convert event to dictionary for SSE streaming."""
     if isinstance(event, CoreTextEvent):
         return {"type": "text", "text": event.text}
     elif isinstance(event, CoreThinkingEvent):
