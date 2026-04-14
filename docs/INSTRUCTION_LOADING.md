@@ -274,7 +274,7 @@ class QueryEngine:
 ```json
 {
   "current_model": "claude-sonnet",
-  "theme": "tokyo-night",
+  "theme": "atom-one-dark",
   "models": {
     "claude-sonnet": {
       "api_key": "your-api-key",

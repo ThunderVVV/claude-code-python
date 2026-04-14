@@ -12,7 +12,7 @@ from claude_code.services.openai_client import OpenAIClientConfig
 
 DEFAULT_SETTINGS_BASE_DIR = Path.home() / ".claude-code-python"
 DEFAULT_SETTINGS_PATH = DEFAULT_SETTINGS_BASE_DIR / "settings.json"
-DEFAULT_THEME_NAME = "tokyo-night"
+DEFAULT_THEME_NAME = "atom-one-dark"
 
 _ENV_ASSIGNMENT_PATTERN = re.compile(
     r"^(?P<comment>\s*#\s*)?(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>.*)$"

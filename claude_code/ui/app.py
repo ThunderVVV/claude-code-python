@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_THEME_NAME = "tokyo-night"
+DEFAULT_THEME_NAME = "atom-one-dark"
 
 
 def _resolve_theme_name(
