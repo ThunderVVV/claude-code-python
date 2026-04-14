@@ -227,8 +227,6 @@ class Message:
     timestamp: datetime = field(default_factory=datetime.now)
     is_meta: bool = False
     is_compact_summary: bool = False
-    tool_use_result: Any = None
-    is_visible_in_transcript_only: bool = False
     usage: Optional[Usage] = None
     stop_reason: Optional[str] = None
     parent_id: Optional[str] = None
@@ -297,7 +295,6 @@ class Message:
                     metadata=metadata,
                 )
             ],
-            tool_use_result=content,
         )
 
     def get_text(self) -> str:
@@ -364,7 +361,6 @@ class Message:
             message_dict["timestamp"] = self.timestamp.isoformat()
             message_dict["is_meta"] = self.is_meta
             message_dict["is_compact_summary"] = self.is_compact_summary
-            message_dict["is_visible_in_transcript_only"] = self.is_visible_in_transcript_only
 
             if self.parent_id:
                 message_dict["parent_id"] = self.parent_id

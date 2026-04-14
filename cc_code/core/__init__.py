@@ -27,7 +27,7 @@ from cc_code.core.tools import (
     ToolInputSchema,
     ToolRegistry,
 )
-from cc_code.core.query_engine import QueryEngine, QueryConfig
+from cc_code.core.query_engine import QueryEngine
 
 __all__ = [
     # Messages
@@ -53,7 +53,6 @@ __all__ = [
     "ErrorEvent",
     # Query Engine
     "QueryEngine",
-    "QueryConfig",
     # Tools
     "BaseTool",
     "ToolContext",

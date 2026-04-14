@@ -410,11 +410,6 @@ class SnapshotManager:
         )
 
 
-def compute_worktree_hash(working_directory: str) -> str:
-    """Compute a hash for the working directory path"""
-    return hashlib.sha256(working_directory.encode()).hexdigest()[:16]
-
-
 # Revert state models (previously in revert.py)
 
 

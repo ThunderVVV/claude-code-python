@@ -566,7 +566,3 @@ def create_app(
         app.mount("/static", StaticFiles(directory=static_path), name="static")
 
     return app
-
-
-# Default app instance for backward compatibility
-app = create_app()

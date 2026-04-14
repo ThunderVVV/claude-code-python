@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncGenerator, List, Optional
 
 if TYPE_CHECKING:
@@ -50,14 +49,6 @@ from cc_code.utils.logging_config import log_full_exception
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class QueryConfig:
-    """Configuration for the query engine"""
-
-    working_directory: str = ""
-    max_turns: int = 1000000  # Large value for effectively unlimited turns
-
-
 class QueryEngine:
     """
     Core query engine that handles the conversation loop.
@@ -77,7 +68,8 @@ class QueryEngine:
         self,
         client_config: OpenAIClientConfig,
         tool_registry: ToolRegistry,
-        config: Optional[QueryConfig] = None,
+        working_directory: str = "",
+        max_turns: int = 1000000,  # Large value for effectively unlimited turns
         session_id: Optional[str] = None,
         initial_messages: Optional[List[Message]] = None,
         initial_current_turn: int = 0,
@@ -88,7 +80,7 @@ class QueryEngine:
     ):
         self.client_config = client_config
         self.tool_registry = tool_registry
-        self.config = config or QueryConfig()
+        self.max_turns = max_turns
 
         # Mutable state
         self.state = SessionState()
@@ -99,8 +91,9 @@ class QueryEngine:
             output_tokens=(initial_usage.output_tokens if initial_usage else 0),
         )
         self._client: Optional[OpenAIClient] = None
-        self._session_id = session_id or generate_uuid()
-        self.state.session_id = self._session_id
+        self.state.session_id = session_id or generate_uuid()
+        self.state.title = session_title or ""
+        self.state.created_at = session_created_at or ""
         self._is_initialized = False
         self._interrupt_reason: Optional[str] = None
         self._active_task: Optional[asyncio.Task[Any]] = None
@@ -108,14 +101,10 @@ class QueryEngine:
         self._cancel_event = asyncio.Event()
 
         # Working directory
-        self._cwd = self.config.working_directory or os.getcwd()
+        self._cwd = working_directory or os.getcwd()
 
         # Session store for persistence
         self._session_store = session_store
-
-        # Session metadata
-        self._session_title = session_title
-        self._session_created_at = session_created_at
 
         # Snapshot system for file revert
         self._snapshot_manager: Optional["SnapshotManager"] = None
@@ -154,15 +143,11 @@ class QueryEngine:
         if session_id:
             persisted = session_store.load_session(session_id)
 
-        config = QueryConfig(
-            working_directory=working_directory
-            or (persisted.working_directory if persisted else ""),
-        )
-
         engine = cls(
             client_config,
             tool_registry,
-            config,
+            working_directory=working_directory
+            or (persisted.working_directory if persisted else ""),
             session_id=(persisted.session_id if persisted else session_id),
             initial_messages=list(persisted.messages) if persisted else None,
             initial_current_turn=persisted.current_turn if persisted else 0,
@@ -240,7 +225,7 @@ class QueryEngine:
 
     def get_session_id(self) -> str:
         """Get the session ID"""
-        return self._session_id
+        return self.state.session_id
 
     def get_working_directory(self) -> str:
         """Return the working directory for this session."""
@@ -445,7 +430,7 @@ class QueryEngine:
         return ToolContext(
             working_directory=self._cwd,
             project_root=self._cwd,
-            session_id=self._session_id,
+            session_id=self.state.session_id,
             cancel_event=self._cancel_event,
             instruction_service=self._instruction_service,
             message_id=message_id,
@@ -543,9 +528,6 @@ class QueryEngine:
         """
         self.state.clear()
         self.clear_interrupt()
-        # Reset to a new session ID
-        self._session_id = generate_uuid()
-        self.state.session_id = self._session_id
 
     def interrupt(self, reason: str = "interrupt") -> None:
         """Interrupt the in-flight query, matching the TypeScript QueryEngine API."""
@@ -591,13 +573,13 @@ class QueryEngine:
         try:
             from cc_code.core.session_store import RevertStateData, derive_session_title
 
-            self._session_title = self._session_title or derive_session_title(
-                self.state.messages, self._session_id
-            )
+            # Derive title if not set
+            if not self.state.title:
+                self.state.title = derive_session_title(
+                    self.state.messages, self.state.session_id
+                )
 
             # Update state metadata
-            self.state.title = self._session_title
-            self.state.created_at = self._session_created_at or ""
             self.state.working_directory = self._cwd
             self.state.model_id = self.client_config.model_id
             self.state.model_name = self.client_config.model_name
@@ -636,22 +618,23 @@ class QueryEngine:
             }
 
             session = self._session_store.save_snapshot(
-                session_id=self._session_id,
+                session_id=self.state.session_id,
                 messages=list(self.state.messages),
                 working_directory=self._cwd,
                 current_turn=self.state.current_turn,
-                title=self._session_title,
-                created_at=self._session_created_at,
+                title=self.state.title,
+                created_at=self.state.created_at,
                 model_id=self.client_config.model_id,
                 model_name=self.client_config.model_name,
                 total_usage=self.state.total_usage,
                 revert_state=revert_data,
                 total_diff=total_diff,
             )
-            self._session_title = session.title
-            self._session_created_at = session.created_at
+            # Update state with any derived values from save
+            self.state.title = session.title
+            self.state.created_at = session.created_at
             logger.debug(
-                f"Persisted session {self._session_id}: {len(self.state.messages)} messages"
+                f"Persisted session {self.state.session_id}: {len(self.state.messages)} messages"
             )
         except Exception as e:
             logger.warning(f"Failed to persist session: {e}")
@@ -728,19 +711,19 @@ class QueryEngine:
                     )  # Keep the same UUID for consistency
                     self.state.messages[-1] = user_message
                     logger.info(
-                        f"Replaced rewound user message - session_id={self._session_id}"
+                        f"Replaced rewound user message - session_id={self.state.session_id}"
                     )
                     # Clear revert state since user has submitted a new message
                     self.clear_revert_state()
                 else:
                     self.state.add_message(user_message)
                     logger.info(
-                        f"User message created - session_id={self._session_id}, web_enabled={web_enabled}"
+                        f"User message created - session_id={self.state.session_id}, web_enabled={web_enabled}"
                     )
             else:
                 self.state.add_message(user_message)
                 logger.info(
-                    f"User message created - session_id={self._session_id}, web_enabled={web_enabled}"
+                    f"User message created - session_id={self.state.session_id}, web_enabled={web_enabled}"
                 )
 
             yield MessageCompleteEvent(message=user_message)
@@ -926,7 +909,7 @@ class QueryEngine:
 
         system_prompt = await self._build_system_prompt()
 
-        while self.state.current_turn < self.config.max_turns:
+        while self.state.current_turn < self.max_turns:
             self.state.is_streaming = True
             self.state.current_streaming_text = ""
 
@@ -1180,7 +1163,7 @@ class QueryEngine:
                 self.state.current_turn += 1
 
                 # Check if we should continue
-                has_more = self.state.current_turn < self.config.max_turns
+                has_more = self.state.current_turn < self.max_turns
 
                 # Persist session when stop_reason is 'stop'
                 if stop_reason == "stop":

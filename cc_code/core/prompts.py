@@ -7,11 +7,6 @@ import platform
 import sys
 from typing import List, Optional
 
-from cc_code.core.instruction import (
-    InstructionConfig,
-    load_system_instructions,
-)
-
 
 def prepend_bullets(items: List[str | List[str]]) -> List[str]:
     """Prepend bullet points to items"""
@@ -204,27 +199,3 @@ def create_default_system_prompt(
         sections.extend(instructions)
 
     return "\n\n".join(sections)
-
-
-async def create_system_prompt_with_instructions(
-    cwd: Optional[str] = None,
-    model_name: str = "claude-sonnet-4-6",
-    instruction_config: Optional[InstructionConfig] = None,
-) -> str:
-    """Create system prompt with automatically loaded instructions.
-
-    This is an async version that automatically loads CLAUDE.md, AGENTS.md, etc.
-    from the project and global directories.
-
-    Args:
-        cwd: Current working directory
-        model_name: Name of the model being used
-        instruction_config: Optional custom instruction configuration
-    """
-    if cwd is None:
-        cwd = os.getcwd()
-
-    # Load instructions from CLAUDE.md, AGENTS.md, etc.
-    instructions = await load_system_instructions(cwd, instruction_config)
-
-    return create_default_system_prompt(cwd, model_name, instructions)

@@ -9,7 +9,6 @@ Aligned with TypeScript implementation in session/compaction.ts
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from cc_code.core.messages import (
@@ -18,8 +17,6 @@ from cc_code.core.messages import (
     TextContent,
     ToolUseContent,
     ToolResultContent,
-    Usage,
-    generate_uuid,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,17 +52,6 @@ When constructing the summary, try to stick to this template:
 
 [Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
 ---"""
-
-
-@dataclass
-class CompactionResult:
-    """Result of a compaction operation."""
-
-    success: bool
-    summary: str = ""
-    error: Optional[str] = None
-    tokens_saved: int = 0
-    messages_compacted: int = 0
 
 
 class SessionCompaction:
@@ -140,11 +126,6 @@ class SessionCompaction:
                 total += self.estimate_tokens(json.dumps(block.input))
         return total
 
-    def should_compact(self) -> bool:
-        """Check if compaction should be triggered based on message count."""
-        eligible = self.get_messages_for_compaction()
-        return len(eligible) > 20
-
     def create_compaction_prompt(
         self,
         custom_prompt: Optional[str] = None,
@@ -213,76 +194,3 @@ class SessionCompaction:
             # Skip TOOL messages entirely for compaction
 
         return result
-
-    def create_summary_message(
-        self,
-        summary_text: str,
-        parent_message_id: Optional[str] = None,
-    ) -> Message:
-        """Create a summary message from the generated summary text.
-
-        Args:
-            summary_text: The generated summary text
-            parent_message_id: Optional parent message ID
-
-        Returns:
-            A Message object marked as a compact summary
-        """
-        msg = Message.assistant_message(
-            content=[TextContent(text=summary_text)],
-        )
-        msg.is_compact_summary = True
-        msg.uuid = parent_message_id or generate_uuid()
-        return msg
-
-    def compact_messages(
-        self,
-        summary_text: str,
-        keep_last_n: int = 2,
-    ) -> List[Message]:
-        """Create a compacted message list with the summary.
-
-        Args:
-            summary_text: The generated summary text
-            keep_last_n: Number of recent messages to keep after summary
-
-        Returns:
-            New list of messages with summary replacing old history
-        """
-        if not self.messages:
-            return []
-
-        # Find where to insert the summary
-        # Keep the last few messages after the summary
-        summary_msg = self.create_summary_message(summary_text)
-
-        # Get messages to keep (recent ones)
-        recent_messages = []
-        eligible = self.get_messages_for_compaction()
-
-        # Keep last N messages
-        if len(eligible) > keep_last_n:
-            recent_messages = eligible[-keep_last_n:]
-        else:
-            recent_messages = eligible
-
-        # Build new message list
-        result = [summary_msg]
-
-        # Add recent messages
-        for msg in recent_messages:
-            result.append(msg)
-
-        return result
-
-
-def is_context_overflow(
-    usage: Usage,
-    context_window: int,
-    threshold: float = 0.9,
-) -> bool:
-    if not context_window:
-        return False
-
-    total_tokens = usage.input_tokens + usage.output_tokens
-    return total_tokens > context_window * threshold

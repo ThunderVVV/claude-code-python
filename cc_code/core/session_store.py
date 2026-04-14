@@ -12,7 +12,6 @@ from typing import Any, Optional
 from cc_code.core.messages import (
     Message,
     MessageRole,
-    ToolResultContent,
     Usage,
     generate_uuid,
     content_block_from_dict,
@@ -186,8 +185,11 @@ class SessionStore:
             "current_turn": state.current_turn,
             "model_id": state.model_id,
             "model_name": state.model_name,
-            "total_usage": _usage_to_dict(state.total_usage),
-            "messages": [_message_to_dict(message) for message in state.messages],
+            "total_usage": {
+                "input_tokens": state.total_usage.input_tokens,
+                "output_tokens": state.total_usage.output_tokens,
+            },
+            "messages": [message.serialize(format="persistence") for message in state.messages],
             "revert_state": revert_data,
             "total_diff": total_diff,
         }
@@ -209,6 +211,21 @@ class SessionStore:
             return None
 
         try:
+            # Reconstruct usage
+            usage_data = payload.get("total_usage")
+            if not isinstance(usage_data, dict):
+                usage_data = {}
+            total_usage = Usage(
+                input_tokens=int(usage_data.get("input_tokens", 0)),
+                output_tokens=int(usage_data.get("output_tokens", 0)),
+            )
+
+            # Reconstruct messages
+            messages = []
+            for message_data in payload.get("messages", []):
+                if isinstance(message_data, dict):
+                    messages.append(_reconstruct_message(message_data))
+
             state = SessionState(
                 session_id=str(payload["session_id"]),
                 title=str(payload.get("title", "")).strip() or session_id[:8],
@@ -218,12 +235,8 @@ class SessionStore:
                 current_turn=int(payload.get("current_turn", 0)),
                 model_id=payload.get("model_id"),
                 model_name=payload.get("model_name"),
-                total_usage=_usage_from_dict(payload.get("total_usage")),
-                messages=[
-                    _message_from_dict(message_data)
-                    for message_data in payload.get("messages", [])
-                    if isinstance(message_data, dict)
-                ],
+                total_usage=total_usage,
+                messages=messages,
             )
             
             # Restore revert state
@@ -319,28 +332,7 @@ def _normalize_title_text(text: str) -> str:
     return sentence[:77].rstrip() + "..."
 
 
-def _usage_to_dict(usage: Usage) -> dict[str, int]:
-    return {
-        "input_tokens": usage.input_tokens,
-        "output_tokens": usage.output_tokens,
-    }
-
-
-def _usage_from_dict(data: Any) -> Usage:
-    if not isinstance(data, dict):
-        return Usage()
-    return Usage(
-        input_tokens=int(data.get("input_tokens", 0)),
-        output_tokens=int(data.get("output_tokens", 0)),
-    )
-
-
-def _message_to_dict(message: Message) -> dict[str, Any]:
-    """Convert message to dict for persistence using unified Message.serialize()"""
-    return message.serialize(format="persistence")
-
-
-def _message_from_dict(data: dict[str, Any]) -> Message:
+def _reconstruct_message(data: dict[str, Any]) -> Message:
     """Reconstruct Message from persisted dict."""
     timestamp_value = data.get("timestamp")
     timestamp = (
@@ -381,13 +373,6 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
             output_tokens=usage_data.get("output_tokens", 0),
         )
 
-    tool_use_result = data.get("tool_use_result")
-    if tool_use_result is None and role == MessageRole.TOOL:
-        for block in content:
-            if isinstance(block, ToolResultContent):
-                tool_use_result = block.content
-                break
-
     return Message(
         type=role,
         content=content,
@@ -395,10 +380,6 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
         timestamp=timestamp,
         is_meta=bool(data.get("is_meta", False)),
         is_compact_summary=bool(data.get("is_compact_summary", False)),
-        tool_use_result=tool_use_result,
-        is_visible_in_transcript_only=bool(
-            data.get("is_visible_in_transcript_only", False)
-        ),
         usage=usage,
         stop_reason=data.get("stop_reason"),
         parent_id=data.get("parent_id"),

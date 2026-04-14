@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -21,11 +21,7 @@ class ToolInputSchema:
     required: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "type": self.type,
-            "properties": self.properties,
-            "required": self.required,
-        }
+        return asdict(self)
 
 
 @dataclass
