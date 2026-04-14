@@ -1,6 +1,6 @@
 {
   "name": "@thundervvv/cc-py",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "CC Code Python - AI programming assistant",
   "main": "bin/cc-py.js",
   "bin": {
