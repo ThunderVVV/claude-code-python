@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed - 2026-04-14
 
+#### TUI Markdown First Block Top Margin
+- Fixed transcript messages starting with extra blank line by setting first markdown block top_margin = 0
+- Removed hardcoded top_margin = 1 for first block in Markdown.render()
+- Added `test_streaming_markdown_first_block_has_no_top_margin()` test
+- Updated existing spacing test assertions
+
 #### TUI Bug Fixes and Improvements
 - Fixed `InputTextArea` cursor_blink compatibility with different Textual versions
 - Fixed tool title prefix to show "● " before tool summary

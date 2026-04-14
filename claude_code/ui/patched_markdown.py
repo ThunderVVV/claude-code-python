@@ -702,6 +702,11 @@ def _parse_tokens(
                 if external is not None:
                     blocks.append(external)
 
+    if blocks:
+        # Transcript messages should start flush with their host container rather
+        # than inheriting an extra blank line from the first markdown block.
+        blocks[0].top_margin = 0
+
     return blocks
 
 
@@ -1141,8 +1146,6 @@ class Markdown(ScrollView, can_focus=True):
         for index, block in enumerate(self._blocks):
             # Compute top margin (collapse with previous bottom margin)
             top_margin = max(block.top_margin, last_bottom_margin) - last_bottom_margin
-            if index == 0:
-                top_margin = 1
 
             # Calculate content height
             border_width = len(block.border_left) if block.border_left else 0

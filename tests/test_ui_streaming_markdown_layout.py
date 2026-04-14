@@ -50,7 +50,7 @@ async def _run_streaming_markdown_layout_test() -> None:
         content_area = screen.query_one("#content-area")
 
         assert markdown.size.height == markdown.virtual_size.height
-        assert markdown.virtual_size.height == 5
+        assert markdown.virtual_size.height == 4
         assert markdown.size.height < content_area.size.height
         assert markdown.focus_on_click() is False
 
