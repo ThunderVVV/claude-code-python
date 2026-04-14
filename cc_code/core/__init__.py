@@ -9,7 +9,7 @@ from cc_code.core.messages import (
     PatchContent,
     Message,
     MessageRole,
-    QueryState,
+    SessionState,
     Usage,
     QueryEvent,
     TextEvent,
@@ -39,7 +39,7 @@ __all__ = [
     "PatchContent",
     "Message",
     "MessageRole",
-    "QueryState",
+    "SessionState",
     "Usage",
     "generate_uuid",
     # Events

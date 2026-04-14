@@ -22,7 +22,7 @@ from cc_code.core.messages import (
     ContentBlock,
     Message,
     MessageRole,
-    QueryState,
+    SessionState,
     QueryEvent,
     TextContent,
     ThinkingContent,
@@ -91,7 +91,7 @@ class QueryEngine:
         self.config = config or QueryConfig()
 
         # Mutable state
-        self.state = QueryState()
+        self.state = SessionState()
         self.state.messages = list(initial_messages or [])
         self.state.current_turn = initial_current_turn
         self.state.total_usage = Usage(
@@ -148,7 +148,6 @@ class QueryEngine:
             working_directory: Working directory for the session
             instruction_config: Optional instruction configuration for CLAUDE.md/AGENTS.md loading
         """
-        from cc_code.core.messages import SessionState
         from cc_code.core.snapshot import DiffSummary
 
         persisted: Optional[SessionState] = None

@@ -84,11 +84,7 @@ class TextContent:
     type: str = field(default="text", init=False)
     text: str = ""
 
-    def to_api_format(self) -> Dict[str, Any]:
-        return self.to_dict()
-
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
         return {"type": "text", "text": self.text}
 
 
@@ -100,11 +96,7 @@ class ThinkingContent:
     thinking: str = ""
     signature: str = ""
 
-    def to_api_format(self) -> Dict[str, Any]:
-        return self.to_dict()
-
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
         return {
             "type": "thinking",
             "thinking": self.thinking,
@@ -121,16 +113,7 @@ class ToolUseContent:
     name: str = ""
     input: Dict[str, Any] = field(default_factory=dict)
 
-    def to_api_format(self) -> Dict[str, Any]:
-        return {
-            "type": "tool_use",
-            "id": self.id,
-            "name": self.name,
-            "input": self.input,
-        }
-
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
         return {
             "type": "tool_use",
             "tool_use_id": self.id,
@@ -147,21 +130,9 @@ class ToolResultContent:
     tool_use_id: str = ""
     content: str = ""
     is_error: bool = False
-    metadata: Optional[Dict[str, Any]] = None  # For tracking loaded instruction files
-
-    def to_api_format(self) -> Dict[str, Any]:
-        result = {
-            "type": "tool_result",
-            "tool_use_id": self.tool_use_id,
-            "content": self.content,
-            "is_error": self.is_error,
-        }
-        if self.metadata:
-            result["metadata"] = self.metadata
-        return result
+    metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
         result = {
             "type": "tool_result",
             "tool_use_id": self.tool_use_id,
@@ -175,18 +146,14 @@ class ToolResultContent:
 
 @dataclass
 class PatchContent:
-    """Patch content block for file revert tracking - aligned with OpenCode PatchPart"""
+    """Patch content block for file revert tracking"""
 
     type: str = field(default="patch", init=False)
-    prev_hash: str = ""  # Git tree hash BEFORE changes (snapshot before tool execution)
-    hash: str = ""  # Git tree hash AFTER changes
-    files: List[str] = field(default_factory=list)  # List of changed file paths
-
-    def to_api_format(self) -> Dict[str, Any]:
-        return self.to_dict()
+    prev_hash: str = ""
+    hash: str = ""
+    files: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
         return {
             "type": "patch",
             "prev_hash": self.prev_hash,
@@ -252,7 +219,7 @@ class Usage:
 
 @dataclass
 class Message:
-    """Base message class - aligned with TypeScript Message type"""
+    """Base message class"""
 
     type: MessageRole
     content: List[ContentBlock] = field(default_factory=list)
@@ -262,19 +229,13 @@ class Message:
     is_compact_summary: bool = False
     tool_use_result: Any = None
     is_visible_in_transcript_only: bool = False
-    # Usage and stop reason (previously in message dict)
     usage: Optional[Usage] = None
     stop_reason: Optional[str] = None
-    # For compact summary: parent message ID
     parent_id: Optional[str] = None
-    # For system messages: subtype
     subtype: Optional[str] = None
-    # File expansion info for user messages
-    file_expansions: List[Any] = field(
-        default_factory=list
-    )  # List of FileExpansion objects
-    original_text: str = ""  # Original user text before expansion (for display)
-    web_enabled: bool = False  # Whether @web was referenced in the message
+    file_expansions: List[Any] = field(default_factory=list)
+    original_text: str = ""
+    web_enabled: bool = False
 
     @classmethod
     def user_message(
@@ -361,30 +322,26 @@ class Message:
         """Get usage data from assistant messages when available."""
         return self.usage
 
-    def serialize(
-        self,
-        format: str = "api",
-        working_directory: str = "",
-        include_persistence_fields: bool = False,
-    ) -> Dict[str, Any]:
-        """Unified serialization method.
+    def serialize(self, format: str = "api") -> Dict[str, Any]:
+        """Serialize message to dictionary.
         
         Args:
-            format: Output format - "api" (OpenAI API), "dict" (general dict), "persistence" (disk storage)
-            working_directory: Working directory for file expansion resolution
-            include_persistence_fields: Include timestamp, is_meta, etc. for disk persistence
+            format: Output format
+                - "api": OpenAI API format (for LLM requests)
+                - "dict": General dict format (for API responses)
+                - "persistence": Full format for disk storage
         
         Returns:
             Serialized message dictionary
         """
         if format == "api":
-            return self.to_api_format()
+            return self._serialize_for_api()
 
-        # Unified dict format
+        # Dict and persistence formats share common structure
         content_blocks = [block.to_dict() for block in self.content]
         message_dict = {
             "uuid": self.uuid,
-            "role": self.type.value if hasattr(self.type, "value") else str(self.type),
+            "role": self.type.value,
             "content": content_blocks,
             "content_blocks": content_blocks,
         }
@@ -402,14 +359,12 @@ class Message:
             message_dict["stop_reason"] = self.stop_reason
 
         # Persistence-specific fields
-        if include_persistence_fields or format == "persistence":
+        if format == "persistence":
             message_dict["type"] = self.type.value
             message_dict["timestamp"] = self.timestamp.isoformat()
             message_dict["is_meta"] = self.is_meta
             message_dict["is_compact_summary"] = self.is_compact_summary
-            message_dict["is_visible_in_transcript_only"] = (
-                self.is_visible_in_transcript_only
-            )
+            message_dict["is_visible_in_transcript_only"] = self.is_visible_in_transcript_only
 
             if self.parent_id:
                 message_dict["parent_id"] = self.parent_id
@@ -429,8 +384,8 @@ class Message:
 
         return message_dict
 
-    def to_api_format(self) -> Dict[str, Any]:
-        """Convert to API format for OpenAI"""
+    def _serialize_for_api(self) -> Dict[str, Any]:
+        """Convert to OpenAI API format for LLM requests."""
         if self.type == MessageRole.SYSTEM:
             return {"role": "system", "content": self.get_text()}
         elif self.type == MessageRole.USER:
@@ -464,19 +419,10 @@ class Message:
                     }
         return {"role": "user", "content": ""}
 
-    def to_dict(
-        self, use_content_key: bool = False, include_persistence_fields: bool = False
-    ) -> Dict[str, Any]:
-        """Convert to dictionary for serialization (backward compatibility wrapper)."""
-        return self.serialize(
-            format="persistence" if include_persistence_fields else "dict",
-            include_persistence_fields=include_persistence_fields
-        )
-
 
 @dataclass
 class SessionState:
-    """Unified session state - combines runtime state, persistence, and revert tracking."""
+    """Unified session state."""
     
     # Core state
     messages: List[Message] = field(default_factory=list)
@@ -494,13 +440,8 @@ class SessionState:
     model_id: Optional[str] = None
     model_name: Optional[str] = None
     
-    # Revert tracking
-    revert_message_id: Optional[str] = None
-    revert_part_id: Optional[str] = None
-    revert_snapshot: Optional[str] = None
-    revert_diff_additions: int = 0
-    revert_diff_deletions: int = 0
-    revert_diff_files: int = 0
+    # Revert tracking - use RevertState object directly
+    _revert_state: Optional["RevertState"] = field(default=None, repr=False)
     
     # Total diff tracking
     total_diff_additions: int = 0
@@ -528,7 +469,7 @@ class SessionState:
         self.working_directory = ""
         self.model_id = None
         self.model_name = None
-        self.set_revert_state(None)
+        self._revert_state = None
         self.total_diff_additions = 0
         self.total_diff_deletions = 0
         self.total_diff_files = 0
@@ -536,56 +477,23 @@ class SessionState:
 
     def get_revert_state(self) -> Optional["RevertState"]:
         """Get revert state if exists."""
-        if self.revert_message_id:
-            from cc_code.core.snapshot import DiffSummary
-            from cc_code.core.snapshot import RevertState
-
-            return RevertState(
-                message_id=self.revert_message_id,
-                part_id=self.revert_part_id,
-                snapshot=self.revert_snapshot,
-                diff=DiffSummary(
-                    additions=self.revert_diff_additions,
-                    deletions=self.revert_diff_deletions,
-                    files=self.revert_diff_files,
-                ),
-            )
-        return None
+        return self._revert_state
 
     def set_revert_state(self, state: Optional["RevertState"]) -> None:
         """Set revert state."""
-        if state:
-            self.revert_message_id = state.message_id
-            self.revert_part_id = state.part_id
-            self.revert_snapshot = state.snapshot
-            if state.diff:
-                self.revert_diff_additions = state.diff.additions
-                self.revert_diff_deletions = state.diff.deletions
-                self.revert_diff_files = state.diff.files
-        else:
-            self.revert_message_id = None
-            self.revert_part_id = None
-            self.revert_snapshot = None
-            self.revert_diff_additions = 0
-            self.revert_diff_deletions = 0
-            self.revert_diff_files = 0
-
-# Legacy aliases for backward compatibility
-QueryState = SessionState
+        self._revert_state = state
 
 
-# Query event types for the query loop
+# Query event types
 @dataclass
 class QueryEvent:
     """Base query event"""
-
     pass
 
 
 @dataclass
 class TextEvent(QueryEvent):
     """Event for streaming text content"""
-
     text: str = ""
 
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
@@ -595,7 +503,6 @@ class TextEvent(QueryEvent):
 @dataclass
 class ThinkingEvent(QueryEvent):
     """Event for streaming thinking/reasoning content"""
-
     thinking: str = ""
 
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
@@ -605,7 +512,6 @@ class ThinkingEvent(QueryEvent):
 @dataclass
 class ToolUseEvent(QueryEvent):
     """Event for tool use"""
-
     tool_use_id: str = ""
     tool_name: str = ""
     input: Dict[str, Any] = field(default_factory=dict)
@@ -622,7 +528,6 @@ class ToolUseEvent(QueryEvent):
 @dataclass
 class ToolResultEvent(QueryEvent):
     """Event for tool result"""
-
     tool_use_id: str = ""
     result: str = ""
     is_error: bool = False
@@ -639,21 +544,18 @@ class ToolResultEvent(QueryEvent):
 @dataclass
 class MessageCompleteEvent(QueryEvent):
     """Event when a message is complete"""
-
     message: Optional[Message] = None
 
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         event_dict: dict[str, object] = {"type": "message_complete"}
         if self.message:
-            # Basic message dict - server.py's message_to_dict will add file expansions
-            event_dict["message"] = self.message.to_dict()
+            event_dict["message"] = self.message.serialize(format="dict")
         return event_dict
 
 
 @dataclass
 class TurnCompleteEvent(QueryEvent):
     """Event when a turn is complete"""
-
     turn: int = 0
     has_more_turns: bool = False
     stop_reason: Optional[str] = None
@@ -669,7 +571,6 @@ class TurnCompleteEvent(QueryEvent):
 @dataclass
 class ErrorEvent(QueryEvent):
     """Event for errors"""
-
     error: str = ""
     is_fatal: bool = False
 
@@ -681,18 +582,14 @@ def message_to_api_dict(
     message: Message,
     working_directory: str = "",
 ) -> Dict[str, Any]:
-    """Serialize a message for web transport with file expansion support.
-
-    This is the unified serialization function for API responses.
-    """
+    """Serialize a message for web transport with file expansion support."""
     from cc_code.core.file_expansion import (
         build_visible_file_expansions,
         serialize_file_expansions,
         has_web_reference,
     )
 
-    # Get basic message dict from the message's unified to_dict method
-    message_dict = message.to_dict()
+    message_dict = message.serialize(format="dict")
 
     # Add file expansions if needed
     if getattr(message, "file_expansions", None):
@@ -721,10 +618,9 @@ def event_to_api_dict(
     event: QueryEvent,
     working_directory: str = "",
 ) -> Dict[str, Any]:
-    """Convert event to dictionary for SSE streaming using unified to_dict methods."""
+    """Convert event to dictionary for SSE streaming."""
     event_dict = event.to_dict(working_directory=working_directory)
 
-    # Special handling for MessageCompleteEvent to add file expansions
     if isinstance(event, MessageCompleteEvent) and event.message:
         event_dict["message"] = message_to_api_dict(
             event.message,
