@@ -24,10 +24,6 @@ from cc_code.core.messages import (
 
 logger = logging.getLogger(__name__)
 
-# Constants aligned with TypeScript
-PRUNE_MINIMUM = 20_000  # Minimum tokens to trigger pruning
-PRUNE_PROTECT = 40_000  # Tokens to protect from pruning
-PRUNE_PROTECTED_TOOLS = ["skill"]  # Tools that should not be pruned
 
 # Default compaction prompt template - MUST match TypeScript version exactly
 DEFAULT_COMPACTION_PROMPT = """Provide a detailed prompt for continuing our conversation above.
@@ -146,58 +142,8 @@ class SessionCompaction:
 
     def should_compact(self) -> bool:
         """Check if compaction should be triggered based on message count."""
-        # Simple heuristic: compact if more than 20 messages
         eligible = self.get_messages_for_compaction()
         return len(eligible) > 20
-
-    def get_tool_results_to_prune(self) -> List[tuple]:
-        """Get tool results that can be pruned to save context.
-
-        Returns list of (message_index, block_index, estimated_tokens) tuples.
-        """
-        if not self.messages:
-            return []
-
-        to_prune: List[tuple] = []
-        total_tokens = 0
-        pruned_tokens = 0
-        turns = 0
-
-        # Iterate backwards through messages
-        for msg_idx in range(len(self.messages) - 1, -1, -1):
-            msg = self.messages[msg_idx]
-
-            # Count turns
-            if msg.type == MessageRole.USER:
-                turns += 1
-
-            # Skip recent turns
-            if turns < 2:
-                continue
-
-            # Stop at previous summary
-            if msg.type == MessageRole.ASSISTANT and msg.is_compact_summary:
-                break
-
-            # Check tool results
-            for block_idx in range(len(msg.content) - 1, -1, -1):
-                block = msg.content[block_idx]
-                if isinstance(block, ToolResultContent):
-                    # Skip protected tools
-                    # Note: we'd need tool name info to check PRUNE_PROTECTED_TOOLS
-                    # For now, estimate all tool results
-
-                    estimate = self.estimate_tokens(block.content)
-                    total_tokens += estimate
-
-                    if total_tokens > PRUNE_PROTECT:
-                        pruned_tokens += estimate
-                        to_prune.append((msg_idx, block_idx, estimate))
-
-        # Only prune if we'd save enough tokens
-        if pruned_tokens > PRUNE_MINIMUM:
-            return to_prune
-        return []
 
     def create_compaction_prompt(
         self,
@@ -330,63 +276,11 @@ class SessionCompaction:
         return result
 
 
-def prune_tool_results(messages: List[Message]) -> tuple[List[Message], int]:
-    """Prune old tool results from messages to save context space.
-
-    Args:
-        messages: List of messages to prune
-
-    Returns:
-        Tuple of (pruned messages, tokens saved)
-    """
-    if not messages:
-        return messages, 0
-
-    compaction = SessionCompaction(messages=messages)
-    to_prune = compaction.get_tool_results_to_prune()
-
-    if not to_prune:
-        return messages, 0
-
-    # Create a copy of messages
-    result = [msg for msg in messages]
-    tokens_saved = 0
-
-    # Prune from end to start to preserve indices
-    for msg_idx, block_idx, estimate in sorted(to_prune, reverse=True):
-        if msg_idx < len(result):
-            msg = result[msg_idx]
-            # Replace tool result with placeholder
-            if block_idx < len(msg.content):
-                block = msg.content[block_idx]
-                if isinstance(block, ToolResultContent):
-                    # Create truncated version
-                    truncated = ToolResultContent(
-                        tool_use_id=block.tool_use_id,
-                        content="[Output pruned to save context space]",
-                        is_error=block.is_error,
-                    )
-                    msg.content[block_idx] = truncated
-                    tokens_saved += estimate
-
-    return result, tokens_saved
-
-
 def is_context_overflow(
     usage: Usage,
     context_window: int,
     threshold: float = 0.9,
 ) -> bool:
-    """Check if context is near overflow.
-
-    Args:
-        usage: Current token usage
-        context_window: Maximum context window size
-        threshold: Fraction of context window to consider overflow (default 90%)
-
-    Returns:
-        True if context usage exceeds threshold
-    """
     if not context_window:
         return False
 

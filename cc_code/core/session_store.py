@@ -17,7 +17,6 @@ from cc_code.core.messages import (
     ToolResultContent,
     ToolUseContent,
     PatchContent,
-    StepStartContent,
     Usage,
     generate_uuid,
 )
@@ -131,7 +130,9 @@ class SessionStore:
             updated_at=now,
             working_directory=working_directory,
             current_turn=current_turn,
-            model_id=model_id if model_id is not None else (existing.model_id if existing else None),
+            model_id=model_id
+            if model_id is not None
+            else (existing.model_id if existing else None),
             model_name=model_name
             if model_name is not None
             else (existing.model_name if existing else None),
@@ -339,10 +340,6 @@ def _content_block_from_dict(data: dict[str, Any]) -> Any:
             hash=str(data.get("hash", "")),
             files=files if isinstance(files, list) else [],
         )
-    if block_type == "step_start":
-        return StepStartContent(
-            snapshot=str(data.get("snapshot", "")),
-        )
     raise ValueError(f"Unknown content block type: {block_type!r}")
 
 
@@ -350,14 +347,14 @@ def _message_to_dict(message: Message) -> dict[str, Any]:
     """Convert message to dict using the unified to_dict method, adding persistence-specific fields."""
     # Get basic dict from message's own to_dict with content key
     result = message.to_dict(use_content_key=True)
-    
+
     # Add persistence-specific fields
     result["type"] = message.type.value
     result["timestamp"] = message.timestamp.isoformat()
     result["is_meta"] = message.is_meta
     result["is_compact_summary"] = message.is_compact_summary
     result["is_visible_in_transcript_only"] = message.is_visible_in_transcript_only
-    
+
     # Add file expansions if they exist
     if message.file_expansions:
         result["file_expansions"] = [
@@ -368,7 +365,7 @@ def _message_to_dict(message: Message) -> dict[str, Any]:
             }
             for exp in message.file_expansions
         ]
-    
+
     return result
 
 

@@ -88,7 +88,7 @@ class TextContent:
 
     def to_api_format(self) -> Dict[str, Any]:
         return {"type": "text", "text": self.text}
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {"type": "text", "text": self.text}
@@ -108,7 +108,7 @@ class ThinkingContent:
             "thinking": self.thinking,
             "signature": self.signature,
         }
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
@@ -134,7 +134,7 @@ class ToolUseContent:
             "name": self.name,
             "input": self.input,
         }
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
@@ -165,7 +165,7 @@ class ToolResultContent:
         if self.metadata:
             result["metadata"] = self.metadata
         return result
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         result = {
@@ -195,7 +195,7 @@ class PatchContent:
             "hash": self.hash,
             "files": self.files,
         }
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
@@ -206,34 +206,12 @@ class PatchContent:
         }
 
 
-@dataclass
-class StepStartContent:
-    """Step start content block for tracking tool execution start"""
-
-    type: str = field(default="step_start", init=False)
-    snapshot: str = ""  # Git tree hash before tool execution
-
-    def to_api_format(self) -> Dict[str, Any]:
-        return {
-            "type": "step_start",
-            "snapshot": self.snapshot,
-        }
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
-        return {
-            "type": "step_start",
-            "snapshot": self.snapshot,
-        }
-
-
 ContentBlock = Union[
     TextContent,
     ThinkingContent,
     ToolUseContent,
     ToolResultContent,
     PatchContent,
-    StepStartContent,
 ]
 
 
@@ -418,7 +396,7 @@ class Message:
 
     def to_dict(self, use_content_key: bool = False) -> Dict[str, Any]:
         """Convert to dictionary for serialization (basic version)
-        
+
         Args:
             use_content_key: If True, use "content" key instead of "content_blocks"
         """
@@ -499,7 +477,7 @@ class TextEvent(QueryEvent):
     """Event for streaming text content"""
 
     text: str = ""
-    
+
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         return {"type": "text", "text": self.text}
 
@@ -509,7 +487,7 @@ class ThinkingEvent(QueryEvent):
     """Event for streaming thinking/reasoning content"""
 
     thinking: str = ""
-    
+
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         return {"type": "thinking", "thinking": self.thinking}
 
@@ -521,7 +499,7 @@ class ToolUseEvent(QueryEvent):
     tool_use_id: str = ""
     tool_name: str = ""
     input: Dict[str, Any] = field(default_factory=dict)
-    
+
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         return {
             "type": "tool_use",
@@ -538,7 +516,7 @@ class ToolResultEvent(QueryEvent):
     tool_use_id: str = ""
     result: str = ""
     is_error: bool = False
-    
+
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         return {
             "type": "tool_result",
@@ -553,7 +531,7 @@ class MessageCompleteEvent(QueryEvent):
     """Event when a message is complete"""
 
     message: Optional[Message] = None
-    
+
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         event_dict: dict[str, object] = {"type": "message_complete"}
         if self.message:
@@ -569,7 +547,7 @@ class TurnCompleteEvent(QueryEvent):
     turn: int = 0
     has_more_turns: bool = False
     stop_reason: Optional[str] = None
-    
+
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         return {
             "type": "turn_complete",
@@ -584,6 +562,6 @@ class ErrorEvent(QueryEvent):
 
     error: str = ""
     is_fatal: bool = False
-    
+
     def to_dict(self, working_directory: str = "") -> Dict[str, Any]:
         return {"type": "error", "error": self.error, "is_fatal": self.is_fatal}

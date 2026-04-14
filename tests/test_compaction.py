@@ -4,16 +4,12 @@ from cc_code.core.messages import (
     Message,
     MessageRole,
     TextContent,
-    ToolUseContent,
     Usage,
 )
 from cc_code.core.compaction import (
     SessionCompaction,
     CompactionResult,
     DEFAULT_COMPACTION_PROMPT,
-    PRUNE_MINIMUM,
-    PRUNE_PROTECT,
-    prune_tool_results,
     is_context_overflow,
 )
 
@@ -156,37 +152,6 @@ def test_compact_messages():
     assert compacted[0].get_text() == "Summary text"
 
 
-def test_prune_tool_results():
-    """Test pruning tool results."""
-    # Create enough messages and turns to trigger pruning
-    messages = []
-    
-    # First turn
-    messages.append(Message.user_message("Hello"))
-    messages.append(Message.assistant_message([
-        TextContent(text="Let me check that"),
-        ToolUseContent(id="tool-1", name="Read", input={"file_path": "test.txt"}),
-    ]))
-    messages.append(Message.tool_result_message("tool-1", "x" * 100000))  # Large result
-    
-    # Second turn (recent, should be protected)
-    messages.append(Message.user_message("Another question"))
-    messages.append(Message.assistant_message([TextContent(text="Answer")]))
-    
-    # Third turn
-    messages.append(Message.user_message("Yet another question"))
-
-    pruned, tokens_saved = prune_tool_results(messages)
-
-    # The pruning logic requires > PRUNE_PROTECT tokens before pruning
-    # and only prunes if pruned_tokens > PRUNE_MINIMUM
-    # With 100000 chars ~ 25000 tokens, this should trigger some pruning
-    # But since we only have 2 turns, the first turn is protected
-    # Let's just verify the function runs without error
-    assert isinstance(tokens_saved, int)
-    assert tokens_saved >= 0
-
-
 def test_is_context_overflow():
     """Test context overflow detection."""
     # No overflow
@@ -199,12 +164,6 @@ def test_is_context_overflow():
 
     # No context window
     assert is_context_overflow(usage, context_window=None) is False
-
-
-def test_constants():
-    """Test that constants match TypeScript implementation."""
-    assert PRUNE_MINIMUM == 20_000
-    assert PRUNE_PROTECT == 40_000
 
 
 def test_prompt_matches_typescript():
