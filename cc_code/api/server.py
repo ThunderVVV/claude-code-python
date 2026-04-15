@@ -410,6 +410,36 @@ async def get_snapshot_status(session_id: str, http_request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.get("/debug/{session_id}")
+async def get_debug_state(session_id: str, http_request: Request):
+    """Get serialized QueryEngine member state for debugging."""
+    logger.info(f"GET /debug/{session_id}")
+    try:
+        session_manager = http_request.app.state.session_manager
+        session = session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        engine = session_manager.get_engine(session_id)
+        if not engine:
+            engine = await session_manager.get_or_create_engine(
+                session_id,
+                session.working_directory or "",
+            )
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "debug": engine.get_debug_state(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get debug state")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.get("/sessions")
 async def list_sessions(http_request: Request):
     """List all sessions"""

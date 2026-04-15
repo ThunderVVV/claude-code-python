@@ -403,6 +403,21 @@ class CCCodeHttpClient:
             logger.error(f"Get snapshot status request failed: {e}")
             return {"available": False}
 
+    async def get_debug_state(self, session_id: str) -> dict:
+        """Get serialized QueryEngine runtime state for debugging."""
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        try:
+            response = await self._client.get(
+                f"{self._base_url}/api/debug/{session_id}",
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Get debug state request failed: {e}")
+            return {"success": False, "message": str(e)}
+
     async def switch_model(self, session_id: str, model_id: str) -> dict:
         """Switch the active model for a session."""
         if not self._client:

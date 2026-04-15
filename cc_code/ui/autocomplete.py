@@ -156,6 +156,12 @@ class CommandRegistry:
                 title="/summarize",
                 description="Alias for /compact - compress conversation history",
             ),
+            Command(
+                id="debug",
+                trigger="debug",
+                title="/debug",
+                description="Show QueryEngine runtime debug state",
+            ),
         ]
         for cmd in default_commands:
             self._commands[cmd.id] = cmd

@@ -64,6 +64,10 @@ class QueryEngine:
     - Persists to disk when stop_reason is 'stop'
     """
 
+    _DEBUG_MAX_DEPTH = 3
+    _DEBUG_MAX_ITEMS = 25
+    _DEBUG_MAX_STRING_LENGTH = 4000
+
     def __init__(
         self,
         client_config: OpenAIClientConfig,
@@ -275,6 +279,205 @@ class QueryEngine:
         """Get the snapshot manager"""
         return self._snapshot_manager
 
+    def _truncate_debug_text(self, value: str, limit: Optional[int] = None) -> str:
+        """Truncate debug text to keep payloads bounded."""
+        max_length = limit or self._DEBUG_MAX_STRING_LENGTH
+        if len(value) <= max_length:
+            return value
+        trimmed = len(value) - max_length
+        return f"{value[:max_length]}... <truncated {trimmed} chars>"
+
+    def _safe_debug_repr(self, value: Any) -> str:
+        """Get a safe repr for arbitrary objects."""
+        try:
+            return repr(value)
+        except Exception as exc:
+            return f"<repr failed: {type(value).__name__}: {exc}>"
+
+    def _serialize_debug_value(
+        self,
+        value: Any,
+        *,
+        depth: int = 0,
+        seen: Optional[set[int]] = None,
+    ) -> Any:
+        """Convert arbitrary runtime values to JSON-friendly debug payloads."""
+        if seen is None:
+            seen = set()
+
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+
+        if isinstance(value, str):
+            return self._truncate_debug_text(value)
+
+        if isinstance(value, (bytes, bytearray)):
+            return {"type": type(value).__name__, "length": len(value)}
+
+        if isinstance(value, asyncio.Event):
+            return {"type": "Event", "is_set": value.is_set()}
+
+        if isinstance(value, asyncio.Lock):
+            return {"type": "Lock", "locked": value.locked()}
+
+        if isinstance(value, asyncio.Task):
+            return {
+                "type": "Task",
+                "done": value.done(),
+                "cancelled": value.cancelled(),
+                "repr": self._truncate_debug_text(
+                    self._safe_debug_repr(value),
+                    limit=500,
+                ),
+            }
+
+        if depth >= self._DEBUG_MAX_DEPTH:
+            return {
+                "type": type(value).__name__,
+                "repr": self._truncate_debug_text(
+                    self._safe_debug_repr(value),
+                    limit=500,
+                ),
+            }
+
+        object_id = id(value)
+        if object_id in seen:
+            return {
+                "type": type(value).__name__,
+                "repr": "<recursive reference>",
+            }
+        seen.add(object_id)
+
+        if isinstance(value, dict):
+            serialized: dict[str, Any] = {}
+            items = list(value.items())
+            for idx, (key, item_value) in enumerate(items):
+                if idx >= self._DEBUG_MAX_ITEMS:
+                    serialized["..."] = f"{len(items) - self._DEBUG_MAX_ITEMS} more items"
+                    break
+                serialized[str(key)] = self._serialize_debug_value(
+                    item_value,
+                    depth=depth + 1,
+                    seen=seen,
+                )
+            return {
+                "type": "dict",
+                "size": len(value),
+                "items": serialized,
+            }
+
+        if isinstance(value, (list, tuple, set, frozenset)):
+            values = list(value)
+            serialized_items: list[Any] = []
+            for idx, item in enumerate(values):
+                if idx >= self._DEBUG_MAX_ITEMS:
+                    serialized_items.append(
+                        f"... {len(values) - self._DEBUG_MAX_ITEMS} more items"
+                    )
+                    break
+                serialized_items.append(
+                    self._serialize_debug_value(item, depth=depth + 1, seen=seen)
+                )
+            return {
+                "type": type(value).__name__,
+                "size": len(values),
+                "items": serialized_items,
+            }
+
+        try:
+            object_vars = vars(value)
+        except TypeError:
+            return {
+                "type": type(value).__name__,
+                "repr": self._truncate_debug_text(
+                    self._safe_debug_repr(value),
+                    limit=500,
+                ),
+            }
+
+        serialized_attrs: dict[str, Any] = {}
+        attr_names = sorted(object_vars.keys())
+        for idx, attr_name in enumerate(attr_names):
+            if idx >= self._DEBUG_MAX_ITEMS:
+                serialized_attrs["..."] = (
+                    f"{len(attr_names) - self._DEBUG_MAX_ITEMS} more attributes"
+                )
+                break
+            serialized_attrs[attr_name] = self._serialize_debug_value(
+                object_vars[attr_name],
+                depth=depth + 1,
+                seen=seen,
+            )
+
+        return {
+            "type": type(value).__name__,
+            "attributes": serialized_attrs,
+            "repr": self._truncate_debug_text(
+                self._safe_debug_repr(value),
+                limit=500,
+            ),
+        }
+
+    def get_debug_state(self) -> dict[str, Any]:
+        """Return serialized runtime state for debugging."""
+        members: dict[str, Any] = {}
+        for name in sorted(vars(self).keys()):
+            try:
+                members[name] = self._serialize_debug_value(
+                    getattr(self, name),
+                    depth=0,
+                    seen=set(),
+                )
+            except Exception as exc:
+                members[name] = {
+                    "type": type(getattr(self, name, None)).__name__,
+                    "error": str(exc),
+                }
+
+        return {
+            "class": self.__class__.__name__,
+            "member_count": len(members),
+            "members": members,
+        }
+
+    def _get_file_modifying_paths(self, tool_use_blocks: List[ContentBlock]) -> List[str]:
+        """Collect candidate file paths from file-modifying tool calls."""
+        paths: List[str] = []
+        seen: set[str] = set()
+
+        for tool_use in tool_use_blocks:
+            if not hasattr(tool_use, "name") or tool_use.name not in ("Edit", "Write"):
+                continue
+            if not hasattr(tool_use, "input") or not isinstance(tool_use.input, dict):
+                continue
+
+            file_path = tool_use.input.get("file_path")
+            if not isinstance(file_path, str) or not file_path.strip():
+                continue
+
+            normalized = file_path.strip()
+            if normalized in seen:
+                continue
+
+            seen.add(normalized)
+            paths.append(normalized)
+
+        return paths
+
+    def _collect_patch_file_paths(self, patches: List["Patch"]) -> List[str]:
+        """Collect unique file paths from patches while preserving order."""
+        paths: List[str] = []
+        seen: set[str] = set()
+
+        for patch in patches:
+            for file_path in patch.files:
+                if not file_path or file_path in seen:
+                    continue
+                seen.add(file_path)
+                paths.append(file_path)
+
+        return paths
+
     def _collect_patches(
         self,
         messages: List[Message],
@@ -372,19 +575,26 @@ class QueryEngine:
             if existing_revert.snapshot:
                 self._snapshot_manager.restore(existing_revert.snapshot)
 
-        current_snapshot = self._snapshot_manager.track()
-        revert_point.snapshot = current_snapshot
-
         patches = self._collect_patches(
             messages,
             revert_point.message_id,
             revert_point.part_id,
         )
+        candidate_files = self._collect_patch_file_paths(patches)
+
+        current_snapshot: Optional[str] = None
+        if candidate_files:
+            current_snapshot = self._snapshot_manager.track(candidate_files)
+            revert_point.snapshot = current_snapshot
 
         earliest_prev_hash = ""
         if patches:
             earliest_prev_hash = patches[0].prev_hash
-            diff = self._snapshot_manager.diff(earliest_prev_hash, current_snapshot)
+            if current_snapshot:
+                diff = self._snapshot_manager.diff(earliest_prev_hash, current_snapshot)
+            else:
+                latest_hash = patches[-1].hash
+                diff = self._snapshot_manager.diff(earliest_prev_hash, latest_hash)
             revert_point.diff = diff
             self._snapshot_manager.restore(earliest_prev_hash)
         else:
@@ -1053,10 +1263,16 @@ class QueryEngine:
                     for tool_use in tool_use_blocks
                     if tool_use.name
                 )
+                candidate_files = self._get_file_modifying_paths(tool_use_blocks)
                 if has_file_modifying_tools and self._snapshot_manager:
                     try:
-                        step_snapshot = self._snapshot_manager.track()
-                        logger.debug(f"Created step snapshot: {step_snapshot[:8]}")
+                        if candidate_files:
+                            step_snapshot = self._snapshot_manager.track(candidate_files)
+                            logger.debug(f"Created step snapshot: {step_snapshot[:8]}")
+                        else:
+                            logger.warning(
+                                "Skipping snapshot for file-modifying tools because no candidate files were found"
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to create step snapshot: {e}")
 
@@ -1125,7 +1341,10 @@ class QueryEngine:
                     from cc_code.core.snapshot import DiffSummary
 
                     try:
-                        patch = self._snapshot_manager.patch(step_snapshot)
+                        patch = self._snapshot_manager.patch(
+                            step_snapshot,
+                            candidate_files=candidate_files,
+                        )
                         if patch.files:
                             patch_content = PatchContent(
                                 prev_hash=step_snapshot,

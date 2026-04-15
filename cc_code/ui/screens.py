@@ -50,6 +50,7 @@ from cc_code.ui.session_resume_modal import SessionResumeModal
 from cc_code.ui.rewind_modal import RewindModal
 from cc_code.ui.model_select_modal import ModelSelectModal
 from cc_code.ui.transcript_mode_modal import ProgressStatusModal
+from cc_code.ui.debug_modal import DebugStateModal
 from cc_code.ui.autocomplete import (
     AutocompletePopup,
     AutocompleteMode,
@@ -57,6 +58,7 @@ from cc_code.ui.autocomplete import (
     CommandRegistry,
     AtOption,
 )
+from cc_code.ui.utils import sanitize_terminal_text
 from cc_code.utils.logging_config import log_full_exception, tui_log
 
 logger = logging.getLogger(__name__)
@@ -950,6 +952,11 @@ class REPLScreen(Screen):
             asyncio.create_task(self._handle_compact_command())
             return
 
+        if user_text_lower == "/debug":
+            tui_log("Executing command: /debug")
+            asyncio.create_task(self._handle_debug_command())
+            return
+
         self._hide_welcome_widget()
         self._add_to_history(submitted_value)
 
@@ -1136,6 +1143,43 @@ class REPLScreen(Screen):
             await self._refresh_snapshot_status()
 
             input_widget.focus()
+
+    async def _handle_debug_command(self) -> None:
+        """Handle /debug command and show QueryEngine member state in modal."""
+        if self._is_processing:
+            return
+
+        input_widget = self.query_one("#user-input", InputTextArea)
+        input_widget.load_text("")
+
+        result: dict = {}
+
+        async def fetch_debug_state() -> None:
+            nonlocal result
+            result = await self.client.get_debug_state(self.session_id)
+
+        await self._run_async_with_progress_modal(
+            "Loading debug state...",
+            fetch_debug_state,
+        )
+
+        if not result.get("success"):
+            message_list = self.query_one("#message-list", MessageList)
+            error_text = result.get("message", "Unknown error")
+            await message_list.add_message(
+                Message.system_message(f"Debug request failed: {error_text}")
+            )
+            input_widget.focus()
+            return
+
+        debug_payload = result.get("debug", {})
+        debug_text = sanitize_terminal_text(
+            json.dumps(debug_payload, ensure_ascii=False, indent=2)
+        )
+        if not debug_text.strip():
+            debug_text = "<empty debug payload>"
+        modal = DebugStateModal(debug_text)
+        self.app.push_screen(modal, lambda _: self._schedule_input_focus())
 
     async def _start_new_session(self) -> None:
         """Create a new session on server and reset UI."""

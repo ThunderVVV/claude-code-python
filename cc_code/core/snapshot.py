@@ -188,15 +188,43 @@ class SnapshotManager:
 
         exclude_file.write_text(content, encoding="utf-8")
 
-    def _get_changed_files(self) -> List[str]:
-        """Get list of changed files (modified and untracked)"""
-        self._ensure_initialized()
+    def _normalize_candidate_files(self, files: List[str]) -> List[str]:
+        """Normalize candidate paths and keep only files under working directory."""
+        normalized: List[str] = []
+        seen: Set[str] = set()
 
-        result = self._run_git(["diff-files", "--name-only", "-z", "--", "."])
+        for file_path in files:
+            if not file_path:
+                continue
+
+            abs_path = os.path.abspath(os.path.expanduser(file_path))
+            try:
+                common = os.path.commonpath([self.working_directory, abs_path])
+            except ValueError:
+                continue
+
+            if common != self.working_directory:
+                continue
+
+            if abs_path not in seen:
+                seen.add(abs_path)
+                normalized.append(abs_path)
+
+        return normalized
+
+    def _get_changed_candidate_files(self, candidate_files: List[str]) -> List[str]:
+        """Get changed files limited to specific candidate paths."""
+        normalized = self._normalize_candidate_files(candidate_files)
+        if not normalized:
+            return []
+
+        rel_paths = [os.path.relpath(path, self.working_directory) for path in normalized]
+
+        result = self._run_git(["diff-files", "--name-only", "-z", "--"] + rel_paths)
         tracked = [f for f in result.stdout.split("\0") if f]
 
         result = self._run_git(
-            ["ls-files", "--others", "--exclude-standard", "-z", "--", "."]
+            ["ls-files", "--others", "--exclude-standard", "-z", "--"] + rel_paths
         )
         untracked = [f for f in result.stdout.split("\0") if f]
 
@@ -263,14 +291,15 @@ class SnapshotManager:
 
         sparse_file.write_text("\n".join(sorted(existing)) + "\n")
 
-    def track(self) -> str:
+    def track(self, candidate_files: List[str]) -> str:
         """Create a snapshot of the current file state.
 
         Returns the git tree hash of the snapshot.
         """
         self._ensure_initialized()
 
-        changed_files = self._get_changed_files()
+        changed_files = self._get_changed_candidate_files(candidate_files)
+
         changed_files = self._filter_ignored_files(changed_files)
 
         # Safely find large files (skip deleted files)
@@ -303,12 +332,12 @@ class SnapshotManager:
         logger.debug(f"Created snapshot: {tree_hash[:8]} ({len(changed_files)} files)")
         return tree_hash
 
-    def patch(self, prev_hash: str) -> Patch:
+    def patch(self, prev_hash: str, candidate_files: List[str]) -> Patch:
         """Compute the patch between prev_hash and current state.
 
         Returns a Patch containing the current tree hash, prev_hash, and list of changed files.
         """
-        current_hash = self.track()
+        current_hash = self.track(candidate_files=candidate_files)
 
         if current_hash == prev_hash:
             return Patch(hash=current_hash, prev_hash=prev_hash, files=[])
@@ -394,11 +423,8 @@ class SnapshotManager:
             except OSError as e:
                 logger.warning(f"Failed to delete {rel_path}: {e}")
 
-    def diff(self, tree_hash1: str, tree_hash2: Optional[str] = None) -> DiffSummary:
-        """Compute diff summary between two trees (or tree and current state)"""
-        if tree_hash2 is None:
-            tree_hash2 = self.track()
-
+    def diff(self, tree_hash1: str, tree_hash2: str) -> DiffSummary:
+        """Compute diff summary between two trees."""
         result = self._run_git(["diff-tree", "--numstat", tree_hash1, tree_hash2])
 
         additions = 0

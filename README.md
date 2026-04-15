@@ -136,6 +136,7 @@ cc-py-dev api  # pip 开发安装
 
 - `/model`：显示当前模型和可用模型 ID（从服务器获取）
 - `/model <model_id>`：实时切换当前 session 的模型，并同步更新 `settings.json`
+- `/debug`：弹出调试窗口，查看当前 QueryEngine 成员变量状态
 
 ### 调试模式
 

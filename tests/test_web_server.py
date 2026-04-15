@@ -67,6 +67,7 @@ def test_create_api_app_uses_prefixed_routes_by_default():
 
     assert "/api/chat" in paths
     assert "/api/interrupt" in paths
+    assert "/api/debug/{session_id}" in paths
     assert "/api/sessions" in paths
     assert "/health" in paths
 
@@ -78,6 +79,7 @@ def test_create_api_app_can_build_unprefixed_routes():
 
     assert "/chat" in paths
     assert "/interrupt" in paths
+    assert "/debug/{session_id}" in paths
     assert "/sessions" in paths
     assert "/health" in paths
     assert "/api/chat" not in paths
