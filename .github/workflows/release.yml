@@ -232,6 +232,11 @@ jobs:
           mv binary-temp/darwin-x64/cc-py binary/darwin-x64/cc-py
           mv binary-temp/darwin-arm64/cc-py binary/darwin-arm64/cc-py
           chmod +x binary/*/cc-py
+          mkdir -p release-assets
+          cp binary/linux-x64/cc-py release-assets/cc-py-linux-x64
+          cp binary/linux-arm64/cc-py release-assets/cc-py-linux-arm64
+          cp binary/darwin-x64/cc-py release-assets/cc-py-darwin-x64
+          cp binary/darwin-arm64/cc-py release-assets/cc-py-darwin-arm64
 
       - name: Update package.json version
         run: |
@@ -246,9 +251,9 @@ jobs:
           tag_name: v${{ needs.resolve-release.outputs.version }}
           name: Release v${{ needs.resolve-release.outputs.version }}
           files: |
-            binary/linux-x64/cc-py
-            binary/linux-arm64/cc-py
-            binary/darwin-x64/cc-py
-            binary/darwin-arm64/cc-py
+            release-assets/cc-py-linux-x64
+            release-assets/cc-py-linux-arm64
+            release-assets/cc-py-darwin-x64
+            release-assets/cc-py-darwin-arm64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
