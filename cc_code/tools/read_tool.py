@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -11,7 +10,6 @@ from cc_code.core.tools import (
     BaseTool,
     ToolContext,
     ToolInputSchema,
-    ValidationResult,
 )
 from cc_code.tools.file_utils import expand_path, format_file_result
 
@@ -91,21 +89,6 @@ Usage:
             return os.path.basename(path)
         return self.name
 
-    async def validate_input(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> ValidationResult:
-        """Validate file path before reading"""
-        file_path = input.get("file_path", "")
-        if not file_path:
-            return ValidationResult(
-                result=False,
-                message="file_path is required",
-                error_code=1,
-            )
-        return ValidationResult(result=True)
-
     async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
         file_path = input.get("file_path", "")
         if not file_path:
@@ -144,10 +127,9 @@ Usage:
             )
 
             # Load nearby instructions if context provides the necessary info
-            nearby_instructions: List[str] = []
+            loaded_paths: List[str] = []
             if context.instruction_service and context.message_id and context.messages:
                 try:
-                    from cc_code.core.instruction import LoadedInstruction
                     
                     instructions = await context.instruction_service.resolve_nearby_instructions(
                         messages=context.messages,
@@ -156,20 +138,22 @@ Usage:
                         project_root=context.project_root,
                     )
                     if instructions:
-                        nearby_instructions = [inst.path for inst in instructions]
-                        # Append nearby instructions to the result
                         for inst in instructions:
-                            result += f"\n\n---\n{inst.format()}"
+                            # Extract path from "Instructions from: <path>\n<content>"
+                            lines = inst.split('\n', 1)
+                            if lines[0].startswith("Instructions from: "):
+                                path = lines[0][len("Instructions from: "):]
+                                loaded_paths.append(path)
+                            result += f"\n\n---\n{inst}"
                         logger.debug(f"Appended {len(instructions)} nearby instructions to Read result")
                 except Exception as e:
                     logger.warning(f"Failed to load nearby instructions: {e}")
 
-            # Add metadata about loaded instructions (for deduplication tracking)
-            if nearby_instructions:
-                # Add a metadata marker that can be extracted later
-                result += f"\n\n<!-- loaded: {json.dumps(nearby_instructions)} -->"
-
-            return result
+            # Return structured result with metadata
+            return {
+                "content": result,
+                "metadata": {"loaded": loaded_paths} if loaded_paths else None
+            }
 
         except PermissionError:
             return f"Error: Permission denied reading file: {full_path}"

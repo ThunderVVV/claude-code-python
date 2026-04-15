@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field, asdict
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from cc_code.core.messages import Message
+    from cc_code.core.instruction import InstructionService
 
 
 @dataclass
@@ -17,29 +21,7 @@ class ToolInputSchema:
     required: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "type": self.type,
-            "properties": self.properties,
-            "required": self.required,
-        }
-
-
-@dataclass
-class PermissionResult:
-    """Result of a permission check"""
-
-    behavior: str = "allow"  # allow, deny, ask
-    message: Optional[str] = None
-    updated_input: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class ValidationResult:
-    """Result of input validation"""
-
-    result: bool = True
-    message: Optional[str] = None
-    error_code: int = 0
+        return asdict(self)
 
 
 @dataclass
@@ -49,12 +31,11 @@ class ToolContext:
     working_directory: str
     project_root: str
     session_id: str
-    permissions: Dict[str, bool] = field(default_factory=dict)
     cancel_event: Optional[asyncio.Event] = None
     # For nearby instruction loading
-    instruction_service: Optional[Any] = None  # InstructionService type (avoid circular import)
+    instruction_service: Optional["InstructionService"] = None
     message_id: Optional[str] = None  # Current assistant message ID
-    messages: Optional[List[Any]] = None  # Current conversation messages
+    messages: Optional[List["Message"]] = None  # Current conversation messages
 
     def get_cwd(self) -> str:
         """Get current working directory"""
@@ -99,50 +80,6 @@ class BaseTool(ABC):
     def is_read_only(self, input: Dict[str, Any]) -> bool:
         """Check if this tool use is read-only"""
         return False
-
-    def is_concurrency_safe(self, input: Dict[str, Any]) -> bool:
-        """Check if this tool can run concurrently with other tools"""
-        return False
-
-    def is_destructive(self, input: Dict[str, Any]) -> bool:
-        """Check if this tool performs irreversible operations"""
-        return False
-
-    async def check_permissions(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> PermissionResult:
-        """Check if this tool use is allowed"""
-        return PermissionResult(behavior="allow", updated_input=input)
-
-    async def validate_input(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> ValidationResult:
-        """Validate tool input"""
-        return ValidationResult(result=True)
-
-    def get_path(self, input: Dict[str, Any]) -> Optional[str]:
-        """Get file path if this tool operates on a file"""
-        return None
-
-    def user_facing_name(self, input: Optional[Dict[str, Any]] = None) -> str:
-        """Get human-readable name for the tool"""
-        return self.name
-
-    def get_tool_use_summary(
-        self, input: Optional[Dict[str, Any]] = None
-    ) -> Optional[str]:
-        """Get a short summary of this tool use for display"""
-        return None
-
-    def get_activity_description(
-        self, input: Optional[Dict[str, Any]] = None
-    ) -> Optional[str]:
-        """Get present-tense activity description for spinner"""
-        return None
 
     def is_error_result(
         self,
@@ -206,3 +143,24 @@ class ToolRegistry:
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
         """Get tool definitions for OpenAI API"""
         return [tool.to_openai_tool() for tool in self.list_enabled_tools()]
+    
+    @classmethod
+    def create_default(cls) -> "ToolRegistry":
+        """Create a ToolRegistry with all default tools registered"""
+        from cc_code.tools import (
+            EditTool,
+            GlobTool,
+            GrepTool,
+            ReadTool,
+            WriteTool,
+        )
+        from cc_code.tools.bash_tool import BashTool
+        
+        registry = cls()
+        registry.register(ReadTool())
+        registry.register(WriteTool())
+        registry.register(EditTool())
+        registry.register(GlobTool())
+        registry.register(GrepTool())
+        registry.register(BashTool())
+        return registry

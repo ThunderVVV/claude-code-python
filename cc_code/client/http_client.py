@@ -74,7 +74,7 @@ def dict_to_message(data: dict) -> Message:
     from cc_code.core.file_expansion import FileExpansion
 
     content_blocks = []
-    for block_data in data.get("content_blocks", []):
+    for block_data in data.get("content_blocks") or data.get("content") or []:
         block = dict_to_content_block(block_data)
         if block:
             content_blocks.append(block)
@@ -96,10 +96,15 @@ def dict_to_message(data: dict) -> Message:
         uuid=data.get("uuid", ""),
         timestamp=datetime.now(),
         original_text=data.get("original_text", ""),
-        message={"usage": data.get("usage")} if data.get("usage") else {},
         file_expansions=file_expansions,
         web_enabled=data.get("web_enabled", False),
     )
+
+    if data.get("usage"):
+        msg.usage = Usage(
+            input_tokens=data["usage"].get("input_tokens", 0),
+            output_tokens=data["usage"].get("output_tokens", 0),
+        )
 
     return msg
 
@@ -217,7 +222,7 @@ class CCCodeHttpClient:
             "user_text": user_text,
             "working_directory": working_directory,
         }
-        
+
         if model:
             request_data["model"] = model
 

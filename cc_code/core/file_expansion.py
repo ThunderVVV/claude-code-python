@@ -224,3 +224,24 @@ def format_expansions_for_display(
         parts.append(format_expansion_for_display(expansion, max_lines))
 
     return "\n\n".join(parts)
+
+
+def serialize_file_expansions(file_expansions: list[FileExpansion]) -> list[dict]:
+    """Convert file-expansion objects into JSON-friendly dictionaries."""
+    return [
+        {
+            "file_path": exp.file_path,
+            "content": exp.content,
+            "display_path": exp.display_path,
+        }
+        for exp in file_expansions
+    ]
+
+
+def build_visible_file_expansions(
+    user_text: str,
+    working_directory: str,
+) -> list[FileExpansion]:
+    """Reconstruct visible @file_path expansions for the web frontend."""
+    _, expansions = expand_file_references(user_text, working_directory)
+    return expansions

@@ -59,7 +59,6 @@ async def _run_session_restore_autofollow_test() -> None:
         async def tracked_create_streaming_widget(
             message: Message | None = None,
             auto_follow: bool = True,
-            should_stream_live=None,
             tool_streaming_context: bool = True,
             before_widget=None,
         ):
@@ -67,7 +66,6 @@ async def _run_session_restore_autofollow_test() -> None:
             return await original_create_streaming_widget(
                 message=message,
                 auto_follow=auto_follow,
-                should_stream_live=should_stream_live,
                 tool_streaming_context=tool_streaming_context,
                 before_widget=before_widget,
             )

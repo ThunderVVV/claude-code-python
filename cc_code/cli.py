@@ -216,14 +216,6 @@ def api_cmd(host: str, port: int, debug: bool) -> None:
 
     from cc_code.core.settings import SettingsStore
     from cc_code.core.tools import ToolRegistry
-    from cc_code.tools import (
-        EditTool,
-        GlobTool,
-        GrepTool,
-        ReadTool,
-        WriteTool,
-    )
-    from cc_code.tools.bash_tool import BashTool
     from cc_code.utils.logging_config import setup_server_logging
 
     setup_server_logging(debug=debug)
@@ -241,19 +233,16 @@ def api_cmd(host: str, port: int, debug: bool) -> None:
         )
         sys.exit(1)
 
-    registry = ToolRegistry()
-    registry.register(ReadTool())
-    registry.register(WriteTool())
-    registry.register(EditTool())
-    registry.register(GlobTool())
-    registry.register(GrepTool())
-    registry.register(BashTool())
+    registry = ToolRegistry.create_default()
 
-    from cc_code.api.server import app, set_global_dependencies
+    from cc_code.api.server import create_app
 
     import uvicorn
 
-    set_global_dependencies(settings_store, registry)
+    app = create_app(
+        settings_store=settings_store,
+        tool_registry=registry,
+    )
 
     click.echo(
         click.style(f"Starting CC Code FastAPI server on {host}:{port}", fg="green")

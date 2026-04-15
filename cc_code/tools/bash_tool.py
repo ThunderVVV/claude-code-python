@@ -12,8 +12,6 @@ from cc_code.core.tools import (
     BaseTool,
     ToolContext,
     ToolInputSchema,
-    PermissionResult,
-    ValidationResult,
 )
 
 
@@ -274,40 +272,6 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
         first_line = result.splitlines()[0] if result else ""
         match = re.match(r"Exit code:\s*(-?\d+)", first_line)
         return bool(match and int(match.group(1)) != 0)
-
-    async def validate_input(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> ValidationResult:
-        """Validate command before execution"""
-        command = input.get("command", "")
-        if not command:
-            return ValidationResult(
-                result=False,
-                message="command is required",
-                error_code=1,
-            )
-
-        timeout = input.get("timeout", DEFAULT_TIMEOUT_MS)
-        if timeout > MAX_TIMEOUT_MS:
-            return ValidationResult(
-                result=False,
-                message=f"Timeout exceeds maximum allowed ({MAX_TIMEOUT_MS}ms)",
-                error_code=2,
-            )
-
-        return ValidationResult(result=True)
-
-    async def check_permissions(
-        self,
-        input: Dict[str, Any],
-        context: ToolContext,
-    ) -> PermissionResult:
-        """Check if command is allowed"""
-        # For now, allow all commands
-        # In a full implementation, this would check against permission rules
-        return PermissionResult(behavior="allow", updated_input=input)
 
     async def _terminate_process(
         self,

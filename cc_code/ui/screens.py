@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import logging
 from contextlib import nullcontext
@@ -18,7 +17,7 @@ from textual.screen import Screen
 from textual import events
 from textual.worker import Worker
 
-from cc_code.core.context_window import (
+from cc_code.core.messages import (
     format_token_count,
     get_used_context_percentage,
     get_used_context_tokens,
@@ -632,7 +631,7 @@ class REPLScreen(Screen):
             status = await self.client.get_snapshot_status(self.session_id)
             self._snapshot_status = status
             self._refresh_context_usage_label()
-        except Exception as e:
+        except Exception:
             pass
 
     def _reset_streaming_state(self) -> None:
@@ -1193,7 +1192,6 @@ class REPLScreen(Screen):
         if not self._current_assistant_widget:
             self._current_assistant_widget = await message_list.create_streaming_widget(
                 auto_follow=False,
-                should_stream_live=self._should_follow_transcript,
             )
         return self._current_assistant_widget
 
@@ -1232,6 +1230,7 @@ class REPLScreen(Screen):
             assistant_widget = await self._ensure_assistant_widget(
                 message_list, auto_follow=False
             )
+            await assistant_widget.flush_streaming_text()
             tool_widget = await assistant_widget.add_tool_use(tool_use)
             if tool_widget:
                 self._tool_widget_context[event.tool_use_id] = tool_widget

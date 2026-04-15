@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-from dataclasses import dataclass
-from typing import Any, AsyncGenerator, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, List, Optional
+
+if TYPE_CHECKING:
+    from cc_code.core.instruction import InstructionConfig, InstructionService
+    from cc_code.core.snapshot import (
+        DiffSummary,
+        Patch,
+        RevertResult,
+        RevertState,
+        SnapshotManager,
+    )
 
 from cc_code.core.messages import (
     ContentBlock,
     Message,
     MessageRole,
-    QueryState,
+    SessionState,
     QueryEvent,
     TextContent,
     ThinkingContent,
@@ -30,10 +38,6 @@ from cc_code.core.messages import (
 )
 from cc_code.core.tools import ToolContext, ToolRegistry
 from cc_code.core.prompts import create_default_system_prompt
-from cc_code.core.instruction import InstructionConfig, InstructionService
-from cc_code.core.file_expansion import expand_file_references
-from cc_code.core.snapshot import SnapshotManager, DiffSummary
-from cc_code.core.revert import RevertState, SessionRevertService
 from cc_code.services.openai_client import (
     OpenAIClient,
     OpenAIClientConfig,
@@ -43,16 +47,6 @@ from cc_code.services.openai_client import (
 from cc_code.utils.logging_config import log_full_exception
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class QueryConfig:
-    """Configuration for the query engine"""
-
-    max_turns: int = 1000000
-    stream: bool = True
-    system_prompt: str = ""
-    working_directory: str = ""
 
 
 class QueryEngine:
@@ -74,7 +68,8 @@ class QueryEngine:
         self,
         client_config: OpenAIClientConfig,
         tool_registry: ToolRegistry,
-        config: Optional[QueryConfig] = None,
+        working_directory: str = "",
+        max_turns: Optional[int] = None,  # None for unlimited turns
         session_id: Optional[str] = None,
         initial_messages: Optional[List[Message]] = None,
         initial_current_turn: int = 0,
@@ -85,10 +80,10 @@ class QueryEngine:
     ):
         self.client_config = client_config
         self.tool_registry = tool_registry
-        self.config = config or QueryConfig()
+        self.max_turns = max_turns
 
         # Mutable state
-        self.state = QueryState()
+        self.state = SessionState()
         self.state.messages = list(initial_messages or [])
         self.state.current_turn = initial_current_turn
         self.state.total_usage = Usage(
@@ -96,8 +91,9 @@ class QueryEngine:
             output_tokens=(initial_usage.output_tokens if initial_usage else 0),
         )
         self._client: Optional[OpenAIClient] = None
-        self._session_id = session_id or generate_uuid()
-        self.state.session_id = self._session_id
+        self.state.session_id = session_id or generate_uuid()
+        self.state.title = session_title or ""
+        self.state.created_at = session_created_at or ""
         self._is_initialized = False
         self._interrupt_reason: Optional[str] = None
         self._active_task: Optional[asyncio.Task[Any]] = None
@@ -105,26 +101,21 @@ class QueryEngine:
         self._cancel_event = asyncio.Event()
 
         # Working directory
-        self._cwd = self.config.working_directory or os.getcwd()
+        self._cwd = working_directory or os.getcwd()
 
         # Session store for persistence
         self._session_store = session_store
 
-        # Session metadata
-        self._session_title = session_title
-        self._session_created_at = session_created_at
-
         # Snapshot system for file revert
-        self._snapshot_manager: Optional[SnapshotManager] = None
+        self._snapshot_manager: Optional["SnapshotManager"] = None
         self._current_snapshot: Optional[str] = None
-        self._revert_state: Optional[RevertState] = None
-        self._revert_service: Optional[SessionRevertService] = None
-        self._total_diff: Optional[DiffSummary] = None
+        self._revert_state: Optional["RevertState"] = None
+        self._total_diff: Optional["DiffSummary"] = None
 
         # Instruction service for loading CLAUDE.md, AGENTS.md, etc.
-        self._instruction_service: Optional[InstructionService] = None
+        self._instruction_service: Optional["InstructionService"] = None
         self._cached_instructions: Optional[List[str]] = None
-        self._instruction_config: Optional[InstructionConfig] = None
+        self._instruction_config: Optional["InstructionConfig"] = None
 
     @classmethod
     async def create_from_session_id(
@@ -134,10 +125,10 @@ class QueryEngine:
         tool_registry: ToolRegistry,
         session_store: Any,
         working_directory: str = "",
-        instruction_config: Optional[InstructionConfig] = None,
+        instruction_config: Optional["InstructionConfig"] = None,
     ) -> "QueryEngine":
         """Create a QueryEngine from a session ID, loading persisted state if exists.
-        
+
         Args:
             session_id: Optional session ID to restore
             client_config: OpenAI client configuration
@@ -146,22 +137,17 @@ class QueryEngine:
             working_directory: Working directory for the session
             instruction_config: Optional instruction configuration for CLAUDE.md/AGENTS.md loading
         """
-        from cc_code.core.session_store import PersistedSession
+        from cc_code.core.snapshot import DiffSummary
 
-        persisted: Optional[PersistedSession] = None
+        persisted: Optional[SessionState] = None
         if session_id:
             persisted = session_store.load_session(session_id)
-
-        config = QueryConfig(
-            stream=True,
-            working_directory=working_directory
-            or (persisted.working_directory if persisted else ""),
-        )
 
         engine = cls(
             client_config,
             tool_registry,
-            config,
+            working_directory=working_directory
+            or (persisted.working_directory if persisted else ""),
             session_id=(persisted.session_id if persisted else session_id),
             initial_messages=list(persisted.messages) if persisted else None,
             initial_current_turn=persisted.current_turn if persisted else 0,
@@ -170,29 +156,22 @@ class QueryEngine:
             session_title=persisted.title if persisted else None,
             session_created_at=persisted.created_at if persisted else None,
         )
-        
+
         # Set instruction config if provided
         if instruction_config:
             engine._instruction_config = instruction_config
 
-        if persisted and persisted.revert_state:
-            engine._initial_revert_state = RevertState(
-                message_id=persisted.revert_state.message_id,
-                part_id=persisted.revert_state.part_id,
-                snapshot=persisted.revert_state.snapshot,
-                diff=DiffSummary(
-                    additions=persisted.revert_state.additions,
-                    deletions=persisted.revert_state.deletions,
-                    files=persisted.revert_state.files,
-                ),
-            )
+        if persisted:
+            revert = persisted.get_revert_state()
+            if revert:
+                engine._initial_revert_state = revert
 
-        if persisted and persisted.total_diff:
-            engine._total_diff = DiffSummary(
-                additions=persisted.total_diff.get("additions", 0),
-                deletions=persisted.total_diff.get("deletions", 0),
-                files=persisted.total_diff.get("files", 0),
-            )
+            if persisted.total_diff_additions or persisted.total_diff_deletions or persisted.total_diff_files:
+                engine._total_diff = DiffSummary(
+                    additions=persisted.total_diff_additions,
+                    deletions=persisted.total_diff_deletions,
+                    files=persisted.total_diff_files,
+                )
 
         await engine.initialize()
         if engine._snapshot_manager:
@@ -202,9 +181,11 @@ class QueryEngine:
     async def initialize(self) -> None:
         """Initialize the engine (create HTTP client and instruction service)"""
         if not self._is_initialized:
+            from cc_code.core.snapshot import SnapshotManager
+            from cc_code.core.instruction import InstructionService
+
             self._client = OpenAIClient(self.client_config)
             self._snapshot_manager = SnapshotManager(self._cwd)
-            self._revert_service = SessionRevertService(self._snapshot_manager)
             self._instruction_service = InstructionService(self._instruction_config)
             if hasattr(self, "_initial_revert_state"):
                 self._revert_state = self._initial_revert_state
@@ -244,7 +225,7 @@ class QueryEngine:
 
     def get_session_id(self) -> str:
         """Get the session ID"""
-        return self._session_id
+        return self.state.session_id
 
     def get_working_directory(self) -> str:
         """Return the working directory for this session."""
@@ -279,17 +260,136 @@ class QueryEngine:
         """Set the revert state"""
         self._revert_state = state
 
-    def clear_revert_state(self) -> None:
-        """Clear the revert state"""
-        self._revert_state = None
-
     def get_snapshot_manager(self) -> Optional[SnapshotManager]:
         """Get the snapshot manager"""
         return self._snapshot_manager
 
-    def get_revert_service(self) -> Optional[SessionRevertService]:
-        """Get the revert service"""
-        return self._revert_service
+    def _collect_patches(
+        self,
+        messages: List[Message],
+        start_message_id: str,
+        start_part_id: Optional[str] = None,
+    ) -> List["Patch"]:
+        """Collect all patches from messages after the revert point."""
+        from cc_code.core.snapshot import Patch
+
+        patches: List[Patch] = []
+        found_start = False
+
+        for message in messages:
+            if message.uuid == start_message_id:
+                found_start = True
+                if start_part_id:
+                    continue
+                else:
+                    patches = []
+                    continue
+
+            if not found_start:
+                continue
+
+            for content in message.content:
+                if isinstance(content, PatchContent):
+                    patches.append(
+                        Patch(
+                            hash=content.hash,
+                            prev_hash=content.prev_hash,
+                            files=content.files,
+                        )
+                    )
+        return patches
+
+    def _find_revert_point(
+        self,
+        messages: List[Message],
+        target_message_id: Optional[str] = None,
+        target_part_id: Optional[str] = None,
+    ) -> Optional["RevertState"]:
+        """Find the revert point in message history."""
+        from cc_code.core.snapshot import RevertState
+
+        if not messages:
+            return None
+
+        if target_message_id:
+            for message in messages:
+                if message.uuid == target_message_id:
+                    return RevertState(
+                        message_id=target_message_id,
+                        part_id=target_part_id,
+                    )
+            return None
+
+        last_user_message_id: Optional[str] = None
+        for message in reversed(messages):
+            if message.type == MessageRole.USER:
+                last_user_message_id = message.uuid
+                break
+
+        if last_user_message_id:
+            return RevertState(message_id=last_user_message_id)
+
+        return None
+
+    async def revert(
+        self,
+        target_message_id: Optional[str] = None,
+        target_part_id: Optional[str] = None,
+    ) -> "RevertResult":
+        """Revert file changes from the target point to the current state."""
+        from cc_code.core.snapshot import DiffSummary, RevertResult
+
+        if not self._snapshot_manager:
+            return RevertResult(
+                success=False,
+                message="Snapshot manager not available",
+            )
+
+        messages = self.get_messages()
+
+        revert_point = self._find_revert_point(
+            messages, target_message_id, target_part_id
+        )
+        if not revert_point:
+            return RevertResult(
+                success=False,
+                message="Could not find revert point",
+            )
+
+        existing_revert = self.get_revert_state()
+        if existing_revert:
+            if existing_revert.snapshot:
+                self._snapshot_manager.restore(existing_revert.snapshot)
+
+        current_snapshot = self._snapshot_manager.track()
+        revert_point.snapshot = current_snapshot
+
+        patches = self._collect_patches(
+            messages,
+            revert_point.message_id,
+            revert_point.part_id,
+        )
+
+        earliest_prev_hash = ""
+        if patches:
+            earliest_prev_hash = patches[0].prev_hash
+            diff = self._snapshot_manager.diff(earliest_prev_hash, current_snapshot)
+            revert_point.diff = diff
+            self._snapshot_manager.restore(earliest_prev_hash)
+        else:
+            revert_point.diff = DiffSummary()
+
+        removed_count = self.truncate_messages_to(revert_point.message_id)
+        self.recalculate_total_diff()
+        self.set_revert_state(revert_point)
+        self.persist_session()
+
+        return RevertResult(
+            success=True,
+            message=f"Reverted changes from {len(patches)} tool operations, removed {removed_count} messages",
+            revert_state=revert_point,
+            summary=revert_point.diff,
+        )
 
     def get_total_diff(self) -> Optional[DiffSummary]:
         """Get the total diff accumulated from all AI tool operations"""
@@ -297,6 +397,8 @@ class QueryEngine:
 
     def recalculate_total_diff(self) -> None:
         """Recalculate total_diff from all PatchContent in messages."""
+        from cc_code.core.snapshot import DiffSummary
+
         if not self._snapshot_manager:
             return
         additions = 0
@@ -324,7 +426,7 @@ class QueryEngine:
         return ToolContext(
             working_directory=self._cwd,
             project_root=self._cwd,
-            session_id=self._session_id,
+            session_id=self.state.session_id,
             cancel_event=self._cancel_event,
             instruction_service=self._instruction_service,
             message_id=message_id,
@@ -333,18 +435,18 @@ class QueryEngine:
 
     async def _load_instructions(self) -> List[str]:
         """Load instructions from CLAUDE.md, AGENTS.md, etc.
-        
+
         Instructions are cached after first load to avoid repeated file I/O.
         """
         if self._cached_instructions is not None:
             return self._cached_instructions
-        
+
         if self._instruction_service is None:
             return []
-        
+
         try:
-            self._cached_instructions = await self._instruction_service.get_system_instructions(
-                self._cwd
+            self._cached_instructions = (
+                await self._instruction_service.get_system_instructions(self._cwd)
             )
             return self._cached_instructions
         except Exception as e:
@@ -355,7 +457,7 @@ class QueryEngine:
         """Build the system prompt with instructions from CLAUDE.md, AGENTS.md, etc."""
         # Load instructions from CLAUDE.md, AGENTS.md, etc.
         instructions = await self._load_instructions()
-        
+
         # Build system prompt with instructions
         return create_default_system_prompt(
             cwd=self._cwd,
@@ -365,41 +467,41 @@ class QueryEngine:
 
     def _filter_compacted_messages(self) -> List[Message]:
         """Filter messages to only include those after the last successful compaction summary.
-        
+
         This aligns with TypeScript MessageV2.filterCompacted():
         - Iterates through messages and adds them to result
-        - When a successful summary is found (summary=true, finish set, no error), 
+        - When a successful summary is found (summary=true, finish set, no error),
           marks its parent message ID as "completed"
         - When encountering a user message that triggered a completed compaction, stops
         - Returns messages from the compaction boundary onwards
-        
+
         Returns:
             List of messages that should be sent to the model
         """
         messages = self.state.messages
         if not messages:
             return messages
-        
+
         # Find completed compaction boundaries
         # A successful summary has: is_compact_summary=True, has finish reason, no error
         completed_parent_ids = set()
-        
+
         # First pass: find all completed compaction summaries
         for msg in messages:
-            if (msg.type == MessageRole.ASSISTANT and 
-                msg.is_compact_summary and 
-                msg.message and 
-                msg.message.get("stop_reason") and
-                not msg.message.get("error")):
+            if (
+                msg.type == MessageRole.ASSISTANT
+                and msg.is_compact_summary
+                and msg.stop_reason
+                and not msg.stop_reason.startswith("error")
+            ):
                 # This summary completed successfully
-                parent_id = msg.message.get("parent_id")
-                if parent_id:
-                    completed_parent_ids.add(parent_id)
-        
+                if msg.parent_id:
+                    completed_parent_ids.add(msg.parent_id)
+
         if not completed_parent_ids:
             # No compaction done, return all messages
             return messages
-        
+
         # Second pass: filter messages
         # Include messages from the last compaction boundary onwards
         # The summary message itself should be included
@@ -411,7 +513,7 @@ class QueryEngine:
                 result = []  # Clear previous messages
                 continue
             result.append(msg)
-        
+
         return result
 
     def clear(self) -> None:
@@ -422,9 +524,6 @@ class QueryEngine:
         """
         self.state.clear()
         self.clear_interrupt()
-        # Reset to a new session ID
-        self._session_id = generate_uuid()
-        self.state.session_id = self._session_id
 
     def interrupt(self, reason: str = "interrupt") -> None:
         """Interrupt the in-flight query, matching the TypeScript QueryEngine API."""
@@ -445,17 +544,13 @@ class QueryEngine:
         return self._interrupt_reason
 
     def persist_session(self) -> None:
-        """Persist session to disk. Public method for external callers."""
-        self._persist_session()
-
-    def _persist_session(self) -> None:
         """Persist session to disk."""
         if self._session_store is None:
             return
 
         # Don't save empty sessions (no user messages)
         if not self.state.messages:
-            logger.debug(f"Skipping session persistence - no messages")
+            logger.debug("Skipping session persistence - no messages")
             return
 
         # Check if there's at least one user message
@@ -464,20 +559,36 @@ class QueryEngine:
             for msg in self.state.messages
         )
         if not has_user_message:
-            logger.debug(f"Skipping session persistence - no user messages")
+            logger.debug("Skipping session persistence - no user messages")
             return
 
         try:
-            from cc_code.core.session_store import (
-                derive_session_title,
-                RevertStateData,
-            )
+            from cc_code.core.session_store import RevertStateData, derive_session_title
 
-            self._session_title = self._session_title or derive_session_title(
-                self.state.messages, self._session_id
-            )
+            # Derive title if not set
+            if not self.state.title:
+                self.state.title = derive_session_title(
+                    self.state.messages, self.state.session_id
+                )
 
-            revert_data: Optional[RevertStateData] = None
+            # Update state metadata
+            self.state.working_directory = self._cwd
+            self.state.model_id = self.client_config.model_id
+            self.state.model_name = self.client_config.model_name
+            
+            # Keep persisted state aligned with current runtime state.
+            self.state.set_revert_state(self._revert_state)
+
+            if self._total_diff:
+                self.state.total_diff_additions = self._total_diff.additions
+                self.state.total_diff_deletions = self._total_diff.deletions
+                self.state.total_diff_files = self._total_diff.files
+            else:
+                self.state.total_diff_additions = 0
+                self.state.total_diff_deletions = 0
+                self.state.total_diff_files = 0
+
+            revert_data = None
             if self._revert_state:
                 revert_data = RevertStateData(
                     message_id=self._revert_state.message_id,
@@ -489,34 +600,33 @@ class QueryEngine:
                     deletions=self._revert_state.diff.deletions
                     if self._revert_state.diff
                     else 0,
-                    files=self._revert_state.diff.files
-                    if self._revert_state.diff
-                    else 0,
+                    files=self._revert_state.diff.files if self._revert_state.diff else 0,
                 )
 
+            total_diff = {
+                "additions": self.state.total_diff_additions,
+                "deletions": self.state.total_diff_deletions,
+                "files": self.state.total_diff_files,
+            }
+
             session = self._session_store.save_snapshot(
-                session_id=self._session_id,
+                session_id=self.state.session_id,
                 messages=list(self.state.messages),
                 working_directory=self._cwd,
                 current_turn=self.state.current_turn,
-                title=self._session_title,
-                created_at=self._session_created_at,
+                title=self.state.title,
+                created_at=self.state.created_at,
                 model_id=self.client_config.model_id,
                 model_name=self.client_config.model_name,
                 total_usage=self.state.total_usage,
                 revert_state=revert_data,
-                total_diff={
-                    "additions": self._total_diff.additions if self._total_diff else 0,
-                    "deletions": self._total_diff.deletions if self._total_diff else 0,
-                    "files": self._total_diff.files if self._total_diff else 0,
-                }
-                if self._total_diff
-                else None,
+                total_diff=total_diff,
             )
-            self._session_title = session.title
-            self._session_created_at = session.created_at
+            # Update state with any derived values from save
+            self.state.title = session.title
+            self.state.created_at = session.created_at
             logger.debug(
-                f"Persisted session {self._session_id}: {len(self.state.messages)} messages"
+                f"Persisted session {self.state.session_id}: {len(self.state.messages)} messages"
             )
         except Exception as e:
             logger.warning(f"Failed to persist session: {e}")
@@ -559,7 +669,10 @@ class QueryEngine:
                     yield event
                 return
 
-            from cc_code.core.file_expansion import has_web_reference
+            from cc_code.core.file_expansion import (
+                expand_file_references,
+                has_web_reference,
+            )
 
             # Expand @file_path references
             expanded_text, file_expansions = expand_file_references(
@@ -590,19 +703,19 @@ class QueryEngine:
                     )  # Keep the same UUID for consistency
                     self.state.messages[-1] = user_message
                     logger.info(
-                        f"Replaced rewound user message - session_id={self._session_id}"
+                        f"Replaced rewound user message - session_id={self.state.session_id}"
                     )
                     # Clear revert state since user has submitted a new message
-                    self.clear_revert_state()
+                    self.set_revert_state(None)
                 else:
                     self.state.add_message(user_message)
                     logger.info(
-                        f"User message created - session_id={self._session_id}, web_enabled={web_enabled}"
+                        f"User message created - session_id={self.state.session_id}, web_enabled={web_enabled}"
                     )
             else:
                 self.state.add_message(user_message)
                 logger.info(
-                    f"User message created - session_id={self._session_id}, web_enabled={web_enabled}"
+                    f"User message created - session_id={self.state.session_id}, web_enabled={web_enabled}"
                 )
 
             yield MessageCompleteEvent(message=user_message)
@@ -618,7 +731,7 @@ class QueryEngine:
             ):
                 if current_task in self._cancelled_tasks:
                     self._cancelled_tasks.discard(current_task)
-                self._persist_session()
+                self.persist_session()
                 self.clear_interrupt()
                 return
             raise
@@ -643,7 +756,6 @@ class QueryEngine:
         """
         from cc_code.core.compaction import (
             SessionCompaction,
-            DEFAULT_COMPACTION_PROMPT,
         )
 
         if not self._is_initialized or not self._client:
@@ -689,8 +801,7 @@ class QueryEngine:
         assistant_message = Message.assistant_message(content=[])
         assistant_message.is_compact_summary = True
         # Store parent_id for filtering (the user message that triggered compaction)
-        assistant_message.message = assistant_message.message or {}
-        assistant_message.message["parent_id"] = user_message.uuid
+        assistant_message.parent_id = user_message.uuid
 
         # Stream the summary using raw API call
         current_text = ""
@@ -707,7 +818,9 @@ class QueryEngine:
                 "stream_options": {"include_usage": True},
             }
 
-            stream_response = await self._client._client.chat.completions.create(**request_params)
+            stream_response = await self._client._client.chat.completions.create(
+                **request_params
+            )
 
             async for chunk in stream_response:
                 self._raise_if_interrupted()
@@ -716,7 +829,9 @@ class QueryEngine:
 
                 # Extract usage if available
                 extract_usage = getattr(self._client, "extract_usage", None)
-                chunk_usage = extract_usage(chunk_dict) if callable(extract_usage) else None
+                chunk_usage = (
+                    extract_usage(chunk_dict) if callable(extract_usage) else None
+                )
                 if chunk_usage:
                     current_usage = chunk_usage
                     self.state.total_usage = chunk_usage
@@ -731,24 +846,17 @@ class QueryEngine:
             # Update the assistant message with the final text
             assistant_message.content = [TextContent(text=current_text)]
             # Set stop_reason to mark this as a completed summary (for filtering)
-            assistant_message.message["stop_reason"] = "stop"
-            
+            assistant_message.stop_reason = "stop"
+
             # Attach usage to the message so UI can refresh context info
             if current_usage:
-                assistant_message.message["usage"] = {
-                    "input_tokens": current_usage.input_tokens,
-                    "output_tokens": current_usage.output_tokens,
-                }
+                assistant_message.usage = current_usage
 
             # Align with opencode: KEEP ALL HISTORY, just add the summary message
             # The summary is marked with is_compact_summary = True for filtering
             self.state.add_message(assistant_message)
 
             # Calculate tokens saved (for logging only)
-            original_tokens = sum(
-                compaction.estimate_message_tokens(msg)
-                for msg in compaction.get_messages_for_compaction()
-            )
             summary_tokens = compaction.estimate_tokens(current_text)
 
             logger.info(
@@ -793,7 +901,7 @@ class QueryEngine:
 
         system_prompt = await self._build_system_prompt()
 
-        while self.state.current_turn < self.config.max_turns:
+        while self.max_turns is None or self.state.current_turn < self.max_turns:
             self.state.is_streaming = True
             self.state.current_streaming_text = ""
 
@@ -814,100 +922,65 @@ class QueryEngine:
                 async for chunk in self._client.chat_completion(
                     filtered_messages,  # Use filtered messages, not all messages
                     self.tool_registry,
-                    stream=self.config.stream,
+                    stream=True,
                     system_prompt=system_prompt,
                 ):
                     self._raise_if_interrupted()
-                    if self.config.stream:
-                        extract_usage = getattr(self._client, "extract_usage", None)
-                        chunk_usage = (
-                            extract_usage(chunk) if callable(extract_usage) else None
+                    extract_usage = getattr(self._client, "extract_usage", None)
+                    chunk_usage = (
+                        extract_usage(chunk) if callable(extract_usage) else None
+                    )
+                    if chunk_usage:
+                        current_usage = chunk_usage
+                        self.state.total_usage = chunk_usage
+
+                    # Parse streaming chunk
+                    text_delta, thinking_delta, tool_call_deltas = (
+                        self._client.parse_stream_chunk(chunk)
+                    )
+
+                    # Accumulate thinking
+                    if thinking_delta:
+                        current_thinking += thinking_delta
+                        yield ThinkingEvent(thinking=thinking_delta)
+
+                    # Accumulate text
+                    if text_delta:
+                        current_text += text_delta
+                        self.state.current_streaming_text = current_text
+                        yield TextEvent(text=text_delta)
+
+                    # Accumulate tool calls
+                    if tool_call_deltas:
+                        accumulated_tool_calls = self._client.accumulate_tool_calls(
+                            accumulated_tool_calls,
+                            tool_call_deltas,
                         )
-                        if chunk_usage:
-                            current_usage = chunk_usage
-                            self.state.total_usage = chunk_usage
-
-                        # Parse streaming chunk
-                        text_delta, thinking_delta, tool_call_deltas = (
-                            self._client.parse_stream_chunk(chunk)
-                        )
-
-                        # Accumulate thinking
-                        if thinking_delta:
-                            current_thinking += thinking_delta
-                            yield ThinkingEvent(thinking=thinking_delta)
-
-                        # Accumulate text
-                        if text_delta:
-                            current_text += text_delta
-                            self.state.current_streaming_text = current_text
-                            yield TextEvent(text=text_delta)
-
-                        # Accumulate tool calls
-                        if tool_call_deltas:
-                            accumulated_tool_calls = self._client.accumulate_tool_calls(
+                        preview_tool_uses = (
+                            self._client.tool_calls_to_content_blocks(
                                 accumulated_tool_calls,
-                                tool_call_deltas,
+                                allow_partial=True,
                             )
-                            preview_tool_uses = (
-                                self._client.partial_tool_calls_to_content_blocks(
-                                    accumulated_tool_calls
-                                )
-                            )
-                            for tool_use in preview_tool_uses:
-                                if tool_use.id in previewed_tool_use_ids:
-                                    continue
-                                previewed_tool_use_ids.add(tool_use.id)
-                                logger.debug(
-                                    f"Previewing partial tool use: tool_use.name={tool_use.name}, tool_use.id={tool_use.id}, tool_use.input: {tool_use.input}"
-                                )
-                                yield ToolUseEvent(
-                                    tool_use_id=tool_use.id,
-                                    tool_name=tool_use.name,
-                                    input=tool_use.input,
-                                )
-
-                        # Check for finish reason
-                        choices = chunk.get("choices", [])
-                        if choices:
-                            finish_reason = choices[0].get("finish_reason")
-                            if finish_reason:
-                                stop_reason = finish_reason
-                    else:
-                        # Non-streaming response
-                        choices = chunk.get("choices", [])
-                        text, thinking, tool_uses, usage = (
-                            self._client.parse_non_stream_response(chunk)
                         )
-                        current_text = text
-                        current_thinking = thinking
-                        current_usage = usage
-                        accumulated_tool_calls = []
-
-                        # Convert tool uses to deltas
-                        for tu in tool_uses:
-                            accumulated_tool_calls.append(
-                                ToolCallDelta(
-                                    id=tu.id,
-                                    name=tu.name,
-                                    arguments=json.dumps(tu.input),
-                                )
+                        for tool_use in preview_tool_uses:
+                            if tool_use.id in previewed_tool_use_ids:
+                                continue
+                            previewed_tool_use_ids.add(tool_use.id)
+                            logger.debug(
+                                f"Previewing partial tool use: tool_use.name={tool_use.name}, tool_use.id={tool_use.id}, tool_use.input: {tool_use.input}"
+                            )
+                            yield ToolUseEvent(
+                                tool_use_id=tool_use.id,
+                                tool_name=tool_use.name,
+                                input=tool_use.input,
                             )
 
-                        if thinking:
-                            yield ThinkingEvent(thinking=thinking)
-
-                        if text:
-                            yield TextEvent(text=text)
-
-                        if usage:
-                            self.state.total_usage = usage
-
-                        stop_reason = (
-                            choices[0].get("finish_reason", "stop")
-                            if choices
-                            else "stop"
-                        )
+                    # Check for finish reason
+                    choices = chunk.get("choices", [])
+                    if choices:
+                        finish_reason = choices[0].get("finish_reason")
+                        if finish_reason:
+                            stop_reason = finish_reason
 
                 # Build content blocks
                 self._raise_if_interrupted()
@@ -939,7 +1012,7 @@ class QueryEngine:
                     # No tool calls - we're done
                     # Persist session when stop_reason is 'stop'
                     if stop_reason == "stop":
-                        self._persist_session()
+                        self.persist_session()
                     yield TurnCompleteEvent(
                         turn=self.state.current_turn + 1,
                         has_more_turns=False,
@@ -958,7 +1031,9 @@ class QueryEngine:
                 logger.info(
                     f"Executing {len(tool_use_blocks)} tool calls: {tool_calls_info}"
                 )
-                tool_results: List[tuple] = []  # (tool_use_id, result, is_error, metadata)
+                tool_results: List[
+                    tuple
+                ] = []  # (tool_use_id, result, is_error, metadata)
 
                 # Track snapshots for file-modifying tools
                 step_snapshot: Optional[str] = None
@@ -1006,29 +1081,25 @@ class QueryEngine:
                         result = await tool.call(
                             tool_use.input, self._get_tool_context(assistant_message_id)
                         )
-                        is_error = tool.is_error_result(result, tool_use.input)
                         
-                        # Extract loaded instruction metadata from Read tool results
+                        # Handle structured tool results (e.g., Read tool with metadata)
                         metadata = None
-                        if tool_use.name == "Read" and "<!-- loaded:" in result:
-                            import re
-                            match = re.search(r'<!-- loaded: (\[.*?\]) -->', result)
-                            if match:
-                                try:
-                                    import json
-                                    loaded_paths = json.loads(match.group(1))
-                                    metadata = {"loaded": loaded_paths}
-                                    # Remove the metadata comment from result
-                                    result = re.sub(r'\n\n<!-- loaded: \[.*?\] -->', '', result)
-                                except (json.JSONDecodeError, ValueError):
-                                    pass
-                        
+                        if isinstance(result, dict) and "content" in result:
+                            # Structured result with metadata
+                            metadata = result.get("metadata")
+                            is_error = tool.is_error_result(result["content"], tool_use.input)
+                            result_str = result["content"]
+                        else:
+                            # Simple string result
+                            result_str = result
+                            is_error = tool.is_error_result(result_str, tool_use.input)
+
                         yield ToolResultEvent(
                             tool_use_id=tool_use.id,
-                            result=result,
+                            result=result_str,
                             is_error=is_error,
                         )
-                        tool_results.append((tool_use.id, result, is_error, metadata))
+                        tool_results.append((tool_use.id, result_str, is_error, metadata))
                     except Exception as e:
                         error_msg = f"Tool execution failed: {str(e)}"
                         yield ToolResultEvent(
@@ -1040,6 +1111,8 @@ class QueryEngine:
 
                 # Create patch after tool execution if we had a snapshot
                 if step_snapshot and self._snapshot_manager:
+                    from cc_code.core.snapshot import DiffSummary
+
                     try:
                         patch = self._snapshot_manager.patch(step_snapshot)
                         if patch.files:
@@ -1083,11 +1156,14 @@ class QueryEngine:
                 self.state.current_turn += 1
 
                 # Check if we should continue
-                has_more = self.state.current_turn < self.config.max_turns
+                has_more = (
+                    self.max_turns is None
+                    or self.state.current_turn < self.max_turns
+                )
 
                 # Persist session when stop_reason is 'stop'
                 if stop_reason == "stop":
-                    self._persist_session()
+                    self.persist_session()
 
                 yield TurnCompleteEvent(
                     turn=self.state.current_turn,
@@ -1104,14 +1180,14 @@ class QueryEngine:
                 raise
             except APIError as e:
                 error_msg = f"API error: {str(e)}"
-                self._persist_session()
+                self.persist_session()
                 logger.info(f"saved session due to API error: {error_msg}")
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return
             except Exception as e:
                 log_full_exception(logger, "Unexpected error in query loop", e)
                 error_msg = f"Query failed: {str(e)}"
-                self._persist_session()
+                self.persist_session()
                 logger.info(f"saved session due to Unexpected error: {error_msg}")
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return

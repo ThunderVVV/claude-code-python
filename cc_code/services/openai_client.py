@@ -13,9 +13,7 @@ from cc_code.utils.logging_config import log_full_exception
 
 from cc_code.core.messages import (
     Message,
-    MessageRole,
     ToolUseContent,
-    ToolResultContent,
     Usage,
 )
 from cc_code.core.tools import ToolRegistry
@@ -75,7 +73,7 @@ class OpenAIClient:
         openai_messages = []
 
         for msg in messages:
-            if msg.type == MessageRole.SYSTEM:
+            if msg.type.value == "system":
                 openai_messages.append(
                     {
                         "role": "system",
@@ -83,7 +81,7 @@ class OpenAIClient:
                     }
                 )
 
-            elif msg.type == MessageRole.USER:
+            elif msg.type.value == "user":
                 openai_messages.append(
                     {
                         "role": "user",
@@ -91,21 +89,19 @@ class OpenAIClient:
                     }
                 )
 
-            elif msg.type == MessageRole.ASSISTANT:
-                # Check if message has tool calls
+            elif msg.type.value == "assistant":
                 tool_uses = msg.get_tool_uses()
 
                 if tool_uses:
-                    # Assistant message with tool calls
                     tool_calls = []
-                    for tu in tool_uses:
+                    for tool_use in tool_uses:
                         tool_calls.append(
                             {
-                                "id": tu.id,
+                                "id": tool_use.id,
                                 "type": "function",
                                 "function": {
-                                    "name": tu.name,
-                                    "arguments": json.dumps(tu.input),
+                                    "name": tool_use.name,
+                                    "arguments": json.dumps(tool_use.input),
                                 },
                             }
                         )
@@ -118,19 +114,16 @@ class OpenAIClient:
                         }
                     )
                 else:
-                    # Simple text message
-                    text = msg.get_text()
                     openai_messages.append(
                         {
                             "role": "assistant",
-                            "content": text,
+                            "content": msg.get_text(),
                         }
                     )
 
-            elif msg.type == MessageRole.TOOL:
-                # Tool result message
+            elif msg.type.value == "tool":
                 for block in msg.content:
-                    if isinstance(block, ToolResultContent):
+                    if block.type == "tool_result":
                         openai_messages.append(
                             {
                                 "role": "tool",
@@ -253,53 +246,6 @@ class OpenAIClient:
 
         return text, thinking, tool_calls
 
-    def parse_non_stream_response(
-        self,
-        response: Dict[str, Any],
-    ) -> tuple[str, str, List[ToolUseContent], Optional[Usage]]:
-        """
-        Parse a non-stream response into text, thinking, tool uses, and usage.
-
-        Returns (text, thinking, tool_uses, usage)
-        """
-        text = ""
-        thinking = ""
-        tool_uses = []
-        usage = None
-
-        choices = response.get("choices", [])
-        if not choices:
-            return text, thinking, tool_uses, usage
-
-        message = choices[0].get("message", {})
-
-        # Extract reasoning_content (thinking) - for models like DeepSeek
-        if "reasoning_content" in message and message["reasoning_content"] is not None:
-            thinking = message["reasoning_content"]
-
-        # Extract text content
-        if "content" in message and message["content"] is not None:
-            text = message["content"]
-
-        # Extract tool calls
-        if "tool_calls" in message and message["tool_calls"] is not None:
-            for tc in message["tool_calls"]:
-                try:
-                    args = json.loads(tc["function"]["arguments"])
-                    tool_uses.append(
-                        ToolUseContent(
-                            id=tc["id"],
-                            name=tc["function"]["name"],
-                            input=args,
-                        )
-                    )
-                except (KeyError, json.JSONDecodeError):
-                    continue
-
-        usage = self.extract_usage(response)
-
-        return text, thinking, tool_uses, usage
-
     def extract_usage(self, payload: Dict[str, Any]) -> Optional[Usage]:
         """Extract usage metadata from streaming or non-streaming payloads."""
         usage_payload = payload.get("usage")
@@ -397,24 +343,7 @@ class OpenAIClient:
             return parsed
         return {}
 
-    def partial_tool_calls_to_content_blocks(
-        self,
-        tool_calls: List[ToolCallDelta],
-    ) -> List[ToolUseContent]:
-        """Build preview tool blocks from the currently streamed tool call deltas."""
-        blocks = []
-        for tc in tool_calls:
-            if not tc.id or not tc.name:
-                continue
-            args = self._parse_tool_call_arguments(tc.arguments, allow_partial=True)
-            blocks.append(
-                ToolUseContent(
-                    id=tc.id,
-                    name=tc.name,
-                    input=args,
-                )
-            )
-        return blocks
+
 
     def _extract_partial_string_fields(self, arguments: str) -> Dict[str, Any]:
         """Recover top-level string fields whose values are already fully streamed."""
@@ -429,35 +358,6 @@ class OpenAIClient:
             except json.JSONDecodeError:
                 continue
         return partial
-
-    async def _chat_completion_raw(
-        self,
-        messages: List[Dict[str, Any]],
-        model: Optional[str] = None,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-    ) -> Dict[str, Any]:
-        """Simple non-streaming chat completion for internal use.
-
-        Args:
-            messages: List of message dicts in OpenAI format
-            model: Model name (uses config default if not provided)
-            max_tokens: Max tokens (uses config default if not provided)
-            temperature: Temperature (uses config default if not provided)
-
-        Returns:
-            Raw response dict
-        """
-        request_params = {
-            "model": model or self.config.model_name,
-            "messages": messages,
-            "max_tokens": max_tokens or self.config.max_tokens,
-            "temperature": temperature if temperature is not None else self.config.temperature,
-            "stream": False,
-        }
-
-        response = await self._client.chat.completions.create(**request_params)
-        return response.model_dump()
 
 
 class APIError(Exception):

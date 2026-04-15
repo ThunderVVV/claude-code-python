@@ -27,8 +27,8 @@ DEFAULT_TRACK_EXTENSIONS = {
     ".py",
     ".js",
     ".ts",
-    ".tsx",
     ".jsx",
+    ".tsx",
     ".java",
     ".kt",
     ".go",
@@ -37,68 +37,29 @@ DEFAULT_TRACK_EXTENSIONS = {
     ".cpp",
     ".h",
     ".hpp",
-    ".cs",
     ".rb",
     ".php",
     ".swift",
-    ".m",
-    ".scala",
-    ".clj",
-    ".ex",
-    ".exs",
-    ".erl",
-    ".hs",
-    ".ml",
-    ".fs",
-    ".vb",
-    ".lua",
-    ".r",
-    ".dart",
     ".vue",
     ".svelte",
     ".html",
-    ".htm",
     ".css",
     ".scss",
-    ".sass",
-    ".less",
     ".json",
     ".yaml",
     ".yml",
     ".toml",
-    ".ini",
-    ".cfg",
-    ".conf",
     ".xml",
     ".sh",
     ".bash",
-    ".zsh",
-    ".fish",
-    ".ps1",
-    ".bat",
-    ".cmd",
     ".sql",
-    ".graphql",
-    ".proto",
-    ".thrift",
     ".md",
-    ".rst",
-    ".txt",
-    ".gitignore",
-    ".dockerignore",
-    ".env.example",
     "Dockerfile",
     "Makefile",
-    "CMakeLists.txt",
-    "README",
-    "LICENSE",
-    "requirements.txt",
-    "setup.py",
     "pyproject.toml",
     "Cargo.toml",
     "go.mod",
     "package.json",
-    "tsconfig.json",
 }
 
 
@@ -449,6 +410,24 @@ class SnapshotManager:
         )
 
 
-def compute_worktree_hash(working_directory: str) -> str:
-    """Compute a hash for the working directory path"""
-    return hashlib.sha256(working_directory.encode()).hexdigest()[:16]
+# Revert state models (previously in revert.py)
+
+
+@dataclass
+class RevertState:
+    """State tracking for a revert operation"""
+
+    message_id: str  # Message ID where revert started
+    part_id: Optional[str] = None  # Specific part ID (if reverting partial message)
+    snapshot: Optional[str] = None  # Snapshot hash before revert (for unrevert)
+    diff: Optional[DiffSummary] = None  # Diff summary of reverted changes
+
+
+@dataclass
+class RevertResult:
+    """Result of a revert or unrevert operation"""
+
+    success: bool
+    message: str
+    revert_state: Optional[RevertState] = None
+    summary: Optional[DiffSummary] = None

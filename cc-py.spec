@@ -20,7 +20,6 @@ a = Analysis(
     hiddenimports=[
         "cc_code",
         "cc_code.cli",
-        "cc_code.api.cli",
         "cc_code.api.server",
         "cc_code.client.http_client",
         "cc_code.core.settings",

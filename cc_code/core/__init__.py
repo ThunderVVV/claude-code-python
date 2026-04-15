@@ -3,49 +3,49 @@
 from cc_code.core.messages import (
     ContentBlock,
     TextContent,
+    ThinkingContent,
     ToolUseContent,
     ToolResultContent,
+    PatchContent,
     Message,
     MessageRole,
-    QueryState,
-    ToolCallState,
+    SessionState,
     Usage,
-    # Events
     QueryEvent,
     TextEvent,
+    ThinkingEvent,
     ToolUseEvent,
     ToolResultEvent,
     MessageCompleteEvent,
     TurnCompleteEvent,
     ErrorEvent,
-)
-from cc_code.core.query_engine import (
-    QueryEngine,
-    QueryConfig,
+    generate_uuid,
 )
 from cc_code.core.tools import (
     BaseTool,
     ToolContext,
     ToolInputSchema,
     ToolRegistry,
-    PermissionResult,
-    ValidationResult,
 )
+from cc_code.core.query_engine import QueryEngine
 
 __all__ = [
     # Messages
     "ContentBlock",
     "TextContent",
+    "ThinkingContent",
     "ToolUseContent",
     "ToolResultContent",
+    "PatchContent",
     "Message",
     "MessageRole",
-    "QueryState",
-    "ToolCallState",
+    "SessionState",
     "Usage",
+    "generate_uuid",
     # Events
     "QueryEvent",
     "TextEvent",
+    "ThinkingEvent",
     "ToolUseEvent",
     "ToolResultEvent",
     "MessageCompleteEvent",
@@ -53,12 +53,9 @@ __all__ = [
     "ErrorEvent",
     # Query Engine
     "QueryEngine",
-    "QueryConfig",
     # Tools
     "BaseTool",
     "ToolContext",
     "ToolInputSchema",
     "ToolRegistry",
-    "PermissionResult",
-    "ValidationResult",
 ]

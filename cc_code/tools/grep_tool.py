@@ -9,7 +9,6 @@ from cc_code.core.tools import (
     BaseTool,
     ToolContext,
     ToolInputSchema,
-    ValidationResult,
 )
 from cc_code.tools.file_utils import expand_path
 from cc_code.tools.ripgrep import (
@@ -158,20 +157,6 @@ class GrepTool(BaseTool):
 
     def get_path(self, input: Dict[str, Any]) -> str:
         return input.get("path") or os.getcwd()
-
-    async def validate_input(
-        self, input: Dict[str, Any], context: ToolContext
-    ) -> ValidationResult:
-        path = input.get("path")
-        if path:
-            absolute_path = expand_path(path)
-            if not os.path.exists(absolute_path):
-                return ValidationResult(
-                    result=False,
-                    message=f"Path does not exist: {path}",
-                    error_code=1,
-                )
-        return ValidationResult(result=True)
 
     async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
         pattern = input.get("pattern", "")

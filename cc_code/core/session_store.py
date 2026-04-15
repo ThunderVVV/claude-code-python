@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -12,14 +12,10 @@ from typing import Any, Optional
 from cc_code.core.messages import (
     Message,
     MessageRole,
-    TextContent,
-    ThinkingContent,
-    ToolResultContent,
-    ToolUseContent,
-    PatchContent,
-    StepStartContent,
     Usage,
     generate_uuid,
+    content_block_from_dict,
+    SessionState,
 )
 
 
@@ -41,24 +37,6 @@ class RevertStateData:
     additions: int = 0
     deletions: int = 0
     files: int = 0
-
-
-@dataclass
-class PersistedSession:
-    """Full persisted session payload."""
-
-    session_id: str
-    title: str
-    created_at: str
-    updated_at: str
-    working_directory: str
-    current_turn: int = 0
-    model_id: Optional[str] = None
-    model_name: Optional[str] = None
-    total_usage: Usage = field(default_factory=Usage)
-    messages: list[Message] = field(default_factory=list)
-    revert_state: Optional[RevertStateData] = None
-    total_diff: Optional[dict] = None
 
 
 @dataclass
@@ -112,7 +90,7 @@ class SessionStore:
         total_usage: Optional[Usage] = None,
         revert_state: Optional[RevertStateData] = None,
         total_diff: Optional[dict] = None,
-    ) -> PersistedSession:
+    ) -> SessionState:
         """Persist a stable session snapshot to disk."""
         existing = self.load_session(session_id)
         now = _local_now()
@@ -122,16 +100,17 @@ class SessionStore:
             or (existing.title if existing else "")
             or derive_session_title(messages, fallback_session_id=session_id)
         )
-        resolved_total_diff = total_diff or (existing.total_diff if existing else None)
-
-        session = PersistedSession(
+        
+        state = SessionState(
             session_id=session_id,
             title=resolved_title,
             created_at=resolved_created_at,
             updated_at=now,
             working_directory=working_directory,
             current_turn=current_turn,
-            model_id=model_id if model_id is not None else (existing.model_id if existing else None),
+            model_id=model_id
+            if model_id is not None
+            else (existing.model_id if existing else None),
             model_name=model_name
             if model_name is not None
             else (existing.model_name if existing else None),
@@ -139,30 +118,80 @@ class SessionStore:
                 total_usage or (existing.total_usage if existing else None)
             ),
             messages=list(messages),
-            revert_state=revert_state,
-            total_diff=resolved_total_diff,
         )
-        self.save_session(session)
-        return session
 
-    def save_session(self, session: PersistedSession) -> None:
-        """Persist a full session payload to disk."""
+        if revert_state:
+            from cc_code.core.snapshot import DiffSummary, RevertState
+
+            state.set_revert_state(
+                RevertState(
+                    message_id=revert_state.message_id,
+                    part_id=revert_state.part_id,
+                    snapshot=revert_state.snapshot,
+                    diff=DiffSummary(
+                        additions=revert_state.additions,
+                        deletions=revert_state.deletions,
+                        files=revert_state.files,
+                    ),
+                ),
+            )
+
+        if total_diff is not None:
+            state.total_diff_additions = total_diff.get("additions", 0)
+            state.total_diff_deletions = total_diff.get("deletions", 0)
+            state.total_diff_files = total_diff.get("files", 0)
+        elif existing:
+            state.total_diff_additions = existing.total_diff_additions
+            state.total_diff_deletions = existing.total_diff_deletions
+            state.total_diff_files = existing.total_diff_files
+
+        self.save_session(state)
+        return state
+
+    def save_session(self, state: SessionState) -> None:
+        """Persist a session state to disk."""
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
-        session_path = self._session_path(session.session_id)
+        session_path = self._session_path(state.session_id)
         tmp_path = session_path.with_suffix(".json.tmp")
+        
+        # Get revert state for serialization
+        revert_data = None
+        revert = state.get_revert_state()
+        if revert:
+            revert_data = {
+                "message_id": revert.message_id,
+                "part_id": revert.part_id,
+                "snapshot": revert.snapshot,
+                "additions": revert.diff.additions if revert.diff else 0,
+                "deletions": revert.diff.deletions if revert.diff else 0,
+                "files": revert.diff.files if revert.diff else 0,
+            }
+        
+        # Get total diff
+        total_diff = None
+        if state.total_diff_additions or state.total_diff_deletions or state.total_diff_files:
+            total_diff = {
+                "additions": state.total_diff_additions,
+                "deletions": state.total_diff_deletions,
+                "files": state.total_diff_files,
+            }
+        
         payload = {
-            "session_id": session.session_id,
-            "title": session.title,
-            "created_at": session.created_at,
-            "updated_at": session.updated_at,
-            "working_directory": session.working_directory,
-            "current_turn": session.current_turn,
-            "model_id": session.model_id,
-            "model_name": session.model_name,
-            "total_usage": _usage_to_dict(session.total_usage),
-            "messages": [_message_to_dict(message) for message in session.messages],
-            "revert_state": _revert_state_to_dict(session.revert_state),
-            "total_diff": session.total_diff,
+            "session_id": state.session_id,
+            "title": state.title,
+            "created_at": state.created_at,
+            "updated_at": state.updated_at,
+            "working_directory": state.working_directory,
+            "current_turn": state.current_turn,
+            "model_id": state.model_id,
+            "model_name": state.model_name,
+            "total_usage": {
+                "input_tokens": state.total_usage.input_tokens,
+                "output_tokens": state.total_usage.output_tokens,
+            },
+            "messages": [message.serialize(format="persistence") for message in state.messages],
+            "revert_state": revert_data,
+            "total_diff": total_diff,
         }
         tmp_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -170,7 +199,7 @@ class SessionStore:
         )
         tmp_path.replace(session_path)
 
-    def load_session(self, session_id: str) -> Optional[PersistedSession]:
+    def load_session(self, session_id: str) -> Optional[SessionState]:
         """Load a persisted session by ID."""
         session_path = self._session_path(session_id)
         if not session_path.exists():
@@ -182,7 +211,22 @@ class SessionStore:
             return None
 
         try:
-            return PersistedSession(
+            # Reconstruct usage
+            usage_data = payload.get("total_usage")
+            if not isinstance(usage_data, dict):
+                usage_data = {}
+            total_usage = Usage(
+                input_tokens=int(usage_data.get("input_tokens", 0)),
+                output_tokens=int(usage_data.get("output_tokens", 0)),
+            )
+
+            # Reconstruct messages
+            messages = []
+            for message_data in payload.get("messages", []):
+                if isinstance(message_data, dict):
+                    messages.append(_reconstruct_message(message_data))
+
+            state = SessionState(
                 session_id=str(payload["session_id"]),
                 title=str(payload.get("title", "")).strip() or session_id[:8],
                 created_at=str(payload.get("created_at", "")),
@@ -191,15 +235,34 @@ class SessionStore:
                 current_turn=int(payload.get("current_turn", 0)),
                 model_id=payload.get("model_id"),
                 model_name=payload.get("model_name"),
-                total_usage=_usage_from_dict(payload.get("total_usage")),
-                messages=[
-                    _message_from_dict(message_data)
-                    for message_data in payload.get("messages", [])
-                    if isinstance(message_data, dict)
-                ],
-                revert_state=_revert_state_from_dict(payload.get("revert_state")),
-                total_diff=payload.get("total_diff"),
+                total_usage=total_usage,
+                messages=messages,
             )
+            
+            # Restore revert state
+            revert_data = payload.get("revert_state")
+            if revert_data and isinstance(revert_data, dict):
+                from cc_code.core.snapshot import DiffSummary, RevertState
+                state.set_revert_state(RevertState(
+                    message_id=str(revert_data.get("message_id", "")),
+                    part_id=revert_data.get("part_id"),
+                    snapshot=revert_data.get("snapshot"),
+                    diff=DiffSummary(
+                        additions=int(revert_data.get("additions", 0)),
+                        deletions=int(revert_data.get("deletions", 0)),
+                        files=int(revert_data.get("files", 0)),
+                    ),
+                ))
+            
+            # Restore total diff
+            total_diff = payload.get("total_diff")
+            if total_diff and isinstance(total_diff, dict):
+                state.total_diff_additions = total_diff.get("additions", 0)
+                state.total_diff_deletions = total_diff.get("deletions", 0)
+                state.total_diff_files = total_diff.get("files", 0)
+            
+            return state
+            
         except Exception:
             return None
 
@@ -269,180 +332,8 @@ def _normalize_title_text(text: str) -> str:
     return sentence[:77].rstrip() + "..."
 
 
-def _usage_to_dict(usage: Usage) -> dict[str, int]:
-    return {
-        "input_tokens": usage.input_tokens,
-        "output_tokens": usage.output_tokens,
-    }
-
-
-def _usage_from_dict(data: Any) -> Usage:
-    if not isinstance(data, dict):
-        return Usage()
-    return Usage(
-        input_tokens=int(data.get("input_tokens", 0)),
-        output_tokens=int(data.get("output_tokens", 0)),
-    )
-
-
-def _revert_state_to_dict(state: Optional[RevertStateData]) -> Optional[dict[str, Any]]:
-    if state is None:
-        return None
-    return {
-        "message_id": state.message_id,
-        "part_id": state.part_id,
-        "snapshot": state.snapshot,
-        "additions": state.additions,
-        "deletions": state.deletions,
-        "files": state.files,
-    }
-
-
-def _revert_state_from_dict(data: Any) -> Optional[RevertStateData]:
-    if not isinstance(data, dict):
-        return None
-    return RevertStateData(
-        message_id=str(data.get("message_id", "")),
-        part_id=data.get("part_id"),
-        snapshot=data.get("snapshot"),
-        additions=int(data.get("additions", 0)),
-        deletions=int(data.get("deletions", 0)),
-        files=int(data.get("files", 0)),
-    )
-
-
-def _content_block_to_dict(block: Any) -> dict[str, Any]:
-    if isinstance(block, TextContent):
-        return {"type": "text", "text": block.text}
-    if isinstance(block, ThinkingContent):
-        return {
-            "type": "thinking",
-            "thinking": block.thinking,
-            "signature": block.signature,
-        }
-    if isinstance(block, ToolUseContent):
-        return {
-            "type": "tool_use",
-            "id": block.id,
-            "name": block.name,
-            "input": block.input,
-        }
-    if isinstance(block, ToolResultContent):
-        return {
-            "type": "tool_result",
-            "tool_use_id": block.tool_use_id,
-            "content": block.content,
-            "is_error": block.is_error,
-        }
-    if isinstance(block, PatchContent):
-        return {
-            "type": "patch",
-            "prev_hash": block.prev_hash,
-            "hash": block.hash,
-            "files": block.files,
-        }
-    if isinstance(block, StepStartContent):
-        return {
-            "type": "step_start",
-            "snapshot": block.snapshot,
-        }
-    raise TypeError(f"Unsupported content block: {type(block)!r}")
-
-
-def _content_block_from_dict(data: dict[str, Any]) -> Any:
-    block_type = data.get("type")
-    if block_type == "text":
-        return TextContent(text=str(data.get("text", "")))
-    if block_type == "thinking":
-        return ThinkingContent(
-            thinking=str(data.get("thinking", "")),
-            signature=str(data.get("signature", "")),
-        )
-    if block_type == "tool_use":
-        return ToolUseContent(
-            id=str(data.get("id", "")),
-            name=str(data.get("name", "")),
-            input=data.get("input", {}) if isinstance(data.get("input"), dict) else {},
-        )
-    if block_type == "tool_result":
-        return ToolResultContent(
-            tool_use_id=str(data.get("tool_use_id", "")),
-            content=str(data.get("content", "")),
-            is_error=bool(data.get("is_error", False)),
-        )
-    if block_type == "patch":
-        files = data.get("files", [])
-        return PatchContent(
-            prev_hash=str(data.get("prev_hash", "")),
-            hash=str(data.get("hash", "")),
-            files=files if isinstance(files, list) else [],
-        )
-    if block_type == "step_start":
-        return StepStartContent(
-            snapshot=str(data.get("snapshot", "")),
-        )
-    raise ValueError(f"Unknown content block type: {block_type!r}")
-
-
-def _message_to_dict(message: Message) -> dict[str, Any]:
-    result = {
-        "type": message.type.value,
-        "content": [_content_block_to_dict(block) for block in message.content],
-        "uuid": message.uuid,
-        "timestamp": message.timestamp.isoformat(),
-        "is_meta": message.is_meta,
-        "is_compact_summary": message.is_compact_summary,
-        "is_visible_in_transcript_only": message.is_visible_in_transcript_only,
-    }
-    if message.file_expansions:
-        result["file_expansions"] = [
-            {
-                "file_path": exp.file_path,
-                "content": exp.content,
-                "display_path": exp.display_path,
-            }
-            for exp in message.file_expansions
-        ]
-    if message.original_text:
-        result["original_text"] = message.original_text
-    return result
-
-
-def _reconstruct_message_dict(
-    role: MessageRole, content: list[Any], original_text: str
-) -> dict[str, Any]:
-    """Reconstruct message dict from content blocks."""
-    if role == MessageRole.USER:
-        text = ""
-        for block in content:
-            if isinstance(block, TextContent):
-                text = block.text
-                break
-        return {"role": "user", "content": text}
-    elif role == MessageRole.ASSISTANT:
-        return {
-            "role": "assistant",
-            "content": [block.to_api_format() for block in content],
-        }
-    elif role == MessageRole.SYSTEM:
-        text = ""
-        for block in content:
-            if isinstance(block, TextContent):
-                text = block.text
-                break
-        return {"role": "system", "content": text}
-    elif role == MessageRole.TOOL:
-        for block in content:
-            if isinstance(block, ToolResultContent):
-                return {
-                    "role": "tool",
-                    "content": block.content,
-                    "tool_call_id": block.tool_use_id,
-                }
-    return {"role": role.value, "content": ""}
-
-
-def _message_from_dict(data: dict[str, Any]) -> Message:
+def _reconstruct_message(data: dict[str, Any]) -> Message:
+    """Reconstruct Message from persisted dict."""
     timestamp_value = data.get("timestamp")
     timestamp = (
         datetime.fromisoformat(str(timestamp_value))
@@ -469,21 +360,18 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
 
     original_text = str(data.get("original_text", ""))
     content = [
-        _content_block_from_dict(block_data)
+        content_block_from_dict(block_data)
         for block_data in data.get("content", [])
         if isinstance(block_data, dict)
     ]
 
-    message_dict = data.get("message")
-    if not isinstance(message_dict, dict):
-        message_dict = _reconstruct_message_dict(role, content, original_text)
-
-    tool_use_result = data.get("tool_use_result")
-    if tool_use_result is None and role == MessageRole.TOOL:
-        for block in content:
-            if isinstance(block, ToolResultContent):
-                tool_use_result = block.content
-                break
+    usage = None
+    usage_data = data.get("usage")
+    if isinstance(usage_data, dict):
+        usage = Usage(
+            input_tokens=usage_data.get("input_tokens", 0),
+            output_tokens=usage_data.get("output_tokens", 0),
+        )
 
     return Message(
         type=role,
@@ -492,50 +380,10 @@ def _message_from_dict(data: dict[str, Any]) -> Message:
         timestamp=timestamp,
         is_meta=bool(data.get("is_meta", False)),
         is_compact_summary=bool(data.get("is_compact_summary", False)),
-        tool_use_result=tool_use_result,
-        is_visible_in_transcript_only=bool(
-            data.get("is_visible_in_transcript_only", False)
-        ),
-        message=message_dict,
-        file_expansions=file_expansions,
-        original_text=original_text,
-    )
-    role_value = str(data.get("type", MessageRole.USER.value))
-
-    # Restore file expansions
-    file_expansions = []
-    expansions_data = data.get("file_expansions", [])
-    if isinstance(expansions_data, list):
-        from cc_code.core.file_expansion import FileExpansion
-
-        for exp_data in expansions_data:
-            if isinstance(exp_data, dict):
-                file_expansions.append(
-                    FileExpansion(
-                        file_path=str(exp_data.get("file_path", "")),
-                        content=str(exp_data.get("content", "")),
-                        display_path=str(exp_data.get("display_path", "")),
-                    )
-                )
-
-    original_text = str(data.get("original_text", ""))
-
-    return Message(
-        type=MessageRole(role_value),
-        content=[
-            _content_block_from_dict(block_data)
-            for block_data in data.get("content", [])
-            if isinstance(block_data, dict)
-        ],
-        uuid=str(data.get("uuid", "")) or generate_uuid(),
-        timestamp=timestamp,
-        is_meta=bool(data.get("is_meta", False)),
-        is_compact_summary=bool(data.get("is_compact_summary", False)),
-        tool_use_result=data.get("tool_use_result"),
-        is_visible_in_transcript_only=bool(
-            data.get("is_visible_in_transcript_only", False)
-        ),
-        message=data.get("message") if isinstance(data.get("message"), dict) else None,
+        usage=usage,
+        stop_reason=data.get("stop_reason"),
+        parent_id=data.get("parent_id"),
+        subtype=data.get("subtype"),
         file_expansions=file_expansions,
         original_text=original_text,
     )

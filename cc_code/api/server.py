@@ -10,31 +10,20 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from cc_code.core.messages import (
-    TextContent,
-    ThinkingContent,
-    ToolUseContent,
-    ToolResultContent,
-    TextEvent as CoreTextEvent,
-    ThinkingEvent as CoreThinkingEvent,
-    ToolUseEvent as CoreToolUseEvent,
-    ToolResultEvent as CoreToolResultEvent,
-    MessageCompleteEvent as CoreMessageCompleteEvent,
-    TurnCompleteEvent as CoreTurnCompleteEvent,
-    ErrorEvent as CoreErrorEvent,
     generate_uuid,
+    message_to_api_dict,
+    event_to_api_dict,
+    SessionState,
 )
 from cc_code.core.query_engine import QueryEngine
 from cc_code.core.tools import ToolRegistry
-from cc_code.core.session_store import (
-    SessionStore,
-    PersistedSession,
-)
+from cc_code.core.session_store import SessionStore
 from cc_code.core.settings import (
     SettingsStore,
     build_client_config,
@@ -42,31 +31,22 @@ from cc_code.core.settings import (
 )
 from cc_code.core.instruction import InstructionConfig
 from cc_code.services.openai_client import OpenAIClientConfig
-from cc_code.core.file_expansion import (
-    FileExpansion,
-    parse_file_references,
-    read_file_content,
-    resolve_file_path,
-    has_web_reference,
-)
 
 logger = logging.getLogger(__name__)
 
-# Global state
-_session_manager: Optional[object] = None
-
-
 class SessionManager:
-    def __init__(self):
+    """Manages session and engine lifecycle."""
+
+    def __init__(self, settings_store: SettingsStore, tool_registry: ToolRegistry):
         self._engines: dict[str, QueryEngine] = {}
         self._session_store = SessionStore()
-        self._settings_store = SettingsStore()
+        self._settings_store = settings_store
+        self._tool_registry = tool_registry
         self._lock = asyncio.Lock()
 
     async def get_or_create_engine(
         self,
         session_id: Optional[str],
-        tool_registry: ToolRegistry,
         working_directory: str = "",
         model_id: Optional[str] = None,
     ) -> QueryEngine:
@@ -75,7 +55,7 @@ class SessionManager:
                 return self._engines[session_id]
 
             engine = await self._create_engine(
-                session_id, tool_registry, working_directory, model_id
+                session_id, working_directory, model_id
             )
             self._engines[engine.get_session_id()] = engine
             return engine
@@ -83,13 +63,11 @@ class SessionManager:
     async def _create_engine(
         self,
         session_id: Optional[str],
-        tool_registry: ToolRegistry,
         working_directory: str,
         model_id: Optional[str] = None,
     ) -> QueryEngine:
         client_config = self._resolve_client_config(session_id, model_id)
 
-        # Get custom instructions from settings
         settings = self.get_settings()
         instruction_config = InstructionConfig(
             custom_instructions=settings.instructions,
@@ -98,7 +76,7 @@ class SessionManager:
         return await QueryEngine.create_from_session_id(
             session_id=session_id,
             client_config=client_config,
-            tool_registry=tool_registry,
+            tool_registry=self._tool_registry,
             session_store=self._session_store,
             working_directory=working_directory,
             instruction_config=instruction_config,
@@ -107,7 +85,7 @@ class SessionManager:
     def get_engine(self, session_id: str) -> Optional[QueryEngine]:
         return self._engines.get(session_id)
 
-    def get_settings(self):
+    def get_settings(self) -> SettingsStore:
         return self._settings_store.ensure_settings()
 
     def _resolve_client_config(
@@ -115,12 +93,9 @@ class SessionManager:
     ) -> OpenAIClientConfig:
         settings = self.get_settings()
 
-        # If model_id is explicitly provided, use it
-        if model_id:
-            if model_id in settings.models:
-                return build_client_config(settings, model_id)
+        if model_id and model_id in settings.models:
+            return build_client_config(settings, model_id)
 
-        # Otherwise fall back to session or default
         if session_id:
             persisted = self._session_store.load_session(session_id)
             if persisted:
@@ -139,37 +114,23 @@ class SessionManager:
     def list_sessions(self):
         return self._session_store.list_sessions()
 
-    def get_session(self, session_id: str) -> Optional[PersistedSession]:
-        # First try to get from engine (in-memory, most up-to-date)
+    async def close_all(self) -> None:
+        """Close all engines and release resources."""
+        for engine in self._engines.values():
+            await engine.close()
+        self._engines.clear()
+
+    def get_session(self, session_id: str) -> Optional[SessionState]:
+        """Get session details from engine or disk."""
         engine = self._engines.get(session_id)
         if engine:
-            from cc_code.core.session_store import PersistedSession
-            from cc_code.core.messages import Usage
+            # Update state with current values and return it
+            engine.state.working_directory = engine.get_working_directory()
+            engine.state.model_id = engine.client_config.model_id
+            engine.state.model_name = engine.client_config.model_name
+            return engine.state
 
-            messages = engine.get_messages()
-            return PersistedSession(
-                session_id=session_id,
-                title=engine._session_title or "",
-                created_at=engine._session_created_at or "",
-                updated_at="",
-                working_directory=engine.get_working_directory(),
-                current_turn=engine.state.current_turn,
-                model_id=engine.client_config.model_id,
-                model_name=engine.client_config.model_name,
-                total_usage=engine.state.total_usage or Usage(),
-                messages=messages,
-                revert_state=None,
-            )
-        # Fall back to disk
         return self._session_store.load_session(session_id)
-
-
-def get_session_manager() -> SessionManager:
-    """Get or create the global session manager"""
-    global _session_manager
-    if _session_manager is None:
-        _session_manager = SessionManager()
-    return _session_manager
 
 
 # Request models
@@ -204,205 +165,18 @@ class CompactRequest(BaseModel):
 
 def _normalize_api_prefix(api_prefix: str) -> str:
     """Normalize an optional API prefix for route registration."""
-    prefix = api_prefix.strip()
-    if not prefix or prefix == "/":
-        return ""
-    prefix = prefix.rstrip("/")
-    if not prefix.startswith("/"):
-        prefix = f"/{prefix}"
-    return prefix
-
-
-def serialize_file_expansions(file_expansions: list[FileExpansion]) -> list[dict]:
-    """Convert file-expansion objects into JSON-friendly dictionaries."""
-    return [
-        {
-            "file_path": exp.file_path,
-            "content": exp.content,
-            "display_path": exp.display_path,
-        }
-        for exp in file_expansions
-    ]
-
-
-def build_visible_file_expansions(
-    user_text: str,
-    working_directory: str,
-) -> list[FileExpansion]:
-    """Reconstruct visible @file_path expansions for the web frontend."""
-    if not user_text:
-        return []
-
-    expansions: list[FileExpansion] = []
-    seen_paths: set[str] = set()
-    web_requested = has_web_reference(user_text)
-
-    for file_path, _start_pos, _end_pos in parse_file_references(user_text):
-        if file_path == "web" and web_requested:
-            continue
-        if file_path in seen_paths:
-            continue
-
-        full_path = resolve_file_path(file_path, working_directory)
-        if full_path is None:
-            continue
-
-        content = read_file_content(full_path)
-        if content is None:
-            continue
-
-        seen_paths.add(file_path)
-        expansions.append(
-            FileExpansion(
-                file_path=full_path,
-                content=content,
-                display_path=file_path,
-            )
-        )
-
-    return expansions
-
-
-# Content block converters
-def content_block_to_dict(block) -> dict:
-    if isinstance(block, TextContent):
-        return {"type": "text", "text": block.text}
-    elif isinstance(block, ThinkingContent):
-        return {"type": "thinking", "thinking": block.thinking}
-    elif isinstance(block, ToolUseContent):
-        return {
-            "type": "tool_use",
-            "tool_use_id": block.id,
-            "tool_name": block.name,
-            "input": block.input,
-        }
-    elif isinstance(block, ToolResultContent):
-        return {
-            "type": "tool_result",
-            "tool_use_id": block.tool_use_id,
-            "result": block.content,
-            "is_error": block.is_error,
-        }
-    return {"type": "unknown"}
-
-
-def message_to_dict(message, working_directory: str = "") -> dict:
-    """Serialize a message for web transport."""
-    message_dict = {
-        "uuid": message.uuid,
-        "role": message.type.value
-        if hasattr(message.type, "value")
-        else str(message.type),
-        "content_blocks": [content_block_to_dict(block) for block in message.content],
-    }
-
-    if message.original_text:
-        message_dict["original_text"] = message.original_text
-
-    if message.message:
-        usage = message.message.get("usage")
-        if usage:
-            message_dict["usage"] = usage
-
-    if getattr(message, "file_expansions", None):
-        message_dict["file_expansions"] = serialize_file_expansions(
-            message.file_expansions
-        )
-    elif message_dict["role"] == "user" and message.original_text and working_directory:
-        file_expansions = build_visible_file_expansions(
-            message.original_text,
-            working_directory,
-        )
-        if file_expansions:
-            message_dict["file_expansions"] = serialize_file_expansions(file_expansions)
-
-    if message_dict["role"] == "user":
-        message_dict["web_enabled"] = bool(
-            getattr(message, "web_enabled", False)
-            or (message.original_text and has_web_reference(message.original_text))
-        )
-
-    return message_dict
-
-
-def event_to_dict(event, working_directory: str = "") -> dict:
-    if isinstance(event, CoreTextEvent):
-        return {"type": "text", "text": event.text}
-    elif isinstance(event, CoreThinkingEvent):
-        return {"type": "thinking", "thinking": event.thinking}
-    elif isinstance(event, CoreToolUseEvent):
-        return {
-            "type": "tool_use",
-            "tool_use_id": event.tool_use_id,
-            "tool_name": event.tool_name,
-            "input": event.input,
-        }
-    elif isinstance(event, CoreToolResultEvent):
-        return {
-            "type": "tool_result",
-            "tool_use_id": event.tool_use_id,
-            "result": event.result,
-            "is_error": event.is_error,
-        }
-    elif isinstance(event, CoreMessageCompleteEvent):
-        event_dict: dict[str, object] = {"type": "message_complete"}
-        if event.message:
-            event_dict["message"] = message_to_dict(
-                event.message,
-                working_directory=working_directory,
-            )
-        return event_dict
-    elif isinstance(event, CoreTurnCompleteEvent):
-        return {
-            "type": "turn_complete",
-            "turn": event.turn,
-            "has_more_turns": event.has_more_turns,
-        }
-    elif isinstance(event, CoreErrorEvent):
-        return {"type": "error", "error": event.error, "is_fatal": event.is_fatal}
-    return {"type": "unknown"}
+    prefix = api_prefix.strip().strip("/")
+    return f"/{prefix}" if prefix else ""
 
 
 api_router = APIRouter()
 
 
-# Global dependencies
-_settings_store: Optional[SettingsStore] = None
-_tool_registry: Optional[ToolRegistry] = None
-
-
-def set_global_dependencies(
-    settings_store: SettingsStore,
-    tool_registry: ToolRegistry,
-) -> None:
-    """Set global dependencies before app startup"""
-    global _settings_store, _tool_registry
-    _settings_store = settings_store
-    _tool_registry = tool_registry
-
-
-def require_global_dependencies() -> tuple[SettingsStore, ToolRegistry]:
-    """Return global dependencies or raise if not set"""
-    if _settings_store is None or _tool_registry is None:
-        raise RuntimeError("Global dependencies not set")
-    return _settings_store, _tool_registry
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage application lifecycle"""
-    logger.info("Server starting")
-    yield
-    logger.info("Server shutting down")
-
-
-async def event_stream(chat_request: ChatRequest):
+async def event_stream(chat_request: ChatRequest, session_manager: SessionManager, user_text_override: Optional[str] = None):
     """Generate SSE events from QueryEngine directly"""
 
     try:
         session_id = chat_request.session_id
-        _settings_store, tool_registry = require_global_dependencies()
-        session_manager = get_session_manager()
 
         if not session_id:
             session_id = generate_uuid()
@@ -412,13 +186,13 @@ async def event_stream(chat_request: ChatRequest):
 
         engine = await session_manager.get_or_create_engine(
             session_id,
-            tool_registry,
             chat_request.working_directory,
             model_id=chat_request.model,
         )
 
-        async for event in engine.submit_message(chat_request.user_text):
-            event_dict = event_to_dict(
+        user_text = user_text_override or chat_request.user_text
+        async for event in engine.submit_message(user_text):
+            event_dict = event_to_api_dict(
                 event,
                 working_directory=chat_request.working_directory,
             )
@@ -432,42 +206,8 @@ async def event_stream(chat_request: ChatRequest):
         yield f"data: {json.dumps(error_dict)}\n\n"
 
 
-async def compact_stream(request: CompactRequest):
-    """Generate SSE events for compact session - aligns with opencode principle.
-
-    Streams the summary while preserving all history messages, only adds
-    the summary marked as is_compact_summary.
-    """
-    try:
-        session_id = request.session_id
-        _settings_store, tool_registry = require_global_dependencies()
-        session_manager = get_session_manager()
-
-        engine = await session_manager.get_or_create_engine(
-            session_id,
-            tool_registry,
-            request.working_directory,
-            model_id=request.model,
-        )
-
-        # Use the engine's compact handling directly (streaming)
-        async for event in engine.submit_message("/compact"):
-            event_dict = event_to_dict(
-                event,
-                working_directory=request.working_directory,
-            )
-            yield f"data: {json.dumps(event_dict)}\n\n"
-
-        logger.info(f"Compact streaming completed - session_id={session_id}")
-
-    except Exception as e:
-        logger.exception("compact_stream failed")
-        error_dict = {"type": "error", "error": str(e), "is_fatal": True}
-        yield f"data: {json.dumps(error_dict)}\n\n"
-
-
 @api_router.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, http_request: Request):
     """Stream chat response via SSE"""
     logger.info(
         f"POST /chat - session_id={request.session_id}, user_text={request.user_text[:50]}..."
@@ -475,8 +215,9 @@ async def chat(request: ChatRequest):
     logger.debug(
         f"Request: user_text={request.user_text[:50]}..., session_id={request.session_id}"
     )
+    session_manager = http_request.app.state.session_manager
     return StreamingResponse(
-        event_stream(request),
+        event_stream(request, session_manager),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -487,7 +228,7 @@ async def chat(request: ChatRequest):
 
 
 @api_router.post("/compact")
-async def compact_session(request: CompactRequest):
+async def compact_session(request: CompactRequest, http_request: Request):
     """Compact a session via streaming - aligns with opencode principle.
 
     This endpoint streams an AI summary of the conversation history,
@@ -495,8 +236,9 @@ async def compact_session(request: CompactRequest):
     is_compact_summary.
     """
     logger.info(f"POST /compact - session_id={request.session_id}")
+    session_manager = http_request.app.state.session_manager
     return StreamingResponse(
-        compact_stream(request),
+        event_stream(request, session_manager, user_text_override="/compact"),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -507,13 +249,13 @@ async def compact_session(request: CompactRequest):
 
 
 @api_router.post("/interrupt")
-async def interrupt(request: InterruptRequest):
+async def interrupt(request: InterruptRequest, http_request: Request):
     """Send interrupt signal to the backend"""
     logger.info(
         f"POST /interrupt - session_id={request.session_id}, reason={request.reason}"
     )
     try:
-        session_manager = get_session_manager()
+        session_manager = http_request.app.state.session_manager
         engine = session_manager.get_engine(request.session_id)
         if engine:
             engine.interrupt(request.reason or "user_interrupt")
@@ -525,7 +267,7 @@ async def interrupt(request: InterruptRequest):
 
 
 @api_router.post("/revert")
-async def revert(request: RevertRequest):
+async def revert(request: RevertRequest, http_request: Request):
     """Revert file changes from a specific point"""
     logger.info(
         f"POST /revert - session_id={request.session_id}, "
@@ -543,17 +285,12 @@ async def revert(request: RevertRequest):
             f"target_part_id={target_part_id}"
         )
 
-        session_manager = get_session_manager()
+        session_manager = http_request.app.state.session_manager
         engine = session_manager.get_engine(request.session_id)
         if not engine:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        revert_service = engine.get_revert_service()
-        if not revert_service:
-            raise HTTPException(status_code=500, detail="Revert service not available")
-
-        result = await revert_service.revert(
-            engine,
+        result = await engine.revert(
             target_message_id=target_message_id,
             target_part_id=target_part_id,
         )
@@ -581,11 +318,11 @@ async def revert(request: RevertRequest):
 
 
 @api_router.get("/models")
-async def list_models():
+async def list_models(http_request: Request):
     """List all available models from settings."""
     logger.info("GET /models")
     try:
-        session_manager = get_session_manager()
+        session_manager = http_request.app.state.session_manager
         settings = session_manager.get_settings()
 
         models_list = []
@@ -610,16 +347,14 @@ async def list_models():
 
 
 @api_router.post("/model")
-async def switch_model(request: SwitchModelRequest):
+async def switch_model(request: SwitchModelRequest, http_request: Request):
     """Switch the active model for a session and persist it to settings.json."""
     logger.info(
         f"POST /model - session_id={request.session_id}, model_id={request.model_id}"
     )
     try:
-        session_manager = get_session_manager()
+        session_manager = http_request.app.state.session_manager
         engine = session_manager.get_engine(request.session_id)
-        _settings_store, tool_registry = require_global_dependencies()
-
         settings = session_manager.get_settings()
         if request.model_id not in settings.models:
             raise HTTPException(status_code=404, detail="Model configuration not found")
@@ -631,7 +366,6 @@ async def switch_model(request: SwitchModelRequest):
         if engine is None:
             engine = await session_manager.get_or_create_engine(
                 request.session_id,
-                tool_registry,
                 "",
             )
         await engine.switch_model(client_config)
@@ -649,11 +383,11 @@ async def switch_model(request: SwitchModelRequest):
 
 
 @api_router.get("/snapshot_status/{session_id}")
-async def get_snapshot_status(session_id: str):
+async def get_snapshot_status(session_id: str, http_request: Request):
     """Get the snapshot status (files modified, additions, deletions)"""
     logger.info(f"GET /snapshot_status/{session_id}")
     try:
-        session_manager = get_session_manager()
+        session_manager = http_request.app.state.session_manager
         engine = session_manager.get_engine(session_id)
         if not engine:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -677,11 +411,11 @@ async def get_snapshot_status(session_id: str):
 
 
 @api_router.get("/sessions")
-async def list_sessions():
+async def list_sessions(http_request: Request):
     """List all sessions"""
     logger.info("GET /sessions")
     try:
-        session_manager = get_session_manager()
+        session_manager = http_request.app.state.session_manager
         sessions = session_manager.list_sessions()
         return {
             "sessions": [
@@ -701,11 +435,11 @@ async def list_sessions():
 
 
 @api_router.get("/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session_endpoint(session_id: str, http_request: Request):
     """Get session details"""
     logger.info(f"GET /sessions/{session_id}")
     try:
-        session_manager = get_session_manager()
+        session_manager = http_request.app.state.session_manager
         session = session_manager.get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -713,7 +447,7 @@ async def get_session(session_id: str):
         messages_list = []
         for msg in session.messages:
             messages_list.append(
-                message_to_dict(msg, working_directory=session.working_directory)
+                message_to_api_dict(msg, working_directory=session.working_directory)
             )
 
         return {
@@ -736,9 +470,37 @@ async def get_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def create_app(api_prefix: str = "/api") -> FastAPI:
-    """Create a FastAPI app with optional API route prefix."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle"""
+    logger.info("Server starting")
+    yield
+
+    session_manager: SessionManager = app.state.session_manager
+    await session_manager.close_all()
+    logger.info("Server shutting down")
+
+
+def create_app(
+    api_prefix: str = "/api",
+    settings_store: Optional[SettingsStore] = None,
+    tool_registry: Optional[ToolRegistry] = None,
+) -> FastAPI:
+    """Create a FastAPI app with optional API route prefix.
+    
+    Args:
+        api_prefix: API route prefix (e.g., "/api")
+        settings_store: Settings store instance (created if not provided)
+        tool_registry: Tool registry instance (created if not provided)
+    """
     app = FastAPI(title="CC Code Python API", lifespan=lifespan)
+
+    if settings_store is None:
+        settings_store = SettingsStore()
+    if tool_registry is None:
+        tool_registry = ToolRegistry.create_default()
+
+    app.state.session_manager = SessionManager(settings_store, tool_registry)
 
     @app.get("/health")
     async def health():
@@ -765,6 +527,3 @@ def create_app(api_prefix: str = "/api") -> FastAPI:
         app.mount("/static", StaticFiles(directory=static_path), name="static")
 
     return app
-
-
-app = create_app()

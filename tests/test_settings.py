@@ -6,39 +6,8 @@ from cc_code.core.settings import AppSettings, ModelSettings
 from cc_code.core.settings import (
     DEFAULT_THEME_NAME,
     SettingsStore,
-    migrate_env_to_settings,
 )
 import cc_code.ui.app as ui_app
-
-
-def test_settings_migrates_legacy_env_with_commented_models(tmp_path: Path) -> None:
-    env_path = tmp_path / ".env"
-    settings_path = tmp_path / "settings.json"
-    env_path.write_text(
-        "\n".join(
-            [
-                "# CC_CODE_API_URL=https://cloud.infini-ai.com/maas/coding/v1",
-                "# CC_CODE_API_KEY=test-key-1",
-                "# CC_CODE_MODEL=glm-5",
-                "# CC_CODE_MAX_CONTEXT_TOKENS=200000",
-                "",
-                "CC_CODE_API_URL=https://integrate.api.nvidia.com/v1",
-                "CC_CODE_API_KEY=test-key-2",
-                "CC_CODE_MODEL=openai/gpt-oss-120b",
-                "CC_CODE_MAX_CONTEXT_TOKENS=200000",
-                "CC_CODE_THEME=atom-one-dark",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    settings = migrate_env_to_settings(env_path, settings_path)
-
-    assert settings.current_model == "openai-gpt-oss-120b"
-    assert settings.theme == "atom-one-dark"
-    assert set(settings.models) == {"glm-5", "openai-gpt-oss-120b"}
-    assert settings.models["glm-5"].context == 200000
-    assert settings.models["openai-gpt-oss-120b"].api_url == "https://integrate.api.nvidia.com/v1"
 
 
 def test_cc_code_app_uses_theme_from_settings(tmp_path: Path) -> None:

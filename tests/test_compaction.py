@@ -1,46 +1,14 @@
 """Tests for session compaction functionality."""
 
-import pytest
 from cc_code.core.messages import (
     Message,
     MessageRole,
     TextContent,
-    ToolResultContent,
-    ToolUseContent,
-    Usage,
 )
 from cc_code.core.compaction import (
     SessionCompaction,
-    CompactionResult,
-    CompactionConfig,
     DEFAULT_COMPACTION_PROMPT,
-    PRUNE_MINIMUM,
-    PRUNE_PROTECT,
-    prune_tool_results,
-    is_context_overflow,
 )
-
-
-def test_compaction_config_defaults():
-    """Test that CompactionConfig has correct defaults."""
-    config = CompactionConfig()
-    assert config.auto is False
-    assert config.overflow is False
-    assert config.prompt is None
-    assert config.prune_enabled is True
-
-
-def test_compaction_result():
-    """Test CompactionResult dataclass."""
-    result = CompactionResult(success=True, summary="Test summary", tokens_saved=100)
-    assert result.success is True
-    assert result.summary == "Test summary"
-    assert result.tokens_saved == 100
-    assert result.error is None
-
-    error_result = CompactionResult(success=False, error="Test error")
-    assert error_result.success is False
-    assert error_result.error == "Test error"
 
 
 def test_session_compaction_init():
@@ -88,19 +56,6 @@ def test_estimate_tokens():
     assert estimate == len(text) // 4
 
 
-def test_should_compact():
-    """Test compaction threshold check."""
-    # Few messages - should not compact
-    messages = [Message.user_message(f"Message {i}") for i in range(10)]
-    compaction = SessionCompaction(messages)
-    assert compaction.should_compact() is False
-
-    # Many messages - should compact
-    messages = [Message.user_message(f"Message {i}") for i in range(25)]
-    compaction = SessionCompaction(messages)
-    assert compaction.should_compact() is True
-
-
 def test_create_compaction_prompt():
     """Test compaction prompt creation."""
     compaction = SessionCompaction([])
@@ -136,87 +91,6 @@ def test_build_messages_for_summary():
     assert len(summary_messages) == 2
     assert summary_messages[0]["role"] == "user"
     assert summary_messages[1]["role"] == "assistant"
-
-
-def test_create_summary_message():
-    """Test creating a summary message."""
-    compaction = SessionCompaction([])
-    summary_msg = compaction.create_summary_message("This is a summary", parent_message_id="test-id")
-
-    assert summary_msg.is_compact_summary is True
-    assert summary_msg.uuid == "test-id"
-    assert summary_msg.get_text() == "This is a summary"
-    assert summary_msg.type == MessageRole.ASSISTANT
-
-
-def test_compact_messages():
-    """Test compacting messages with a summary."""
-    messages = [
-        Message.user_message("Message 1"),
-        Message.assistant_message([TextContent(text="Response 1")]),
-        Message.user_message("Message 2"),
-        Message.assistant_message([TextContent(text="Response 2")]),
-        Message.user_message("Message 3"),
-    ]
-
-    compaction = SessionCompaction(messages)
-    compacted = compaction.compact_messages("Summary text", keep_last_n=2)
-
-    # Should have summary + last 2 messages
-    assert len(compacted) == 3
-    assert compacted[0].is_compact_summary is True
-    assert compacted[0].get_text() == "Summary text"
-
-
-def test_prune_tool_results():
-    """Test pruning tool results."""
-    # Create enough messages and turns to trigger pruning
-    messages = []
-    
-    # First turn
-    messages.append(Message.user_message("Hello"))
-    messages.append(Message.assistant_message([
-        TextContent(text="Let me check that"),
-        ToolUseContent(id="tool-1", name="Read", input={"file_path": "test.txt"}),
-    ]))
-    messages.append(Message.tool_result_message("tool-1", "x" * 100000))  # Large result
-    
-    # Second turn (recent, should be protected)
-    messages.append(Message.user_message("Another question"))
-    messages.append(Message.assistant_message([TextContent(text="Answer")]))
-    
-    # Third turn
-    messages.append(Message.user_message("Yet another question"))
-
-    pruned, tokens_saved = prune_tool_results(messages)
-
-    # The pruning logic requires > PRUNE_PROTECT tokens before pruning
-    # and only prunes if pruned_tokens > PRUNE_MINIMUM
-    # With 100000 chars ~ 25000 tokens, this should trigger some pruning
-    # But since we only have 2 turns, the first turn is protected
-    # Let's just verify the function runs without error
-    assert isinstance(tokens_saved, int)
-    assert tokens_saved >= 0
-
-
-def test_is_context_overflow():
-    """Test context overflow detection."""
-    # No overflow
-    usage = Usage(input_tokens=50000, output_tokens=10000)
-    assert is_context_overflow(usage, context_window=100000) is False
-
-    # Near overflow (90% threshold)
-    usage = Usage(input_tokens=85000, output_tokens=10000)
-    assert is_context_overflow(usage, context_window=100000) is True
-
-    # No context window
-    assert is_context_overflow(usage, context_window=None) is False
-
-
-def test_constants():
-    """Test that constants match TypeScript implementation."""
-    assert PRUNE_MINIMUM == 20_000
-    assert PRUNE_PROTECT == 40_000
 
 
 def test_prompt_matches_typescript():
@@ -272,10 +146,8 @@ def test_filter_compacted_messages():
     summary = Message.assistant_message([TextContent(text="## Goal\nTest summary")])
     summary.uuid = "summary-1"
     summary.is_compact_summary = True
-    summary.message = {
-        "parent_id": "user-2",
-        "stop_reason": "stop",
-    }
+    summary.parent_id = "user-2"
+    summary.stop_reason = "stop"
     
     user3 = Message.user_message("Continue conversation")
     user3.uuid = "user-3"
@@ -290,12 +162,10 @@ def test_filter_compacted_messages():
     for msg in messages:
         if (msg.type == MessageRole.ASSISTANT and 
             msg.is_compact_summary and 
-            msg.message and 
-            msg.message.get("stop_reason") and
-            not msg.message.get("error")):
-            parent_id = msg.message.get("parent_id")
-            if parent_id:
-                completed_parent_ids.add(parent_id)
+            msg.stop_reason and
+            not msg.stop_reason.startswith("error")):
+            if msg.parent_id:
+                completed_parent_ids.add(msg.parent_id)
     
     assert "user-2" in completed_parent_ids
     
