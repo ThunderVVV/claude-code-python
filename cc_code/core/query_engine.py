@@ -965,8 +965,9 @@ class QueryEngine:
                             tool_call_deltas,
                         )
                         preview_tool_uses = (
-                            self._client.partial_tool_calls_to_content_blocks(
-                                accumulated_tool_calls
+                            self._client.tool_calls_to_content_blocks(
+                                accumulated_tool_calls,
+                                allow_partial=True,
                             )
                         )
                         for tool_use in preview_tool_uses:

@@ -350,24 +350,7 @@ class OpenAIClient:
             return parsed
         return {}
 
-    def partial_tool_calls_to_content_blocks(
-        self,
-        tool_calls: List[ToolCallDelta],
-    ) -> List[ToolUseContent]:
-        """Build preview tool blocks from the currently streamed tool call deltas."""
-        blocks = []
-        for tc in tool_calls:
-            if not tc.id or not tc.name:
-                continue
-            args = self._parse_tool_call_arguments(tc.arguments, allow_partial=True)
-            blocks.append(
-                ToolUseContent(
-                    id=tc.id,
-                    name=tc.name,
-                    input=args,
-                )
-            )
-        return blocks
+
 
     def _extract_partial_string_fields(self, arguments: str) -> Dict[str, Any]:
         """Recover top-level string fields whose values are already fully streamed."""
