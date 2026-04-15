@@ -81,22 +81,48 @@ class TranscriptContainer(ScrollableContainer):
         except Exception:
             pass
 
+    def _notify_user_scrolled_up(self) -> None:
+        """Notify screen when user explicitly scrolls upward."""
+        try:
+            callback = getattr(self.screen, "_on_transcript_user_scrolled_up", None)
+            if callable(callback):
+                callback()
+        except Exception:
+            pass
+
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
         """Notify the screen when the user scrolls upward near transcript top."""
         super().watch_scroll_y(old_value, new_value)
         if new_value >= old_value:
+            self._notify_scroll_position_changed()
             return
         self._notify_top_scroll_intent()
+        self._notify_scroll_position_changed()
 
     def _on_mouse_scroll_up(self, event) -> None:
         """Trigger lazy-load intent even when already pinned at scroll top."""
         super()._on_mouse_scroll_up(event)
+        self._notify_user_scrolled_up()
         self._notify_top_scroll_intent()
+        self._notify_scroll_position_changed()
 
     def _on_scroll_up(self, event) -> None:
         """Handle keyboard/page scroll-up as a lazy-load trigger."""
         super()._on_scroll_up(event)
+        self._notify_user_scrolled_up()
         self._notify_top_scroll_intent()
+        self._notify_scroll_position_changed()
+
+    def _notify_scroll_position_changed(self) -> None:
+        """Notify screen when transcript scroll position changes."""
+        try:
+            callback = getattr(
+                self.screen, "_on_transcript_scroll_position_changed", None
+            )
+            if callable(callback):
+                callback()
+        except Exception:
+            pass
 
 
 class REPLScreen(Screen):
@@ -134,6 +160,16 @@ class REPLScreen(Screen):
         self._snapshot_status: Optional[dict] = None
         self._transcript_collapsible_mode_expanded = False
         self._transcript_mode_switch_in_progress = False
+        self._follow_transcript_output = True
+        self._buffered_assistant_chunks: list[str] = []
+        self._buffered_assistant_char_count: int = 0
+        self._buffered_assistant_flush_lock = asyncio.Lock()
+        self._buffered_assistant_text_flush_task: Optional[asyncio.Task] = None
+        self._live_stream_chunks: list[str] = []
+        self._live_stream_char_count: int = 0
+        self._live_stream_flush_interval_seconds: float = 0.04
+        self._live_stream_flush_lock = asyncio.Lock()
+        self._live_stream_flush_task: Optional[asyncio.Task] = None
 
         self._history: list[str] = []
         self._history_index: int = 0
@@ -359,11 +395,16 @@ class REPLScreen(Screen):
 
     def _should_follow_transcript(self) -> bool:
         """Return True when new output should keep the transcript pinned to bottom."""
+        if self._follow_transcript_output:
+            return True
         try:
             content_area = self.query_one("#content-area", ScrollableContainer)
         except Exception:
             return True
-        return content_area.is_vertical_scroll_end
+        if content_area.is_vertical_scroll_end:
+            self._follow_transcript_output = True
+            return True
+        return False
 
     def _anchor_transcript(self) -> None:
         """Anchor the transcript container so new content stays pinned to bottom."""
@@ -636,6 +677,216 @@ class REPLScreen(Screen):
 
     def _reset_streaming_state(self) -> None:
         self._current_assistant_widget = None
+        self._follow_transcript_output = True
+        self._buffered_assistant_chunks.clear()
+        self._buffered_assistant_char_count = 0
+        if (
+            self._buffered_assistant_text_flush_task is not None
+            and not self._buffered_assistant_text_flush_task.done()
+        ):
+            self._buffered_assistant_text_flush_task.cancel()
+        self._buffered_assistant_text_flush_task = None
+        self._live_stream_chunks.clear()
+        self._live_stream_char_count = 0
+        if (
+            self._live_stream_flush_task is not None
+            and not self._live_stream_flush_task.done()
+        ):
+            self._live_stream_flush_task.cancel()
+        self._live_stream_flush_task = None
+
+    def _has_buffered_assistant_text(self) -> bool:
+        return self._buffered_assistant_char_count > 0
+
+    def _buffer_assistant_text(self, text: str) -> None:
+        if not text:
+            return
+        self._buffered_assistant_chunks.append(text)
+        self._buffered_assistant_char_count += len(text)
+
+    def _prepend_buffered_assistant_text(self, text: str) -> None:
+        if not text:
+            return
+        self._buffered_assistant_chunks.insert(0, text)
+        self._buffered_assistant_char_count += len(text)
+
+    def _drain_buffered_assistant_text(self) -> str:
+        if not self._buffered_assistant_chunks:
+            return ""
+        if len(self._buffered_assistant_chunks) == 1:
+            buffered_text = self._buffered_assistant_chunks[0]
+        else:
+            buffered_text = "".join(self._buffered_assistant_chunks)
+        self._buffered_assistant_chunks.clear()
+        self._buffered_assistant_char_count = 0
+        return buffered_text
+
+    def _has_live_stream_text(self) -> bool:
+        return self._live_stream_char_count > 0
+
+    def _buffer_live_stream_text(self, text: str) -> None:
+        if not text:
+            return
+        self._live_stream_chunks.append(text)
+        self._live_stream_char_count += len(text)
+
+    def _drain_live_stream_text(self) -> str:
+        if not self._live_stream_chunks:
+            return ""
+        if len(self._live_stream_chunks) == 1:
+            live_text = self._live_stream_chunks[0]
+        else:
+            live_text = "".join(self._live_stream_chunks)
+        self._live_stream_chunks.clear()
+        self._live_stream_char_count = 0
+        return live_text
+
+    async def _flush_buffered_assistant_text(
+        self,
+        message_list: MessageList,
+        *,
+        auto_follow: bool,
+    ) -> bool:
+        """Flush buffered assistant markdown text to the streaming widget."""
+        async with self._buffered_assistant_flush_lock:
+            if not self._has_buffered_assistant_text():
+                return False
+            buffered_text = self._drain_buffered_assistant_text()
+        assistant_widget = await self._ensure_assistant_widget(
+            message_list,
+            auto_follow=False,
+        )
+        try:
+            await assistant_widget.append_text(buffered_text)
+            if auto_follow:
+                await assistant_widget.flush_pending_streaming_text()
+            message_list.schedule_scroll_to_latest(auto_follow)
+            return True
+        except Exception:
+            # Preserve buffered output if flush failed; retry on next follow cycle.
+            self._prepend_buffered_assistant_text(buffered_text)
+            raise
+
+    async def _flush_live_stream_text(
+        self,
+        message_list: MessageList,
+        *,
+        auto_follow: bool,
+    ) -> bool:
+        """Flush queued live-stream text in one batched render pass."""
+        async with self._live_stream_flush_lock:
+            if not self._has_live_stream_text():
+                return False
+            live_text = self._drain_live_stream_text()
+
+        should_render_now = auto_follow and self._should_follow_transcript()
+        if not should_render_now:
+            self._buffer_assistant_text(live_text)
+            return False
+
+        await self._flush_buffered_assistant_text(
+            message_list,
+            auto_follow=auto_follow,
+        )
+        assistant_widget = await self._ensure_assistant_widget(
+            message_list,
+            auto_follow=False,
+        )
+        await assistant_widget.append_text(live_text)
+        await assistant_widget.flush_pending_streaming_text()
+        message_list.schedule_scroll_to_latest(auto_follow)
+        return True
+
+    def _schedule_live_stream_flush(self, message_list: MessageList) -> None:
+        """Schedule a near-future batched flush for live stream text."""
+        if (
+            self._live_stream_flush_task is not None
+            and not self._live_stream_flush_task.done()
+        ):
+            return
+
+        async def _runner() -> None:
+            try:
+                await asyncio.sleep(self._live_stream_flush_interval_seconds)
+                await self._flush_live_stream_text(
+                    message_list,
+                    auto_follow=True,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log_full_exception(
+                    logger,
+                    "Failed to flush live stream text",
+                    e,
+                )
+            finally:
+                self._live_stream_flush_task = None
+                # Keep draining while stream is active and new chunks arrived.
+                if self._is_processing and self._has_live_stream_text():
+                    self._schedule_live_stream_flush(message_list)
+
+        self._live_stream_flush_task = asyncio.create_task(_runner())
+
+    def _start_buffered_assistant_text_flush(
+        self,
+        message_list: MessageList,
+        *,
+        auto_follow: bool,
+    ) -> None:
+        """Start one background buffered-text flush task if none is running."""
+        if (
+            self._buffered_assistant_text_flush_task is not None
+            and not self._buffered_assistant_text_flush_task.done()
+        ):
+            return
+
+        async def _runner() -> None:
+            try:
+                await self._flush_buffered_assistant_text(
+                    message_list,
+                    auto_follow=auto_follow,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log_full_exception(
+                    logger,
+                    "Failed to flush buffered assistant text",
+                    e,
+                )
+            finally:
+                self._buffered_assistant_text_flush_task = None
+
+        self._buffered_assistant_text_flush_task = asyncio.create_task(_runner())
+
+    def _on_transcript_scroll_position_changed(self) -> None:
+        """Resume buffered streaming updates when user returns to transcript bottom."""
+        try:
+            content_area = self.query_one("#content-area", ScrollableContainer)
+            if content_area.is_vertical_scroll_end:
+                self._follow_transcript_output = True
+        except Exception:
+            pass
+
+        if not self._is_processing:
+            return
+        if not self._has_buffered_assistant_text() and not self._has_live_stream_text():
+            return
+        if not self._should_follow_transcript():
+            return
+        message_list = self.query_one("#message-list", MessageList)
+        if self._has_live_stream_text():
+            self._schedule_live_stream_flush(message_list)
+        self._start_buffered_assistant_text_flush(
+            message_list,
+            auto_follow=True,
+        )
+
+    def _on_transcript_user_scrolled_up(self) -> None:
+        """Disable auto-follow when user explicitly scrolls up during streaming."""
+        if self._is_processing:
+            self._follow_transcript_output = False
 
     def _reset_tool_contexts(self) -> None:
         """Reset tool widget contexts."""
@@ -1211,12 +1462,22 @@ class REPLScreen(Screen):
 
         elif isinstance(event, TextEvent):
             auto_follow = self._should_follow_transcript()
-
-            assistant_widget = await self._ensure_assistant_widget(
-                message_list, auto_follow=False
-            )
-            await assistant_widget.append_text(event.text)
-            message_list.schedule_scroll_to_latest(auto_follow)
+            await self._ensure_assistant_widget(message_list, auto_follow=False)
+            if auto_follow:
+                self._buffer_live_stream_text(event.text)
+                if self._has_buffered_assistant_text():
+                    await self._flush_live_stream_text(
+                        message_list,
+                        auto_follow=auto_follow,
+                    )
+                else:
+                    self._schedule_live_stream_flush(message_list)
+            else:
+                await self._flush_live_stream_text(
+                    message_list,
+                    auto_follow=False,
+                )
+                self._buffer_assistant_text(event.text)
 
         elif isinstance(event, ToolUseEvent):
             tui_log(f"Received ToolUseEvent: tool_name={event.tool_name}, tool_use_id={event.tool_use_id}")
@@ -1229,6 +1490,14 @@ class REPLScreen(Screen):
 
             assistant_widget = await self._ensure_assistant_widget(
                 message_list, auto_follow=False
+            )
+            await self._flush_live_stream_text(
+                message_list,
+                auto_follow=auto_follow,
+            )
+            await self._flush_buffered_assistant_text(
+                message_list,
+                auto_follow=auto_follow,
             )
             await assistant_widget.flush_streaming_text()
             tool_widget = await assistant_widget.add_tool_use(tool_use)
@@ -1273,6 +1542,14 @@ class REPLScreen(Screen):
         elif isinstance(event, TurnCompleteEvent):
             tui_log("Received TurnCompleteEvent")
             if self._current_assistant_widget is not None:
+                await self._flush_live_stream_text(
+                    message_list,
+                    auto_follow=False,
+                )
+                await self._flush_buffered_assistant_text(
+                    message_list,
+                    auto_follow=False,
+                )
                 await self._current_assistant_widget.finish_streaming()
             self._reset_tool_contexts()
             self._current_assistant_widget = None

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from markdown_it import MarkdownIt
 from textual.await_complete import AwaitComplete
 from textual.content import Content
@@ -28,6 +30,7 @@ class StreamingMarkdownWidget(Markdown):
     """Markdown widget for streaming markdown content with terminal sanitization."""
 
     FOCUS_ON_CLICK = False
+    _TABLE_SEPARATOR_RE = re.compile(r"^\|?[\s:|\-]+\|?$")
 
     def __init__(
         self,
@@ -53,12 +56,67 @@ class StreamingMarkdownWidget(Markdown):
         update = super().update(normalized)
         return update
 
-    async def _flush_pending_markdown(self) -> None:
+    @classmethod
+    def _is_table_separator_line(cls, line: str) -> bool:
+        """Return True if the line looks like a GFM table separator."""
+        stripped = line.strip()
+        if "|" not in stripped or "-" not in stripped:
+            return False
+        if not cls._TABLE_SEPARATOR_RE.match(stripped):
+            return False
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if not cells:
+            return False
+        return all(cell and set(cell) <= {":", "-"} for cell in cells)
+
+    @staticmethod
+    def _is_table_header_candidate_line(line: str) -> bool:
+        """Return True for a line that looks like a pipe table header row."""
+        stripped = line.strip()
+        if not stripped.startswith("|") or not stripped.endswith("|"):
+            return False
+        return stripped.count("|") >= 2
+
+    @classmethod
+    def _has_unterminated_trailing_table(cls, markdown: str) -> bool:
+        """Detect whether the last non-empty block is an unfinished table."""
+        lines = markdown.splitlines()
+        if not lines:
+            return False
+
+        last_non_empty = len(lines) - 1
+        while last_non_empty >= 0 and not lines[last_non_empty].strip():
+            last_non_empty -= 1
+        if last_non_empty < 0:
+            return False
+
+        block_start = last_non_empty
+        while block_start > 0 and lines[block_start - 1].strip():
+            block_start -= 1
+
+        trailing_block = lines[block_start : last_non_empty + 1]
+        header_line = trailing_block[0]
+        if not cls._is_table_header_candidate_line(header_line):
+            return False
+
+        # A lone header row may still become a table on the next chunk.
+        if len(trailing_block) == 1:
+            return True
+
+        separator_line = trailing_block[1]
+        if cls._is_table_separator_line(separator_line):
+            return True
+
+        return False
+
+    async def _flush_pending_markdown(self, force: bool = False) -> None:
         """Flush any buffered markdown content to the widget."""
         if self._rendered_markdown_text == self._markdown_text:
             return
         pending = self._markdown_text
         rendered = self._rendered_markdown_text
+        if not force and self._has_unterminated_trailing_table(pending):
+            return
         if pending.startswith(rendered):
             delta = pending[len(rendered) :]
             if delta:
@@ -75,7 +133,7 @@ class StreamingMarkdownWidget(Markdown):
 
     async def finish_streaming(self) -> None:
         """Stop the background markdown stream, flushing any queued fragments."""
-        await self._flush_pending_markdown()
+        await self._flush_pending_markdown(force=True)
         if self._stream is None:
             return
         stream = self._stream
@@ -84,7 +142,7 @@ class StreamingMarkdownWidget(Markdown):
 
     async def flush_pending_markdown(self) -> None:
         """Render any buffered markdown without stopping future streaming."""
-        await self._flush_pending_markdown()
+        await self._flush_pending_markdown(force=True)
 
     async def append_text(self, markdown: str) -> None:
         """Append a markdown fragment using Textual's streaming helper."""

@@ -211,7 +211,7 @@ class QueryEngine:
         self.client_config = client_config
         self._is_initialized = False
         await self.initialize()
-        self._persist_session()
+        self.persist_session()
 
     async def __aenter__(self) -> "QueryEngine":
         """Async context manager entry"""
@@ -872,7 +872,7 @@ class QueryEngine:
             yield MessageCompleteEvent(message=assistant_message)
 
             # Persist the session
-            self._persist_session()
+            self.persist_session()
 
             yield TurnCompleteEvent(
                 turn=self.state.current_turn,

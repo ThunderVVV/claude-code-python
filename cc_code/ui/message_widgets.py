@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from typing import List, Optional
 from textual.app import ComposeResult
 from textual.content import Content, Span
@@ -740,11 +741,12 @@ class MessageWidget(VerticalGroup):
         elif self._content_container:
             self._streaming_host = Container(classes="markdown-host transcript-block")
             self._streaming_widget = StreamingMarkdownWidget(
-                self._text_content,
+                "",
                 classes="streaming-content",
             )
             await self._content_container.mount(self._streaming_host)
             await self._streaming_host.mount(self._streaming_widget)
+            await self._streaming_widget.append_text(text)
             self.refresh(layout=True)
 
     async def update_text(self, text: str) -> None:
@@ -807,6 +809,11 @@ class MessageWidget(VerticalGroup):
         if self._streaming_widget:
             await self._streaming_widget.finish_streaming()
 
+    async def flush_pending_streaming_text(self) -> None:
+        """Render pending markdown without stopping the streaming worker."""
+        if self._streaming_widget:
+            await self._streaming_widget.flush_pending_markdown()
+
     async def finish_streaming(self) -> None:
         """Flush and stop any active markdown streams."""
         if self._thinking_widget:
@@ -820,6 +827,9 @@ class MessageList(VerticalGroup):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._message_widgets: List[MessageWidget] = []
+        self._scroll_anchor_scheduled = False
+        self._last_anchor_time = 0.0
+        self._anchor_interval_seconds = 0.05
 
     def _get_content_area(self) -> ScrollableContainer | None:
         """Return the transcript scroll container when mounted."""
@@ -828,12 +838,17 @@ class MessageList(VerticalGroup):
         except Exception:
             return None
 
-    def _scroll_to_latest(self) -> None:
+    def _scroll_to_latest(self, force: bool = False) -> None:
         """Anchor the transcript scroll container to the latest output."""
         content_area = self._get_content_area()
         if content_area is None:
             return
         try:
+            if not force:
+                now = time.monotonic()
+                if (now - self._last_anchor_time) < self._anchor_interval_seconds:
+                    return
+                self._last_anchor_time = now
             content_area.anchor()
         except Exception as e:
             log_full_exception(logger, "Failed to anchor transcript", e)
@@ -847,12 +862,21 @@ class MessageList(VerticalGroup):
 
     def reset_auto_follow_output(self) -> None:
         """Re-enable transcript auto-follow for a fresh user request."""
+        self._scroll_to_latest(force=True)
+
+    def _flush_scheduled_scroll_to_latest(self) -> None:
+        """Run one deferred anchor call after the pending refresh."""
+        self._scroll_anchor_scheduled = False
         self._scroll_to_latest()
 
     def schedule_scroll_to_latest(self, auto_follow: bool = True) -> None:
         """Anchor after the current DOM/layout update flushes."""
-        if auto_follow:
-            self.call_after_refresh(self._scroll_to_latest)
+        if not auto_follow:
+            return
+        if self._scroll_anchor_scheduled:
+            return
+        self._scroll_anchor_scheduled = True
+        self.call_after_refresh(self._flush_scheduled_scroll_to_latest)
 
     def first_message_widget(self) -> Optional[MessageWidget]:
         """Return the first mounted message widget, if any."""

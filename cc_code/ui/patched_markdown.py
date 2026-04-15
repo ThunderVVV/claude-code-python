@@ -347,6 +347,7 @@ def _get_list_indent(stack: list[dict]) -> int:
 def _parse_tokens(
     tokens: Iterable[Token],
     unhandled_token: Callable[[Token], MarkdownBlock | None] | None = None,
+    normalize_first_block_margin: bool = True,
 ) -> list[MarkdownBlock]:
     """Parse markdown-it tokens into a flat list of MarkdownBlock objects.
 
@@ -700,7 +701,7 @@ def _parse_tokens(
                 if external is not None:
                     blocks.append(external)
 
-    if blocks:
+    if blocks and normalize_first_block_margin:
         # Transcript messages should start flush with their host container rather
         # than inheriting an extra blank line from the first markdown block.
         blocks[0].top_margin = 0
@@ -1121,7 +1122,66 @@ class Markdown(ScrollView, can_focus=True):
             else self._parser_factory()
         )
         tokens = parser.parse(markdown)
-        return _parse_tokens(tokens)
+        return _parse_tokens(tokens, normalize_first_block_margin=True)
+
+    def _build_blocks_for_slice(
+        self,
+        markdown: str,
+        *,
+        line_offset: int = 0,
+        normalize_first_block_margin: bool = True,
+    ) -> list[MarkdownBlock]:
+        """Parse a markdown slice and optionally offset block source line ranges."""
+        parser = (
+            MarkdownIt("gfm-like")
+            if self._parser_factory is None
+            else self._parser_factory()
+        )
+        tokens = parser.parse(markdown)
+        blocks = _parse_tokens(
+            tokens,
+            normalize_first_block_margin=normalize_first_block_margin,
+        )
+        if line_offset <= 0:
+            return blocks
+        adjusted: list[MarkdownBlock] = []
+        for block in blocks:
+            start, end = block.source_range
+            adjusted.append(
+                replace(block, source_range=(start + line_offset, end + line_offset))
+            )
+        return adjusted
+
+    @staticmethod
+    def _line_to_offset(markdown: str, line_index: int) -> int:
+        """Convert a 0-based line index to a character offset."""
+        if line_index <= 0:
+            return 0
+        offset = 0
+        for idx, line in enumerate(markdown.splitlines(keepends=True)):
+            if idx >= line_index:
+                break
+            offset += len(line)
+        return offset
+
+    def _find_incremental_reparse_line(self, previous_markdown: str) -> int:
+        """Choose a conservative line to start tail reparse from."""
+        if not self._blocks:
+            return 0
+
+        anchor = self._blocks[-1].source_range[0]
+        # Include one extra previous block to preserve list / quote context.
+        if len(self._blocks) > 1:
+            anchor = min(anchor, self._blocks[-2].source_range[0])
+
+        lines = previous_markdown.splitlines()
+        anchor = max(0, min(anchor, len(lines)))
+
+        # Walk back to a blank-line boundary for parser stability.
+        while anchor > 0 and lines[anchor - 1].strip():
+            anchor -= 1
+
+        return anchor
 
     def _layout_blocks(self) -> None:
         """Compute the line layout for all blocks.
@@ -1434,7 +1494,10 @@ class Markdown(ScrollView, can_focus=True):
         if block.bq_depth > 0 and block.block_type != "fence":
             return self._get_bq_depth_style(block.bq_depth)
         if block.style_name:
-            return self.get_visual_style(block.style_name)
+            try:
+                return self.get_visual_style(block.style_name)
+            except KeyError:
+                return self.visual_style
         return self.visual_style
 
     def _get_bq_depth_style(self, depth: int) -> Style:
@@ -1536,7 +1599,10 @@ class Markdown(ScrollView, can_focus=True):
 
         # Styles
         block_style = self._get_block_style(block)
-        header_style = self.get_visual_style("markdown--table-header")
+        try:
+            header_style = self.get_visual_style("markdown--table-header")
+        except KeyError:
+            header_style = block_style
         cell_rs = block_style.rich_style
         header_rs = header_style.rich_style
         # Border style: use foreground at reduced intensity
@@ -1555,20 +1621,20 @@ class Markdown(ScrollView, can_focus=True):
         if available < col_count:
             available = col_count
 
-        # Natural column widths (CJK-aware)
-        nat_widths = [max(cell_len(h.plain), 1) for h in headers]
-        for row in rows:
-            for i, cell_content in enumerate(row):
-                if i < col_count:
-                    nat_widths[i] = max(nat_widths[i], cell_len(cell_content.plain))
-
-        total_nat = sum(nat_widths)
-        if total_nat <= available:
-            col_widths = nat_widths[:]
+        # Use fixed layout widths derived from headers only.
+        # This avoids reflow flicker while rows stream in.
+        header_widths = [max(cell_len(h.plain), 1) for h in headers]
+        total_header = sum(header_widths)
+        if total_header <= 0:
+            col_widths = [max(1, available // col_count)] * col_count
+            remainder = available - sum(col_widths)
+            for idx in range(remainder):
+                col_widths[idx % col_count] += 1
         else:
-            # Shrink proportionally
-            col_widths = [max(1, int(w * available / total_nat)) for w in nat_widths]
-            # Fix rounding errors
+            col_widths = [
+                max(1, int(available * width / total_header))
+                for width in header_widths
+            ]
             diff = available - sum(col_widths)
             for i in range(abs(diff)):
                 idx = i % col_count
@@ -1751,7 +1817,13 @@ class Markdown(ScrollView, can_focus=True):
         async def await_update() -> None:
             async with self.lock:
                 blocks = await asyncio.get_running_loop().run_in_executor(
-                    None, self._build_blocks, markdown
+                    None,
+                    partial(
+                        self._build_blocks_for_slice,
+                        markdown,
+                        line_offset=0,
+                        normalize_first_block_margin=True,
+                    ),
                 )
                 self._blocks = blocks
                 self._layout_blocks()
@@ -1778,16 +1850,47 @@ class Markdown(ScrollView, can_focus=True):
         Returns:
             An optionally awaitable object.
         """
-        self._markdown = self.source + markdown
+        previous_markdown = self.source
+        self._markdown = previous_markdown + markdown
         self._table_of_contents = None
         self._line_cache.clear()
         self._table_strips.clear()
 
         async def await_append() -> None:
             async with self.lock:
-                blocks = await asyncio.get_running_loop().run_in_executor(
-                    None, self._build_blocks, self._markdown
-                )
+                loop = asyncio.get_running_loop()
+                try:
+                    reparse_line = self._find_incremental_reparse_line(previous_markdown)
+                    tail_offset = self._line_to_offset(self._markdown, reparse_line)
+                    tail_markdown = self._markdown[tail_offset:]
+                    tail_blocks = await loop.run_in_executor(
+                        None,
+                        partial(
+                            self._build_blocks_for_slice,
+                            tail_markdown,
+                            line_offset=reparse_line,
+                            normalize_first_block_margin=False,
+                        ),
+                    )
+                    prefix_blocks = [
+                        block
+                        for block in self._blocks
+                        if block.source_range[0] < reparse_line
+                    ]
+                    blocks = prefix_blocks + tail_blocks
+                    if blocks:
+                        blocks[0].top_margin = 0
+                except Exception:
+                    blocks = await loop.run_in_executor(
+                        None,
+                        partial(
+                            self._build_blocks_for_slice,
+                            self._markdown,
+                            line_offset=0,
+                            normalize_first_block_margin=True,
+                        ),
+                    )
+
                 self._blocks = blocks
                 self._layout_blocks()
 
