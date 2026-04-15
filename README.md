@@ -76,7 +76,6 @@
 要求：
 
 - MacOS / Linux / Windows(仅支持WSL启动)
-- Python 3.12+
 - **ripgrep (rg)** - Grep 工具依赖
 
 > WSL下需要  export COLORTERM=truecolor，否则配色不正常
@@ -92,12 +91,62 @@ brew install ripgrep
 sudo apt-get install ripgrep
 ```
 
-### 安装 cc-py
+### 用户安装（推荐）
+
+通过 npm 安装稳定版本：
 
 ```bash
-cd cc-py
+npm install -g @thundervvv/cc-py
+```
+
+### 开发安装
+
+从源码安装（需要 Python 3.12+）：
+
+```bash
+git clone https://github.com/ThunderVVV/claude-code-python.git
+cd claude-code-python
 pip install -e .
 ```
+
+## 运行
+
+| 安装方式 | 命令 |
+|---------|------|
+| npm 安装 | `cc-py` |
+| pip 开发安装 | `cc-py-dev` |
+
+### TUI 模式
+
+默认启动 TUI（自动启动 API 服务器）：
+
+```bash
+cc-py          # npm 安装
+cc-py-dev      # pip 开发安装
+```
+
+### 浏览器界面模式（实验特性）
+
+启动 API 服务器，访问 http://localhost:8000/：
+
+```bash
+cc-py api      # npm 安装
+cc-py-dev api  # pip 开发安装
+```
+
+### TUI 命令
+
+- `/model`：显示当前模型和可用模型 ID（从服务器获取）
+- `/model <model_id>`：实时切换当前 session 的模型，并同步更新 `settings.json`
+
+### 调试模式
+
+```bash
+cc-py --debug          # npm 安装
+cc-py-dev --debug      # pip 开发安装
+```
+
+日志自动写入当前目录下的 `.logs`。
 
 ## 配置
 
@@ -124,66 +173,6 @@ pip install -e .
 - `current_model`：当前默认模型配置 ID
 - `theme`：`cc-py` 的 TUI 主题，默认 `atom-one-dark`, 可选 `tokyo-night`等其他textual支持主题
 - `models.<id>`：每个模型固定包含 `api_key`、`api_url`、`model_name`、`context`
-
-## 运行
-
-本项目提供两种运行方式：
-
-### TUI 模式
-
-只需要运行一个命令，它会自动启动 API 服务器和 TUI 客户端：
-
-```bash
-cc-py-dev
-```
-
-或者单独启动 API 服务器（用于浏览器界面）：
-
-```bash
-cc-py-dev api
-```
-
-> 注意：必须先启动 API 服务器，再启动客户端。如果后端未运行，客户端会提示错误并退出。
-
-### TUI 命令
-
-- `/model`：显示当前模型和可用模型 ID（从服务器获取）
-- `/model <model_id>`：实时切换当前 session 的模型，并同步更新 `settings.json`
-
-### 浏览器界面模式（可选，实验特性）
-
-> ⚠️ **实验特性**：浏览器界面目前处于实验阶段，功能可能不完善，不建议在生产环境使用。
-
-启动 API 服务器后即可直接访问浏览器界面：
-
-```bash
-cc-py-dev api
-```
-
-默认访问地址：http://localhost:8000/
-
-浏览器界面特性：
-- 现代化浏览器界面，支持 Markdown 渲染
-- 流式响应显示
-- 会话管理（创建、切换、恢复历史会话）
-- 工具调用可视化展示
-- Diff 内容渲染（Edit/Write 工具结果）
-- 浏览器界面和 API 由同一个 `cc-api` 进程提供
-
-## 调试
-
-开启调试日志：
-
-```bash
-# TUI 调试（同时调试客户端和服务器）
-cc-py-dev --debug
-
-# 仅 API 服务器调试
-cc-py-dev api --debug
-```
-
-自动写到当前目录下的 `.logs`。
-
 
 ## 可选 Skills（@web 搜索功能）
 
@@ -221,13 +210,9 @@ Web 路径
 Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 ```
 
-- `cc-py-dev` 提供所有功能：默认启动 TUI（自动启动 API 服务器），`api` 子命令只启动 API 服务器
-- `cc-py-dev` 通过 `CCCodeHttpClient` 连接 API 服务器
+- `cc-py`（npm 安装）和 `cc-py-dev`（pip 安装）提供所有功能：默认启动 TUI（自动启动 API 服务器），`api` 子命令只启动 API 服务器
+- TUI 客户端通过 `CCCodeHttpClient` 连接 API 服务器
 - 两条路径共享核心提示词、消息模型、工具实现和 OpenAI-compatible 配置
-
-**启动命令：**
-- TUI 模式：`cc-py-dev`（自动启动 API 服务器）
-- 仅 API 服务器/浏览器界面：`cc-py-dev api`
 
 ## 许可证
 
