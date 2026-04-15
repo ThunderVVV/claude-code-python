@@ -184,7 +184,11 @@ async def _run_streaming_text_continues_without_user_scroll_test() -> None:
         await screen._handle_query_event(TextEvent(text="hello "), message_list)
         await screen._handle_query_event(TextEvent(text="world "), message_list)
         await screen._handle_query_event(TextEvent(text="again"), message_list)
-        await pilot.pause()
+        for _ in range(10):
+            await pilot.pause()
+            assistant_widget = screen._current_assistant_widget
+            if assistant_widget and assistant_widget._streaming_widget is not None:
+                break
 
         assistant_widget = screen._current_assistant_widget
         assert assistant_widget is not None

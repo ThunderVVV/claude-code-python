@@ -88,7 +88,7 @@ def wait_for_server(host: str, port: int, timeout: float = 10.0) -> bool:
     is_flag=True,
     help="Enable debug logging to console",
 )
-@click.version_option(version="0.3.0", prog_name="cc-py")
+@click.version_option(version="0.3.6", prog_name="cc-py")
 def cli(
     ctx: click.Context,
     api_host: str,

@@ -4,7 +4,7 @@ A Python implementation of CC Code that helps with software engineering tasks.
 Uses OpenAI-compatible APIs to connect to various LLM providers.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.6"
 __author__ = "CC Code Python Port"
 
 # Patch textual.widget.Widget.with_tooltip to disable tooltips globally
