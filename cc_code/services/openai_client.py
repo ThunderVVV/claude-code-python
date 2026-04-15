@@ -13,9 +13,7 @@ from cc_code.utils.logging_config import log_full_exception
 
 from cc_code.core.messages import (
     Message,
-    MessageRole,
     ToolUseContent,
-    ToolResultContent,
     Usage,
 )
 from cc_code.core.tools import ToolRegistry
@@ -72,7 +70,69 @@ class OpenAIClient:
         messages: List[Message],
     ) -> List[Dict[str, Any]]:
         """Convert internal message format to OpenAI format"""
-        return [msg.serialize(format="api") for msg in messages]
+        openai_messages = []
+
+        for msg in messages:
+            if msg.type.value == "system":
+                openai_messages.append(
+                    {
+                        "role": "system",
+                        "content": msg.get_text(),
+                    }
+                )
+
+            elif msg.type.value == "user":
+                openai_messages.append(
+                    {
+                        "role": "user",
+                        "content": msg.get_text(),
+                    }
+                )
+
+            elif msg.type.value == "assistant":
+                tool_uses = msg.get_tool_uses()
+
+                if tool_uses:
+                    tool_calls = []
+                    for tool_use in tool_uses:
+                        tool_calls.append(
+                            {
+                                "id": tool_use.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_use.name,
+                                    "arguments": json.dumps(tool_use.input),
+                                },
+                            }
+                        )
+
+                    openai_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": msg.get_text() or None,
+                            "tool_calls": tool_calls,
+                        }
+                    )
+                else:
+                    openai_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": msg.get_text(),
+                        }
+                    )
+
+            elif msg.type.value == "tool":
+                for block in msg.content:
+                    if block.type == "tool_result":
+                        openai_messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": block.tool_use_id,
+                                "content": block.content,
+                            }
+                        )
+
+        return openai_messages
 
     async def chat_completion(
         self,

@@ -1156,7 +1156,10 @@ class QueryEngine:
                 self.state.current_turn += 1
 
                 # Check if we should continue
-                has_more = self.state.current_turn < self.max_turns
+                has_more = (
+                    self.max_turns is None
+                    or self.state.current_turn < self.max_turns
+                )
 
                 # Persist session when stop_reason is 'stop'
                 if stop_reason == "stop":

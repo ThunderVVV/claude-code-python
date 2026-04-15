@@ -216,14 +216,6 @@ def api_cmd(host: str, port: int, debug: bool) -> None:
 
     from cc_code.core.settings import SettingsStore
     from cc_code.core.tools import ToolRegistry
-    from cc_code.tools import (
-        EditTool,
-        GlobTool,
-        GrepTool,
-        ReadTool,
-        WriteTool,
-    )
-    from cc_code.tools.bash_tool import BashTool
     from cc_code.utils.logging_config import setup_server_logging
 
     setup_server_logging(debug=debug)
