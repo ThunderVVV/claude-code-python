@@ -548,10 +548,6 @@ class QueryEngine:
         return self._interrupt_reason
 
     def persist_session(self) -> None:
-        """Persist session to disk. Public method for external callers."""
-        self._persist_session()
-
-    def _persist_session(self) -> None:
         """Persist session to disk."""
         if self._session_store is None:
             return
@@ -739,7 +735,7 @@ class QueryEngine:
             ):
                 if current_task in self._cancelled_tasks:
                     self._cancelled_tasks.discard(current_task)
-                self._persist_session()
+                self.persist_session()
                 self.clear_interrupt()
                 return
             raise
@@ -1020,7 +1016,7 @@ class QueryEngine:
                     # No tool calls - we're done
                     # Persist session when stop_reason is 'stop'
                     if stop_reason == "stop":
-                        self._persist_session()
+                        self.persist_session()
                     yield TurnCompleteEvent(
                         turn=self.state.current_turn + 1,
                         has_more_turns=False,
@@ -1168,7 +1164,7 @@ class QueryEngine:
 
                 # Persist session when stop_reason is 'stop'
                 if stop_reason == "stop":
-                    self._persist_session()
+                    self.persist_session()
 
                 yield TurnCompleteEvent(
                     turn=self.state.current_turn,
@@ -1185,14 +1181,14 @@ class QueryEngine:
                 raise
             except APIError as e:
                 error_msg = f"API error: {str(e)}"
-                self._persist_session()
+                self.persist_session()
                 logger.info(f"saved session due to API error: {error_msg}")
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return
             except Exception as e:
                 log_full_exception(logger, "Unexpected error in query loop", e)
                 error_msg = f"Query failed: {str(e)}"
-                self._persist_session()
+                self.persist_session()
                 logger.info(f"saved session due to Unexpected error: {error_msg}")
                 yield ErrorEvent(error=error_msg, is_fatal=True)
                 return
