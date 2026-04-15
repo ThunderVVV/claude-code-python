@@ -260,10 +260,6 @@ class QueryEngine:
         """Set the revert state"""
         self._revert_state = state
 
-    def clear_revert_state(self) -> None:
-        """Clear the revert state"""
-        self._revert_state = None
-
     def get_snapshot_manager(self) -> Optional[SnapshotManager]:
         """Get the snapshot manager"""
         return self._snapshot_manager
@@ -710,7 +706,7 @@ class QueryEngine:
                         f"Replaced rewound user message - session_id={self.state.session_id}"
                     )
                     # Clear revert state since user has submitted a new message
-                    self.clear_revert_state()
+                    self.set_revert_state(None)
                 else:
                     self.state.add_message(user_message)
                     logger.info(
