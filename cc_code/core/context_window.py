@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
-from cc_code.core.messages import Usage
+from typing import Optional, Any
 
 
 def parse_context_window_tokens(raw_value: Optional[str]) -> Optional[int]:
@@ -32,7 +30,7 @@ def get_configured_context_window_tokens(raw_value: Optional[str]) -> Optional[i
     return parse_context_window_tokens(raw_value)
 
 
-def get_used_context_tokens(usage: Optional[Usage]) -> int:
+def get_used_context_tokens(usage: Optional[Any]) -> int:
     """Return prompt-side context tokens from the latest API usage block."""
     if usage is None:
         return 0
@@ -41,7 +39,7 @@ def get_used_context_tokens(usage: Optional[Usage]) -> int:
 
 
 def get_used_context_percentage(
-    usage: Optional[Usage],
+    usage: Optional[Any],
     context_window_tokens: int,
 ) -> int:
     """Return the clamped context usage percentage."""
