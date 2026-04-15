@@ -181,7 +181,7 @@ def _normalize_api_prefix(api_prefix: str) -> str:
 api_router = APIRouter()
 
 
-async def event_stream(chat_request: ChatRequest, session_manager: SessionManager):
+async def event_stream(chat_request: ChatRequest, session_manager: SessionManager, user_text_override: Optional[str] = None):
     """Generate SSE events from QueryEngine directly"""
 
     try:
@@ -199,7 +199,8 @@ async def event_stream(chat_request: ChatRequest, session_manager: SessionManage
             model_id=chat_request.model,
         )
 
-        async for event in engine.submit_message(chat_request.user_text):
+        user_text = user_text_override or chat_request.user_text
+        async for event in engine.submit_message(user_text):
             event_dict = event_to_api_dict(
                 event,
                 working_directory=chat_request.working_directory,
@@ -210,37 +211,6 @@ async def event_stream(chat_request: ChatRequest, session_manager: SessionManage
 
     except Exception as e:
         logger.exception("event_stream failed")
-        error_dict = {"type": "error", "error": str(e), "is_fatal": True}
-        yield f"data: {json.dumps(error_dict)}\n\n"
-
-
-async def compact_stream(request: CompactRequest, session_manager: SessionManager):
-    """Generate SSE events for compact session - aligns with opencode principle.
-
-    Streams the summary while preserving all history messages, only adds
-    the summary marked as is_compact_summary.
-    """
-    try:
-        session_id = request.session_id
-
-        engine = await session_manager.get_or_create_engine(
-            session_id,
-            request.working_directory,
-            model_id=request.model,
-        )
-
-        # Use the engine's compact handling directly (streaming)
-        async for event in engine.submit_message("/compact"):
-            event_dict = event_to_api_dict(
-                event,
-                working_directory=request.working_directory,
-            )
-            yield f"data: {json.dumps(event_dict)}\n\n"
-
-        logger.info(f"Compact streaming completed - session_id={session_id}")
-
-    except Exception as e:
-        logger.exception("compact_stream failed")
         error_dict = {"type": "error", "error": str(e), "is_fatal": True}
         yield f"data: {json.dumps(error_dict)}\n\n"
 
@@ -277,7 +247,7 @@ async def compact_session(request: CompactRequest, http_request: Request):
     logger.info(f"POST /compact - session_id={request.session_id}")
     session_manager = http_request.app.state.session_manager
     return StreamingResponse(
-        compact_stream(request, session_manager),
+        event_stream(request, session_manager, user_text_override="/compact"),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
