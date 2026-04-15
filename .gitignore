@@ -49,4 +49,6 @@ Thumbs.db
 .omx/
 
 # Build outputs
-binary/
+binary/*
+!binary/*/
+!binary/*/.gitkeep

@@ -1,0 +1,254 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.3.4)'
+        required: true
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  resolve-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version and checkout ref
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            git fetch --tags --force
+            if ! git rev-parse --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
+              echo "Tag v$VERSION does not exist. Create and push the tag first."
+              exit 1
+            fi
+            CHECKOUT_REF="$(git rev-list -n 1 "refs/tags/v$VERSION")"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            CHECKOUT_REF="$GITHUB_SHA"
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version: $VERSION"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "checkout_ref=$CHECKOUT_REF" >> "$GITHUB_OUTPUT"
+
+  build-linux-x64:
+    needs: resolve-release
+    runs-on: ubuntu-latest
+    container:
+      image: registry.access.redhat.com/ubi8/python-312:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release.outputs.checkout_ref }}
+
+      - name: Install build dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install pyinstaller
+
+      - name: Build binary
+        run: |
+          pip install .
+          pyinstaller --clean --noconfirm cc-py.spec
+
+      - name: Test binary
+        run: |
+          chmod +x dist/cc-py
+          ./dist/cc-py --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: dist/cc-py
+          retention-days: 1
+
+  build-linux-arm64:
+    needs: resolve-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release.outputs.checkout_ref }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build binary in ARM64 container
+        run: |
+          docker run --rm --platform linux/arm64 \
+            --user "$(id -u):$(id -g)" \
+            -v ${{ github.workspace }}:/src \
+            -w /src \
+            registry.access.redhat.com/ubi8/python-312:latest \
+            bash -c "
+              pip install --upgrade pip setuptools wheel &&
+              pip install pyinstaller &&
+              pip install . &&
+              pyinstaller --clean --noconfirm cc-py.spec
+            "
+
+      - name: Test binary via QEMU
+        run: |
+          chmod +x dist/cc-py
+          docker run --rm --platform linux/arm64 \
+            -v ${{ github.workspace }}/dist:/dist \
+            registry.access.redhat.com/ubi8/python-312:latest \
+            /dist/cc-py --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: dist/cc-py
+          retention-days: 1
+
+  build-macos-x64:
+    needs: resolve-release
+    runs-on: macos-13
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release.outputs.checkout_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install pyinstaller
+
+      - name: Build binary
+        run: |
+          pip install .
+          pyinstaller --clean --noconfirm cc-py.spec
+
+      - name: Test binary
+        run: |
+          chmod +x dist/cc-py
+          ./dist/cc-py --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-x64
+          path: dist/cc-py
+          retention-days: 1
+
+  build-macos-arm64:
+    needs: resolve-release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release.outputs.checkout_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install pyinstaller
+
+      - name: Build binary
+        run: |
+          pip install .
+          pyinstaller --clean --noconfirm cc-py.spec
+
+      - name: Test binary
+        run: |
+          chmod +x dist/cc-py
+          ./dist/cc-py --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-arm64
+          path: dist/cc-py
+          retention-days: 1
+
+  release:
+    needs: [resolve-release, build-linux-x64, build-linux-arm64, build-macos-x64, build-macos-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release.outputs.checkout_ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@thundervvv'
+
+      - name: Verify Node and npm versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binary-temp
+
+      - name: Prepare binary directory
+        run: |
+          mkdir -p binary/linux-x64 binary/linux-arm64 binary/darwin-x64 binary/darwin-arm64
+          mv binary-temp/linux-x64/cc-py binary/linux-x64/cc-py
+          mv binary-temp/linux-arm64/cc-py binary/linux-arm64/cc-py
+          mv binary-temp/darwin-x64/cc-py binary/darwin-x64/cc-py
+          mv binary-temp/darwin-arm64/cc-py binary/darwin-arm64/cc-py
+          chmod +x binary/*/cc-py
+
+      - name: Update package.json version
+        run: |
+          npm version ${{ needs.resolve-release.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Publish to npm
+        run: npm publish --access public
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.resolve-release.outputs.version }}
+          name: Release v${{ needs.resolve-release.outputs.version }}
+          files: |
+            binary/linux-x64/cc-py
+            binary/linux-arm64/cc-py
+            binary/darwin-x64/cc-py
+            binary/darwin-arm64/cc-py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
