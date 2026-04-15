@@ -241,13 +241,7 @@ def api_cmd(host: str, port: int, debug: bool) -> None:
         )
         sys.exit(1)
 
-    registry = ToolRegistry()
-    registry.register(ReadTool())
-    registry.register(WriteTool())
-    registry.register(EditTool())
-    registry.register(GlobTool())
-    registry.register(GrepTool())
-    registry.register(BashTool())
+    registry = ToolRegistry.create_default()
 
     from cc_code.api.server import create_app
 

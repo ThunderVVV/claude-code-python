@@ -143,3 +143,24 @@ class ToolRegistry:
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
         """Get tool definitions for OpenAI API"""
         return [tool.to_openai_tool() for tool in self.list_enabled_tools()]
+    
+    @classmethod
+    def create_default(cls) -> "ToolRegistry":
+        """Create a ToolRegistry with all default tools registered"""
+        from cc_code.tools import (
+            EditTool,
+            GlobTool,
+            GrepTool,
+            ReadTool,
+            WriteTool,
+        )
+        from cc_code.tools.bash_tool import BashTool
+        
+        registry = cls()
+        registry.register(ReadTool())
+        registry.register(WriteTool())
+        registry.register(EditTool())
+        registry.register(GlobTool())
+        registry.register(GrepTool())
+        registry.register(BashTool())
+        return registry

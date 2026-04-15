@@ -69,7 +69,7 @@ class QueryEngine:
         client_config: OpenAIClientConfig,
         tool_registry: ToolRegistry,
         working_directory: str = "",
-        max_turns: int = 1000000,  # Large value for effectively unlimited turns
+        max_turns: Optional[int] = None,  # None for unlimited turns
         session_id: Optional[str] = None,
         initial_messages: Optional[List[Message]] = None,
         initial_current_turn: int = 0,
@@ -901,7 +901,7 @@ class QueryEngine:
 
         system_prompt = await self._build_system_prompt()
 
-        while self.state.current_turn < self.max_turns:
+        while self.max_turns is None or self.state.current_turn < self.max_turns:
             self.state.is_streaming = True
             self.state.current_streaming_text = ""
 

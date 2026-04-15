@@ -498,7 +498,7 @@ def create_app(
     if settings_store is None:
         settings_store = SettingsStore()
     if tool_registry is None:
-        tool_registry = ToolRegistry()
+        tool_registry = ToolRegistry.create_default()
 
     app.state.session_manager = SessionManager(settings_store, tool_registry)
 

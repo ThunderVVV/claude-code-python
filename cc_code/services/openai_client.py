@@ -72,74 +72,7 @@ class OpenAIClient:
         messages: List[Message],
     ) -> List[Dict[str, Any]]:
         """Convert internal message format to OpenAI format"""
-        openai_messages = []
-
-        for msg in messages:
-            if msg.type == MessageRole.SYSTEM:
-                openai_messages.append(
-                    {
-                        "role": "system",
-                        "content": msg.get_text(),
-                    }
-                )
-
-            elif msg.type == MessageRole.USER:
-                openai_messages.append(
-                    {
-                        "role": "user",
-                        "content": msg.get_text(),
-                    }
-                )
-
-            elif msg.type == MessageRole.ASSISTANT:
-                # Check if message has tool calls
-                tool_uses = msg.get_tool_uses()
-
-                if tool_uses:
-                    # Assistant message with tool calls
-                    tool_calls = []
-                    for tu in tool_uses:
-                        tool_calls.append(
-                            {
-                                "id": tu.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tu.name,
-                                    "arguments": json.dumps(tu.input),
-                                },
-                            }
-                        )
-
-                    openai_messages.append(
-                        {
-                            "role": "assistant",
-                            "content": msg.get_text() or None,
-                            "tool_calls": tool_calls,
-                        }
-                    )
-                else:
-                    # Simple text message
-                    text = msg.get_text()
-                    openai_messages.append(
-                        {
-                            "role": "assistant",
-                            "content": text,
-                        }
-                    )
-
-            elif msg.type == MessageRole.TOOL:
-                # Tool result message
-                for block in msg.content:
-                    if isinstance(block, ToolResultContent):
-                        openai_messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": block.tool_use_id,
-                                "content": block.content,
-                            }
-                        )
-
-        return openai_messages
+        return [msg.serialize(format="api") for msg in messages]
 
     async def chat_completion(
         self,
