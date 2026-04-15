@@ -125,19 +125,11 @@ class SessionManager:
         """Get session details from engine or disk."""
         engine = self._engines.get(session_id)
         if engine:
-            messages = engine.get_messages()
-            return SessionState(
-                session_id=session_id,
-                title=engine.state.title or "",
-                created_at=engine.state.created_at or "",
-                updated_at=engine.state.updated_at or "",
-                working_directory=engine.get_working_directory(),
-                current_turn=engine.state.current_turn,
-                model_id=engine.client_config.model_id,
-                model_name=engine.client_config.model_name,
-                total_usage=engine.state.total_usage or Usage(),
-                messages=messages,
-            )
+            # Update state with current values and return it
+            engine.state.working_directory = engine.get_working_directory()
+            engine.state.model_id = engine.client_config.model_id
+            engine.state.model_name = engine.client_config.model_name
+            return engine.state
 
         return self._session_store.load_session(session_id)
 
