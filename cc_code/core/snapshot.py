@@ -63,6 +63,23 @@ DEFAULT_TRACK_EXTENSIONS = {
 }
 
 
+def build_snapshot_project_id(
+    working_directory: str,
+    session_id: Optional[str] = None,
+) -> str:
+    """Compute snapshot project ID.
+
+    Legacy format uses only working_directory. Session-scoped format includes
+    session_id to isolate snapshot repositories across sessions.
+    """
+    normalized_cwd = os.path.abspath(working_directory)
+    if session_id:
+        seed = f"{normalized_cwd}::session::{session_id}"
+    else:
+        seed = normalized_cwd
+    return hashlib.sha256(seed.encode()).hexdigest()[:16]
+
+
 @dataclass
 class Patch:
     """Represents a file change patch"""
@@ -93,15 +110,15 @@ class SnapshotManager:
 
     def __init__(self, working_directory: str, project_id: Optional[str] = None):
         self.working_directory = os.path.abspath(working_directory)
-        self.project_id = project_id or self._compute_project_id()
+        self.project_id = project_id or build_snapshot_project_id(self.working_directory)
         self.snapshot_dir = DEFAULT_SNAPSHOT_BASE_DIR / self.project_id
         self.gitdir = self.snapshot_dir / "git"
         self._initialized = False
         self._lock = asyncio.Lock()
 
     def _compute_project_id(self) -> str:
-        """Compute a unique project ID from working directory"""
-        return hashlib.sha256(self.working_directory.encode()).hexdigest()[:16]
+        """Compute a unique project ID from working directory (legacy behavior)."""
+        return build_snapshot_project_id(self.working_directory)
 
     def _run_git(
         self,

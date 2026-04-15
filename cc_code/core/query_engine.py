@@ -181,11 +181,22 @@ class QueryEngine:
     async def initialize(self) -> None:
         """Initialize the engine (create HTTP client and instruction service)"""
         if not self._is_initialized:
-            from cc_code.core.snapshot import SnapshotManager
+            from cc_code.core.snapshot import (
+                SnapshotManager,
+                build_snapshot_project_id,
+            )
             from cc_code.core.instruction import InstructionService
 
             self._client = OpenAIClient(self.client_config)
-            self._snapshot_manager = SnapshotManager(self._cwd)
+            # Isolate snapshot repos by session_id to prevent cross-session rewind.
+            snapshot_project_id = build_snapshot_project_id(
+                self._cwd,
+                self.state.session_id,
+            )
+            self._snapshot_manager = SnapshotManager(
+                self._cwd,
+                project_id=snapshot_project_id,
+            )
             self._instruction_service = InstructionService(self._instruction_config)
             if hasattr(self, "_initial_revert_state"):
                 self._revert_state = self._initial_revert_state

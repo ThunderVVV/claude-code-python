@@ -483,6 +483,8 @@ class CCCodeHttpClient:
                             if data_str:
                                 try:
                                     data = json.loads(data_str)
+                                    if data.get("type") == "session_id":
+                                        continue
                                     event = dict_to_query_event(data)
                                     yield event
                                 except json.JSONDecodeError as e:
