@@ -131,11 +131,16 @@ pip install -e .
 
 ### TUI 模式
 
-需要分别在两个终端启动后端和客户端：
+只需要运行一个命令，它会自动启动 API 服务器和 TUI 客户端：
 
 ```bash
-cc-api
-cc-py
+cc-py-dev
+```
+
+或者单独启动 API 服务器（用于浏览器界面）：
+
+```bash
+cc-py-dev api
 ```
 
 > 注意：必须先启动 API 服务器，再启动客户端。如果后端未运行，客户端会提示错误并退出。
@@ -149,10 +154,10 @@ cc-py
 
 > ⚠️ **实验特性**：浏览器界面目前处于实验阶段，功能可能不完善，不建议在生产环境使用。
 
-启动 `cc-api` 后即可直接访问浏览器界面：
+启动 API 服务器后即可直接访问浏览器界面：
 
 ```bash
-cc-api
+cc-py-dev api
 ```
 
 默认访问地址：http://localhost:8000/
@@ -170,14 +175,11 @@ cc-api
 开启调试日志：
 
 ```bash
-# API 调试
-cc-api --debug
+# TUI 调试（同时调试客户端和服务器）
+cc-py-dev --debug
 
-# TUI 客户端调试
-cc-py --debug
-
-# 浏览器界面调试
-cc-api --debug
+# 仅 API 服务器调试
+cc-py-dev api --debug
 ```
 
 自动写到当前目录下的 `.logs`。
@@ -219,14 +221,13 @@ Web 路径
 Browser(Vue) -> cc-api(FastAPI) -> QueryEngine -> OpenAIClient
 ```
 
-- `cc-api` 负责 TUI 模式的 FastAPI 后端，也负责浏览器界面和内置 API
-- `cc-py` 通过 `CCCodeHttpClient` 连接 API 服务器
+- `cc-py-dev` 提供所有功能：默认启动 TUI（自动启动 API 服务器），`api` 子命令只启动 API 服务器
+- `cc-py-dev` 通过 `CCCodeHttpClient` 连接 API 服务器
 - 两条路径共享核心提示词、消息模型、工具实现和 OpenAI-compatible 配置
 
 **启动命令：**
-- TUI 后端：`cc-api`
-- TUI 客户端：`cc-py`
-- 浏览器界面：`cc-api`
+- TUI 模式：`cc-py-dev`（自动启动 API 服务器）
+- 仅 API 服务器/浏览器界面：`cc-py-dev api`
 
 ## 许可证
 
