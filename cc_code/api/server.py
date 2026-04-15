@@ -20,7 +20,6 @@ from cc_code.core.messages import (
     message_to_api_dict,
     event_to_api_dict,
     SessionState,
-    Usage,
 )
 from cc_code.core.query_engine import QueryEngine
 from cc_code.core.tools import ToolRegistry
