@@ -162,13 +162,41 @@ class CommandRegistry:
                 title="/debug",
                 description="Show QueryEngine runtime debug state",
             ),
+            Command(
+                id="skills",
+                trigger="skills",
+                title="/skills",
+                description="List available skills (bundled and loaded)",
+            ),
         ]
         for cmd in default_commands:
             self._commands[cmd.id] = cmd
 
     def register(self, command: Command) -> None:
-        """Register a command."""
+        """Register a command (does not overwrite existing built-in commands)."""
+        if command.id in self._commands:
+            return
         self._commands[command.id] = command
+
+    def register_skills(self, skills_data: list[dict]) -> None:
+        """Register dynamic skills from server as autocomplete commands.
+
+        Only adds skills that are user-invocable and not already registered
+        as built-in commands.
+        """
+        for skill in skills_data:
+            name = skill.get("name", "")
+            if not name or not skill.get("user_invocable", True):
+                continue
+            if name in self._commands:
+                continue
+            cmd = Command(
+                id=name,
+                trigger=name,
+                title=f"/{name}",
+                description=skill.get("description", "") or skill.get("when_to_use", ""),
+            )
+            self._commands[name] = cmd
 
     def unregister(self, command_id: str) -> None:
         """Unregister a command."""

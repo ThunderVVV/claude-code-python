@@ -31,6 +31,12 @@ from cc_code.core.settings import (
 )
 from cc_code.core.instruction import InstructionConfig
 from cc_code.services.openai_client import OpenAIClientConfig
+from cc_code.skills.bundled import init_bundled_skills
+from cc_code.skills.loader import get_all_skills, format_commands_within_budget
+
+
+# Initialize bundled skills at module load time
+init_bundled_skills()
 
 logger = logging.getLogger(__name__)
 
@@ -382,6 +388,35 @@ async def switch_model(request: SwitchModelRequest, http_request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.get("/skills")
+async def list_skills(http_request: Request):
+    """List all available skills (bundled + dynamically loaded)."""
+    logger.info("GET /skills")
+    try:
+        import os
+        cwd = os.getcwd()
+        all_skills = await get_all_skills(cwd)
+        skills_list = []
+        for skill in all_skills:
+            skills_list.append({
+                "name": skill.name,
+                "description": skill.description,
+                "source": skill.source,
+                "loaded_from": skill.loaded_from,
+                "user_invocable": skill.user_invocable,
+                "when_to_use": skill.when_to_use,
+                "argument_hint": skill.argument_hint,
+                "aliases": skill.aliases,
+            })
+        return {
+            "skills": skills_list,
+            "count": len(skills_list),
+        }
+    except Exception as e:
+        logger.exception("Failed to list skills")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.get("/snapshot_status/{session_id}")
 async def get_snapshot_status(session_id: str, http_request: Request):
     """Get the snapshot status (files modified, additions, deletions)"""
@@ -528,7 +563,7 @@ def create_app(
     if settings_store is None:
         settings_store = SettingsStore()
     if tool_registry is None:
-        tool_registry = ToolRegistry.create_default()
+        tool_registry = ToolRegistry.create_default(cwd=os.getcwd())
 
     app.state.session_manager = SessionManager(settings_store, tool_registry)
 

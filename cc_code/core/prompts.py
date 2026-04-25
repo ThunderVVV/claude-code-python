@@ -124,6 +124,22 @@ def get_simple_tone_and_style_section() -> str:
     return ["# Tone and style"] + prepend_bullets(items)
 
 
+def get_skills_guidance_section() -> str:
+    """Brief guidance about using skills/slash commands."""
+    return """/<skill-name> (e.g., /commit) is shorthand for users to invoke a user-invocable skill. When executed, the skill gets expanded to a full prompt. Use the Skill tool to execute them. IMPORTANT: Only use Skill for skills listed in the available skills section - do not guess or use built-in CLI commands."""
+
+
+def get_skills_listing_section(skills_text: str) -> str:
+    """Format the available skills listing."""
+    if not skills_text:
+        return ""
+    return f"""# Available skills
+
+The following skills are available. Use the Skill tool to invoke them when they match the user's request:
+
+{skills_text}"""
+
+
 def get_output_efficiency_section() -> str:
     return """# Output efficiency
 
@@ -172,13 +188,17 @@ def create_default_system_prompt(
     cwd: Optional[str] = None,
     model_name: str = "claude-sonnet-4-6",
     instructions: Optional[List[str]] = None,
+    skills_listing: Optional[str] = None,
+    tool_prompts: Optional[List[str]] = None,
 ) -> str:
     """Create the default system prompt for the assistant - aligned with TypeScript getSystemPrompt()
-
+    
     Args:
         cwd: Current working directory
         model_name: Name of the model being used
         instructions: List of instruction strings to append (from CLAUDE.md, AGENTS.md, etc.)
+        skills_listing: Optional formatted skills listing text
+        tool_prompts: Optional list of tool-specific prompt strings to inject
     """
     if cwd is None:
         cwd = os.getcwd()
@@ -189,10 +209,24 @@ def create_default_system_prompt(
         "\n".join(get_simple_doing_tasks_section()),
         get_actions_section(),
         "\n".join(get_using_your_tools_section()),
+    ]
+
+    # Inject tool-specific prompts after "Using your tools"
+    if tool_prompts:
+        for prompt in tool_prompts:
+            sections.append(prompt)
+
+    sections.extend([
         "\n".join(get_simple_tone_and_style_section()),
         get_output_efficiency_section(),
-        "\n".join(compute_env_info(cwd, model_name)),
-    ]
+    ])
+
+    # Add skills listing if available
+    if skills_listing:
+        sections.append(get_skills_listing_section(skills_listing))
+        sections.append(get_skills_guidance_section())
+
+    sections.append("\n".join(compute_env_info(cwd, model_name)))
 
     # Append instruction files (CLAUDE.md, AGENTS.md, etc.)
     if instructions:

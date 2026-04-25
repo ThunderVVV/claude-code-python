@@ -102,3 +102,49 @@ def test_parse_stream_chunk_accepts_reasoning_alias() -> None:
     assert text == ""
     assert thinking == "Need the tool first."
     assert tool_calls == []
+
+
+def test_convert_messages_skips_corrupted_tool_turn_without_reasoning() -> None:
+    client = _build_client()
+    messages = [
+        Message.user_message("Inspect the file."),
+        Message.assistant_message(
+            [
+                ToolUseContent(
+                    id="call_1",
+                    name="Read",
+                    input={"file_path": "/tmp/demo.py"},
+                ),
+            ]
+        ),
+        Message.tool_result_message("call_1", "file contents"),
+        Message.user_message("Continue."),
+    ]
+
+    payload = client._convert_messages_to_openai_format(messages)
+
+    assert payload == [
+        {"role": "user", "content": "Inspect the file."},
+        {"role": "user", "content": "Continue."},
+    ]
+
+
+def test_extract_final_message_reasoning_accepts_reasoning_alias() -> None:
+    client = _build_client()
+
+    reasoning = client.extract_final_message_reasoning(
+        {
+            "_cc_final_completion": {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "reasoning": "Final aggregated reasoning.",
+                        }
+                    }
+                ]
+            }
+        }
+    )
+
+    assert reasoning == "Final aggregated reasoning."

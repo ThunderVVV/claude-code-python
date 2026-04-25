@@ -73,6 +73,7 @@ class OpenAIClient:
     ) -> List[Dict[str, Any]]:
         """Convert internal message format to OpenAI format"""
         openai_messages = []
+        skipped_tool_call_ids: set[str] = set()
 
         for idx, msg in enumerate(messages):
             if msg.type.value == "system":
@@ -98,6 +99,18 @@ class OpenAIClient:
                     bool(reasoning_content)
                     and self._is_reasoning_persistent_turn(messages, idx)
                 )
+                requires_reasoning_content = self._is_reasoning_persistent_turn(
+                    messages, idx
+                )
+
+                if requires_reasoning_content and not reasoning_content:
+                    logger.warning(
+                        "Skipping assistant message without reasoning content in a tool turn"
+                    )
+                    skipped_tool_call_ids.update(
+                        tool_use.id for tool_use in tool_uses if tool_use.id
+                    )
+                    continue
 
                 if tool_uses:
                     tool_calls = []
@@ -133,6 +146,11 @@ class OpenAIClient:
             elif msg.type.value == "tool":
                 for block in msg.content:
                     if block.type == "tool_result":
+                        if block.tool_use_id in skipped_tool_call_ids:
+                            logger.warning(
+                                "Skipping tool result for assistant message missing reasoning content"
+                            )
+                            continue
                         openai_messages.append(
                             {
                                 "role": "tool",
@@ -228,15 +246,21 @@ class OpenAIClient:
 
         try:
             if stream:
-                # Streaming request using SDK
-                stream_response = await self._client.chat.completions.create(
-                    **request_params
-                )
-                chunk_index = 0
-                async for chunk in stream_response:
-                    chunk_index += 1
-                    chunk_dict = chunk.model_dump()
-                    yield chunk_dict
+                # Streaming request using SDK with final completion access.
+                stream_params = dict(request_params)
+                stream_params.pop("stream", None)
+                async with self._client.chat.completions.stream(
+                    **stream_params
+                ) as stream_response:
+                    async for event in stream_response:
+                        if getattr(event, "type", None) != "chunk":
+                            continue
+                        yield event.chunk.model_dump()
+
+                    final_completion = await stream_response.get_final_completion()
+                    yield {
+                        "_cc_final_completion": final_completion.model_dump(),
+                    }
             else:
                 # Non-streaming request using SDK
                 response = await self._client.chat.completions.create(**request_params)
@@ -307,6 +331,26 @@ class OpenAIClient:
             input_tokens=usage_payload.get("prompt_tokens", 0),
             output_tokens=usage_payload.get("completion_tokens", 0),
         )
+
+    def extract_final_message_reasoning(self, payload: Dict[str, Any]) -> str:
+        """Extract reasoning from the synthetic final-completion payload."""
+        final_completion = payload.get("_cc_final_completion")
+        if not isinstance(final_completion, dict):
+            return ""
+
+        choices = final_completion.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return ""
+
+        message = choices[0].get("message")
+        if not isinstance(message, dict):
+            return ""
+
+        for key in ("reasoning_content", "reasoning"):
+            value = message.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return ""
 
     def accumulate_tool_calls(
         self,

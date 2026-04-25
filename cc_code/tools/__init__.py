@@ -6,6 +6,7 @@ from cc_code.tools.write_tool import WriteTool
 from cc_code.tools.edit_tool import EditTool
 from cc_code.tools.glob_tool import GlobTool
 from cc_code.tools.grep_tool import GrepTool
+from cc_code.tools.skill_tool import SkillTool
 
 __all__ = [
     "BashTool",
@@ -14,4 +15,5 @@ __all__ = [
     "EditTool",
     "GlobTool",
     "GrepTool",
+    "SkillTool",
 ]

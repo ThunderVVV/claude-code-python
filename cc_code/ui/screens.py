@@ -252,8 +252,9 @@ class REPLScreen(Screen):
         autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
         autocomplete_popup.set_working_directory(self.working_directory)
         
-        # Fetch model info from server
+        # Fetch model info and skills from server
         await self._fetch_model_info_from_server()
+        await self._fetch_skills_from_server()
 
     def _focus_input(self) -> None:
         """Restore focus to the composer when the main REPL is active."""
@@ -299,6 +300,19 @@ class REPLScreen(Screen):
             self._update_welcome_model_name()
         except Exception as e:
             logger.warning(f"Failed to fetch model info from server: {e}")
+
+    async def _fetch_skills_from_server(self) -> None:
+        """Fetch skills from server and register them for autocomplete."""
+        try:
+            result = await self.client.list_skills()
+            skills = result.get("skills", [])
+            if skills:
+                from cc_code.ui.autocomplete import CommandRegistry
+                registry = CommandRegistry.get_instance()
+                registry.register_skills(skills)
+                tui_log(f"Registered {len(skills)} skills for autocomplete")
+        except Exception as e:
+            logger.warning(f"Failed to fetch skills from server: {e}")
 
     def _on_input_submit(self, text: str) -> None:
         tui_log(f"_on_input_submit: text={text!r}")
@@ -351,13 +365,18 @@ class REPLScreen(Screen):
         else:
             autocomplete_popup.navigate_down()
 
-    def _select_autocomplete_popup(self) -> None:
-        """Select autocomplete item from InputTextArea."""
+    def _select_autocomplete_popup(self) -> bool:
+        """Select autocomplete item from InputTextArea.
+
+        Returns:
+            True if an item was selected, False if the popup was empty.
+        """
         autocomplete_popup = self.query_one("#autocomplete-popup", AutocompletePopup)
         selected = autocomplete_popup.select_current()
         if selected:
             self._handle_autocomplete_selection(selected, autocomplete_popup.mode)
         autocomplete_popup.hide()
+        return selected is not None
 
     def _handle_autocomplete_selection(
         self, item: Command | AtOption, mode: AutocompleteMode
@@ -957,6 +976,11 @@ class REPLScreen(Screen):
             asyncio.create_task(self._handle_debug_command())
             return
 
+        if user_text_lower == "/skills":
+            tui_log("Executing command: /skills")
+            asyncio.create_task(self._handle_skills_command())
+            return
+
         self._hide_welcome_widget()
         self._add_to_history(submitted_value)
 
@@ -1180,6 +1204,37 @@ class REPLScreen(Screen):
             debug_text = "<empty debug payload>"
         modal = DebugStateModal(debug_text)
         self.app.push_screen(modal, lambda _: self._schedule_input_focus())
+
+    async def _handle_skills_command(self) -> None:
+        """Handle /skills command - list available skills."""
+        if self._is_processing:
+            return
+
+        input_widget = self.query_one("#user-input", InputTextArea)
+        input_widget.load_text("")
+
+        result = await self.client.list_skills()
+        skills = result.get("skills", [])
+
+        message_list = self.query_one("#message-list", MessageList)
+
+        if not skills:
+            await message_list.add_message(
+                Message.system_message("No skills available. Bundled skills are loaded at server startup. Place custom skill definitions in .claude/skills/ (SKILL.md format).")
+            )
+            input_widget.focus()
+            return
+
+        lines = ["Available skills:"]
+        for s in skills:
+            source_label = {"bundled": "bundled", "userSettings": "user", "projectSettings": "project", "policySettings": "managed"}.get(s.get("source", ""), s.get("source", ""))
+            lines.append(f"  /{s['name']} - {s['description']} ({source_label})")
+            if s.get("when_to_use"):
+                lines.append(f"    When: {s['when_to_use']}")
+
+        help_text = "\n".join(lines)
+        await message_list.add_message(Message.system_message(help_text))
+        input_widget.focus()
 
     async def _start_new_session(self) -> None:
         """Create a new session on server and reset UI."""

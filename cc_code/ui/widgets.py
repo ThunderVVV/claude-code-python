@@ -51,10 +51,15 @@ class InputTextArea(TextArea):
                 return
 
             if event.key in ("enter", "tab"):
-                event.stop()
-                event.prevent_default()
-                self._select_autocomplete()
-                return
+                selected = self._select_autocomplete()
+                if selected:
+                    event.stop()
+                    event.prevent_default()
+                    return
+                # No matching items — reset autocomplete state and fall through
+                # to normal key handling so Enter submits the text.
+                self._autocomplete_active = False
+                # Event not consumed; let parent or default handler process it.
 
             if event.key == "escape":
                 event.stop()
@@ -123,14 +128,19 @@ class InputTextArea(TextArea):
         except Exception:
             pass
 
-    def _select_autocomplete(self) -> None:
-        """Select autocomplete item via screen method."""
+    def _select_autocomplete(self) -> bool:
+        """Select autocomplete item via screen method.
+
+        Returns:
+            True if an item was selected, False otherwise.
+        """
         try:
             screen = self.screen
             if hasattr(screen, "_select_autocomplete_popup"):
-                screen._select_autocomplete_popup()
+                return screen._select_autocomplete_popup()
         except Exception:
             pass
+        return False
 
     def set_autocomplete_active(self, active: bool) -> None:
         """Set whether autocomplete is currently active."""

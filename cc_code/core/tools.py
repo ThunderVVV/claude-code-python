@@ -19,6 +19,7 @@ class ToolInputSchema:
     type: str = "object"
     properties: Dict[str, Any] = field(default_factory=dict)
     required: List[str] = field(default_factory=list)
+    additionalProperties: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -57,7 +58,7 @@ class BaseTool(ABC):
     name: str
     description: str
     input_schema: ToolInputSchema
-    aliases: List[str] = field(default_factory=list)
+    aliases: List[str] = []
     max_result_size_chars: int = 100_000
 
     def __init__(self):
@@ -67,11 +68,21 @@ class BaseTool(ABC):
             raise NotImplementedError("Tool must have a 'description' attribute")
         if not hasattr(self, "input_schema"):
             self.input_schema = ToolInputSchema()
+        # Ensure each instance gets its own aliases list
+        if not hasattr(self, "aliases") or self.aliases is type(self).aliases:
+            self.aliases = list(getattr(type(self), "aliases", []))
 
     @abstractmethod
     async def call(self, input: Dict[str, Any], context: ToolContext) -> str:
         """Execute the tool"""
         pass
+
+    def get_prompt(self) -> str:
+        """Return optional prompt text for the system message.
+
+        Tools can override this to inject usage guidance into the system prompt.
+        """
+        return ""
 
     def is_enabled(self) -> bool:
         """Check if tool is enabled (default: True)"""
@@ -99,6 +110,7 @@ class BaseTool(ABC):
                 "name": self.name,
                 "description": self.description,
                 "parameters": self.input_schema.to_dict(),
+                "strict": True,
             },
         }
 
@@ -143,9 +155,21 @@ class ToolRegistry:
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
         """Get tool definitions for OpenAI API"""
         return [tool.to_openai_tool() for tool in self.list_enabled_tools()]
+
+    def get_tool_prompts(self) -> List[str]:
+        """Collect non-empty prompt strings from all registered tools.
+
+        Each tool can provide system prompt guidance via get_prompt().
+        """
+        prompts = []
+        for tool in self.list_enabled_tools():
+            p = tool.get_prompt()
+            if p:
+                prompts.append(p)
+        return prompts
     
     @classmethod
-    def create_default(cls) -> "ToolRegistry":
+    def create_default(cls, cwd: str = "") -> "ToolRegistry":
         """Create a ToolRegistry with all default tools registered"""
         from cc_code.tools import (
             EditTool,
@@ -153,6 +177,7 @@ class ToolRegistry:
             GrepTool,
             ReadTool,
             WriteTool,
+            SkillTool,
         )
         from cc_code.tools.bash_tool import BashTool
         
@@ -163,4 +188,5 @@ class ToolRegistry:
         registry.register(GlobTool())
         registry.register(GrepTool())
         registry.register(BashTool())
+        registry.register(SkillTool(cwd=cwd))
         return registry

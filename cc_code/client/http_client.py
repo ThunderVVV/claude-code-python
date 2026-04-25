@@ -455,6 +455,21 @@ class CCCodeHttpClient:
             logger.error(f"List models request failed: {e}")
             return {"models": [], "current_model": ""}
 
+    async def list_skills(self) -> dict:
+        """Get list of available skills from server."""
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        try:
+            response = await self._client.get(
+                f"{self._base_url}/api/skills",
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"List skills request failed: {e}")
+            return {"skills": [], "count": 0}
+
     async def stream_compact(
         self,
         session_id: str,

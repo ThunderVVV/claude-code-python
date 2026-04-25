@@ -674,16 +674,45 @@ class QueryEngine:
             logger.warning(f"Failed to load instructions: {e}")
             return []
 
+    async def _load_skills_listing(self) -> Optional[str]:
+        """Load and format the skills listing for the system prompt.
+
+        Cached after first load to avoid repeated directory scanning.
+        """
+        if hasattr(self, "_cached_skills_listing") and self._cached_skills_listing is not None:
+            return self._cached_skills_listing
+
+        try:
+            from cc_code.skills.loader import (
+                get_skill_tool_commands,
+                format_commands_within_budget,
+            )
+
+            skill_commands = await get_skill_tool_commands(self._cwd)
+            if skill_commands:
+                self._cached_skills_listing = format_commands_within_budget(skill_commands)
+                return self._cached_skills_listing
+        except Exception as e:
+            logger.warning(f"Failed to load skills listing: {e}")
+
+        self._cached_skills_listing = None
+        return None
+
     async def _build_system_prompt(self) -> str:
         """Build the system prompt with instructions from CLAUDE.md, AGENTS.md, etc."""
         # Load instructions from CLAUDE.md, AGENTS.md, etc.
         instructions = await self._load_instructions()
 
-        # Build system prompt with instructions
+        # Load skills listing
+        skills_listing = await self._load_skills_listing()
+
+        # Build system prompt with instructions, skills, and tool prompts
         return create_default_system_prompt(
             cwd=self._cwd,
             model_name=self.client_config.model_name,
             instructions=instructions if instructions else None,
+            skills_listing=skills_listing,
+            tool_prompts=self.tool_registry.get_tool_prompts(),
         )
 
     def _filter_compacted_messages(self) -> List[Message]:
@@ -745,6 +774,17 @@ class QueryEngine:
         """
         self.state.clear()
         self.clear_interrupt()
+
+        # Clear skills listing cache so new skills are discovered
+        if hasattr(self, "_cached_skills_listing"):
+            del self._cached_skills_listing
+
+        # Clear skill caches
+        try:
+            from cc_code.skills.loader import clear_skill_caches
+            clear_skill_caches()
+        except Exception:
+            pass
 
     def interrupt(self, reason: str = "interrupt") -> None:
         """Interrupt the in-flight query, matching the TypeScript QueryEngine API."""
@@ -1147,6 +1187,27 @@ class QueryEngine:
                     system_prompt=system_prompt,
                 ):
                     self._raise_if_interrupted()
+                    extract_final_reasoning = getattr(
+                        self._client, "extract_final_message_reasoning", None
+                    )
+                    final_reasoning = (
+                        extract_final_reasoning(chunk)
+                        if callable(extract_final_reasoning)
+                        else ""
+                    )
+                    if final_reasoning:
+                        if not current_thinking:
+                            current_thinking = final_reasoning
+                            yield ThinkingEvent(thinking=final_reasoning)
+                        elif (
+                            len(final_reasoning) > len(current_thinking)
+                            and final_reasoning.startswith(current_thinking)
+                        ):
+                            missing_suffix = final_reasoning[len(current_thinking) :]
+                            current_thinking = final_reasoning
+                            if missing_suffix:
+                                yield ThinkingEvent(thinking=missing_suffix)
+
                     extract_usage = getattr(self._client, "extract_usage", None)
                     chunk_usage = (
                         extract_usage(chunk) if callable(extract_usage) else None
