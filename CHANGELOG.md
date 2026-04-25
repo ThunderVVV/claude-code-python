@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-25
+
+#### HTTP Client Proxy Bypass for Localhost
+- Set `trust_env=False` on `CCCodeHttpClient` to prevent httpx from reading proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, etc.), allowing frontend-to-backend connections on localhost when a system proxy or Clash is active
+
 ### Fixed - 2026-04-14
 
 #### API Server Cleanup on Terminal Close

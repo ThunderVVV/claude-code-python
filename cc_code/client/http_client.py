@@ -184,6 +184,7 @@ class CCCodeHttpClient:
     async def connect(self) -> None:
         self._client = httpx.AsyncClient(
             timeout=None,
+            trust_env=False,
         )
         self._is_connected = True
 
