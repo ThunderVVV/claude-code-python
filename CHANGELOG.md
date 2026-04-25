@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-26
+
+#### DeepSeek Reasoning Content Preservation Across Tool Turns
+- Added `_get_reasoning_content()` to extract thinking blocks from assistant messages for replay in subsequent API requests
+- Added `_is_reasoning_persistent_turn()` to detect tool-using turns where reasoning content must be preserved across multiple assistant messages
+- Modified `_convert_messages_to_openai_format()` to include `reasoning_content` in API messages for DeepSeek-style thinking models during ongoing tool turns
+- Modified `parse_stream_chunk()` to accept `reasoning` field alias alongside `reasoning_content` for broader OpenAI-compatible provider compatibility
+- Added `tests/test_openai_client_reasoning_content.py` with four test cases covering reasoning preservation, boundary dropping, multi-turn tool persistence, and streaming alias parsing
+
 ### Fixed - 2026-04-25
 
 #### HTTP Client Proxy Bypass for Localhost

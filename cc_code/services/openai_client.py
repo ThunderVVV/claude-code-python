@@ -13,6 +13,8 @@ from cc_code.utils.logging_config import log_full_exception
 
 from cc_code.core.messages import (
     Message,
+    MessageRole,
+    ThinkingContent,
     ToolUseContent,
     Usage,
 )
@@ -72,7 +74,7 @@ class OpenAIClient:
         """Convert internal message format to OpenAI format"""
         openai_messages = []
 
-        for msg in messages:
+        for idx, msg in enumerate(messages):
             if msg.type.value == "system":
                 openai_messages.append(
                     {
@@ -91,6 +93,11 @@ class OpenAIClient:
 
             elif msg.type.value == "assistant":
                 tool_uses = msg.get_tool_uses()
+                reasoning_content = self._get_reasoning_content(msg)
+                preserve_reasoning_content = (
+                    bool(reasoning_content)
+                    and self._is_reasoning_persistent_turn(messages, idx)
+                )
 
                 if tool_uses:
                     tool_calls = []
@@ -106,20 +113,22 @@ class OpenAIClient:
                             }
                         )
 
-                    openai_messages.append(
-                        {
-                            "role": "assistant",
-                            "content": msg.get_text() or None,
-                            "tool_calls": tool_calls,
-                        }
-                    )
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": msg.get_text() or None,
+                        "tool_calls": tool_calls,
+                    }
+                    if preserve_reasoning_content:
+                        assistant_message["reasoning_content"] = reasoning_content
+                    openai_messages.append(assistant_message)
                 else:
-                    openai_messages.append(
-                        {
-                            "role": "assistant",
-                            "content": msg.get_text(),
-                        }
-                    )
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": msg.get_text(),
+                    }
+                    if preserve_reasoning_content:
+                        assistant_message["reasoning_content"] = reasoning_content
+                    openai_messages.append(assistant_message)
 
             elif msg.type.value == "tool":
                 for block in msg.content:
@@ -133,6 +142,45 @@ class OpenAIClient:
                         )
 
         return openai_messages
+
+    def _get_reasoning_content(self, message: Message) -> str:
+        """Extract reasoning content from assistant thinking blocks."""
+        return "".join(
+            block.thinking
+            for block in message.content
+            if isinstance(block, ThinkingContent) and block.thinking
+        )
+
+    def _is_reasoning_persistent_turn(
+        self,
+        messages: List[Message],
+        assistant_index: int,
+    ) -> bool:
+        """Return whether the assistant message belongs to a tool-using turn.
+
+        DeepSeek thinking-mode tool turns are special: once a user turn contains
+        tool calls, every assistant message from that turn should keep its
+        `reasoning_content` in subsequent requests, even after the next user
+        message begins.
+        """
+        turn_start = 0
+        for idx in range(assistant_index, -1, -1):
+            if messages[idx].type == MessageRole.USER:
+                turn_start = idx
+                break
+
+        turn_end = len(messages)
+        for idx in range(assistant_index + 1, len(messages)):
+            if messages[idx].type == MessageRole.USER:
+                turn_end = idx
+                break
+
+        for turn_msg in messages[turn_start:turn_end]:
+            if turn_msg.type == MessageRole.TOOL:
+                return True
+            if turn_msg.type == MessageRole.ASSISTANT and turn_msg.has_tool_uses():
+                return True
+        return False
 
     async def chat_completion(
         self,
@@ -217,9 +265,12 @@ class OpenAIClient:
 
         delta = choices[0].get("delta", {})
 
-        # Extract reasoning_content (thinking) - for models like DeepSeek
+        # Some OpenAI-compatible providers return `reasoning` while requiring
+        # `reasoning_content` on replay. Normalize both to our thinking stream.
         if "reasoning_content" in delta and delta["reasoning_content"] is not None:
             thinking = delta["reasoning_content"]
+        elif "reasoning" in delta and delta["reasoning"] is not None:
+            thinking = delta["reasoning"]
 
         # Extract text content
         if "content" in delta and delta["content"] is not None:
