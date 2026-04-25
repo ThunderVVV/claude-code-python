@@ -92,28 +92,61 @@ class TranscriptContainer(ScrollableContainer):
         except Exception:
             pass
 
+    def _notify_vertical_scroll_up_intent(self) -> None:
+        """Notify that vertical scrolling moved or intends to move upward."""
+        self._notify_user_scrolled_up()
+
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
         """Notify the screen when the user scrolls upward near transcript top."""
         super().watch_scroll_y(old_value, new_value)
         if new_value >= old_value:
             self._notify_scroll_position_changed()
             return
+
+        # Treat any real upward position change as a user/external attempt to
+        # read earlier output. Keep following if the viewport only moved upward
+        # because content shrank while still pinned to the bottom.
+        if not self.is_vertical_scroll_end:
+            self._notify_vertical_scroll_up_intent()
         self._notify_top_scroll_intent()
         self._notify_scroll_position_changed()
 
     def _on_mouse_scroll_up(self, event) -> None:
         """Trigger lazy-load intent even when already pinned at scroll top."""
         super()._on_mouse_scroll_up(event)
-        self._notify_user_scrolled_up()
+        if not getattr(event, "ctrl", False) and not getattr(event, "shift", False):
+            self._notify_vertical_scroll_up_intent()
         self._notify_top_scroll_intent()
         self._notify_scroll_position_changed()
 
     def _on_scroll_up(self, event) -> None:
         """Handle keyboard/page scroll-up as a lazy-load trigger."""
         super()._on_scroll_up(event)
-        self._notify_user_scrolled_up()
+        self._notify_vertical_scroll_up_intent()
         self._notify_top_scroll_intent()
         self._notify_scroll_position_changed()
+
+    def _on_scroll_to(self, message) -> None:
+        """Handle scrollbar drag as upward intent before the animation finishes."""
+        target_y = getattr(message, "y", None)
+        if target_y is not None and target_y < self.scroll_y:
+            self._notify_vertical_scroll_up_intent()
+        super()._on_scroll_to(message)
+
+    def action_scroll_up(self) -> None:
+        """Handle keyboard line-up scrolling as upward intent."""
+        self._notify_vertical_scroll_up_intent()
+        super().action_scroll_up()
+
+    def action_page_up(self) -> None:
+        """Handle keyboard page-up scrolling as upward intent."""
+        self._notify_vertical_scroll_up_intent()
+        super().action_page_up()
+
+    def action_scroll_home(self) -> None:
+        """Handle keyboard home scrolling as upward intent."""
+        self._notify_vertical_scroll_up_intent()
+        super().action_scroll_home()
 
     def _notify_scroll_position_changed(self) -> None:
         """Notify screen when transcript scroll position changes."""

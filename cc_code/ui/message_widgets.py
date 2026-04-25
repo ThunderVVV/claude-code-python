@@ -125,6 +125,14 @@ class FlushCollapsible(Collapsible):
         event.stop()
         self.collapsed = not self.collapsed
 
+    def _watch_collapsed(self, collapsed: bool) -> None:
+        """Update collapsed state without forcing transcript scroll position."""
+        self._update_collapsed(collapsed)
+        if self.collapsed:
+            self.post_message(self.Collapsed(self))
+        else:
+            self.post_message(self.Expanded(self))
+
 
 # Role configuration - single source of truth
 ROLE_CONFIG = {
@@ -867,7 +875,7 @@ class MessageList(VerticalGroup):
     def _flush_scheduled_scroll_to_latest(self) -> None:
         """Run one deferred anchor call after the pending refresh."""
         self._scroll_anchor_scheduled = False
-        self._scroll_to_latest()
+        self._scroll_to_latest(force=True)
 
     def schedule_scroll_to_latest(self, auto_follow: bool = True) -> None:
         """Anchor after the current DOM/layout update flushes."""
