@@ -11,7 +11,7 @@ REPLScreen {
     height: 1fr;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 0 0;
+    padding: 0 1 0 0;
     scrollbar-size: 1 1;
     scrollbar-background: $surface;
     scrollbar-background-hover: $surface;
@@ -112,7 +112,7 @@ WelcomeWidget:focus {
 #input-area {
     height: auto;
     dock: bottom;
-    padding: 0 0 0 0;
+    padding: 0 1 0 0;
     background: $background;
 }
 
