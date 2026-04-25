@@ -11,13 +11,6 @@ from cc_code.skills.loader import (
     add_skill_directories,
     discover_skill_dirs_for_paths,
 )
-from cc_code.skills.bundled import (
-    init_bundled_skills,
-    get_bundled_skills,
-    register_bundled_skill,
-    BundledSkillDefinition,
-)
-
 __all__ = [
     "LoadedFrom",
     "SkillCommand",
@@ -28,8 +21,4 @@ __all__ = [
     "get_dynamic_skills",
     "add_skill_directories",
     "discover_skill_dirs_for_paths",
-    "init_bundled_skills",
-    "get_bundled_skills",
-    "register_bundled_skill",
-    "BundledSkillDefinition",
 ]

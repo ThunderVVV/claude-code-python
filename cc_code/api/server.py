@@ -31,12 +31,7 @@ from cc_code.core.settings import (
 )
 from cc_code.core.instruction import InstructionConfig
 from cc_code.services.openai_client import OpenAIClientConfig
-from cc_code.skills.bundled import init_bundled_skills
 from cc_code.skills.loader import get_all_skills, format_commands_within_budget
-
-
-# Initialize bundled skills at module load time
-init_bundled_skills()
 
 logger = logging.getLogger(__name__)
 
@@ -390,7 +385,7 @@ async def switch_model(request: SwitchModelRequest, http_request: Request):
 
 @api_router.get("/skills")
 async def list_skills(http_request: Request):
-    """List all available skills (bundled + dynamically loaded)."""
+    """List all available skills."""
     logger.info("GET /skills")
     try:
         import os

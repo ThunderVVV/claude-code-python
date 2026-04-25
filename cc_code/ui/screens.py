@@ -1253,14 +1253,14 @@ class REPLScreen(Screen):
 
         if not skills:
             await message_list.add_message(
-                Message.system_message("No skills available. Bundled skills are loaded at server startup. Place custom skill definitions in .claude/skills/ (SKILL.md format).")
+                Message.system_message("No skills available. Place custom skill definitions in .claude/skills/ (SKILL.md format).")
             )
             input_widget.focus()
             return
 
         lines = ["Available skills:"]
         for s in skills:
-            source_label = {"bundled": "bundled", "userSettings": "user", "projectSettings": "project", "policySettings": "managed"}.get(s.get("source", ""), s.get("source", ""))
+            source_label = {"userSettings": "user", "projectSettings": "project", "policySettings": "managed"}.get(s.get("source", ""), s.get("source", ""))
             lines.append(f"  /{s['name']} - {s['description']} ({source_label})")
             if s.get("when_to_use"):
                 lines.append(f"    When: {s['when_to_use']}")

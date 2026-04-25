@@ -23,7 +23,7 @@ SKILL_TOOL_NAME = "Skill"
 class SkillTool(BaseTool):
     """Tool that allows the model to invoke slash-command skills.
 
-    Skills are user-defined or bundled prompt expansions that provide
+    Skills are user-defined prompt expansions that provide
     specialized capabilities and domain knowledge.
     """
 
@@ -93,11 +93,7 @@ class SkillTool(BaseTool):
         if skill.disable_model_invocation:
             return f"Error: Skill '{skill_name}' cannot be invoked by the model"
 
-        # Get the skill's prompt - bundled skills use _get_prompt_fn
-        if hasattr(skill, '_get_prompt_fn') and callable(skill._get_prompt_fn):
-            prompt = skill._get_prompt_fn(args, context)
-        else:
-            prompt = await skill.get_prompt_for_command(args)
+        prompt = await skill.get_prompt_for_command(args)
 
         # Return the expanded skill prompt as a system-reminder
         return f"""<system-reminder>

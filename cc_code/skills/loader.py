@@ -429,9 +429,6 @@ _dynamic_skills: Dict[str, SkillCommand] = {}
 _conditional_skills: Dict[str, SkillCommand] = {}
 _activated_conditional_skill_names: set[str] = set()
 
-# Bundled skills
-_bundled_skills: List[SkillCommand] = []
-
 # Cache
 _cached_skill_dir_commands: Optional[List[SkillCommand]] = None
 _cached_commands_dir_commands: Optional[List[SkillCommand]] = None
@@ -501,16 +498,11 @@ async def load_skills_from_dir(cwd: str) -> List[SkillCommand]:
 
 
 async def get_all_skills(cwd: str) -> List[SkillCommand]:
-    """Get all available skills (dir-based + bundled + dynamic)."""
+    """Get all available skills (dir-based + dynamic)."""
     dir_skills = await load_skills_from_dir(cwd)
     all_skills = list(dir_skills)
 
-    # Add bundled skills (deduplicate by name)
     seen = {s.name for s in all_skills}
-    for bs in _bundled_skills:
-        if bs.name not in seen:
-            seen.add(bs.name)
-            all_skills.append(bs)
 
     # Add dynamic skills
     for ds in _dynamic_skills.values():
@@ -692,26 +684,14 @@ def format_commands_within_budget(
     if full_total <= budget:
         return "\n".join(full_entries)
 
-    # Truncate non-bundled descriptions
-    bundled = [cmd for cmd in commands if cmd.loaded_from == "bundled"]
-    non_bundled = [cmd for cmd in commands if cmd.loaded_from != "bundled"]
-
-    if not non_bundled:
-        return "\n".join(full_entries)
-
-    # Budget for non-bundled after bundled
-    bundled_chars = sum(len(_format_command_description(cmd)) + 1 for cmd in bundled)
-    remaining = budget - bundled_chars
-    name_overhead = sum(len(cmd.name) + 4 for cmd in non_bundled) + len(non_bundled) - 1
-    max_desc_len = max(20, (remaining - name_overhead) // len(non_bundled))
+    # Truncate all descriptions proportionally
+    name_overhead = sum(len(cmd.name) + 4 for cmd in commands) + len(commands) - 1
+    max_desc_len = max(20, (budget - name_overhead) // len(commands))
 
     result_parts = []
     for cmd in commands:
-        if cmd.loaded_from == "bundled":
-            result_parts.append(_format_command_description(cmd))
-        else:
-            desc = _get_command_description(cmd)
-            truncated = desc[:max_desc_len] + "\u2026" if len(desc) > max_desc_len else desc
-            result_parts.append(f"- {cmd.name}: {truncated}")
+        desc = _get_command_description(cmd)
+        truncated = desc[:max_desc_len] + "\u2026" if len(desc) > max_desc_len else desc
+        result_parts.append(f"- {cmd.name}: {truncated}")
 
     return "\n".join(result_parts)

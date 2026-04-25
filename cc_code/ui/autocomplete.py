@@ -166,7 +166,7 @@ class CommandRegistry:
                 id="skills",
                 trigger="skills",
                 title="/skills",
-                description="List available skills (bundled and loaded)",
+                description="List available skills",
             ),
         ]
         for cmd in default_commands:

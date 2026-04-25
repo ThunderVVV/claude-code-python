@@ -164,6 +164,14 @@ def summarize_tool_result(
         )
         return _norm(summary), trimmed_lines
 
+    if tool_name == "Skill":
+        skill_name = tool_input.get("skill", "")
+        if skill_name:
+            summary = f"Skill: {truncate_preview_line(skill_name, PREVIEW_LINE_MAX_WIDTH)}"
+        else:
+            summary = "Skill completed"
+        return _norm(summary), trimmed_lines
+
     first = trimmed_lines[0] if trimmed_lines else f"{tool_name} completed"
     summary = truncate_preview_line(_compact_path(first))
     return _norm(summary), trimmed_lines[1:] or trimmed_lines[:1]
