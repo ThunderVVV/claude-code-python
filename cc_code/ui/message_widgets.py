@@ -171,7 +171,7 @@ class ThinkingBlockWidget(VerticalGroup):
 
     def compose(self) -> ComposeResult:
         with FlushCollapsible(
-            title="● Thinking...",
+            title="• Thinking...",
             collapsed=True,
             collapsed_symbol="",
             expanded_symbol="",
@@ -350,7 +350,7 @@ class ToolUseWidget(VerticalGroup):
         """Return the current single-line title for the tool call."""
         if self._result is None:
             return Content.from_text(
-                "● " + sanitize_terminal_text(
+                "• " + sanitize_terminal_text(
                     summarize_tool_use(self.tool_name, self.tool_input)
                 ),
                 markup=False,
@@ -358,7 +358,7 @@ class ToolUseWidget(VerticalGroup):
         summary, is_error = self._result
         summary = sanitize_terminal_text(summary)
         status_style = "$error" if is_error else "$success"
-        title_text = f"● {summary}"
+        title_text = f"• {summary}"
         spans = [Span(0, 1, status_style)]
         action_span = self._leading_action_span(summary, offset=2)
         if action_span is not None:
@@ -634,8 +634,8 @@ class MessageWidget(VerticalGroup):
                 with FlushCollapsible(
                     title=f"@{expansion.display_path}",
                     collapsed=True,
-                    collapsed_symbol="●",
-                    expanded_symbol="●",
+                    collapsed_symbol="",
+                    expanded_symbol="",
                     classes="file-expansion-collapsible",
                 ):
                     yield Static(
