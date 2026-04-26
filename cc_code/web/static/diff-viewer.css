@@ -1,0 +1,349 @@
+/*
+ * Diff viewer styles intentionally mirror the official diff2html demo:
+ * website/templates/pages/demo/github-highlights.css
+ * src/ui/css/diff2html.css
+ */
+
+.cc-diff-viewer {
+    max-width: 100%;
+    margin: 0 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    line-height: normal;
+}
+
+.cc-diff-viewer,
+.cc-diff-viewer .d2h-light-color-scheme {
+    --d2h-bg-color: #fff;
+    --d2h-border-color: #ddd;
+    --d2h-dim-color: rgba(0, 0, 0, 0.3);
+    --d2h-line-border-color: #eeeeee;
+    --d2h-file-header-bg-color: #f7f7f7;
+    --d2h-file-header-border-color: #d8d8d8;
+    --d2h-empty-placeholder-bg-color: #f1f1f1;
+    --d2h-empty-placeholder-border-color: #e1e1e1;
+    --d2h-selected-color: #c8e1ff;
+    --d2h-ins-bg-color: #dfd;
+    --d2h-ins-border-color: #b4e2b4;
+    --d2h-ins-highlight-bg-color: #97f295;
+    --d2h-ins-label-color: #399839;
+    --d2h-del-bg-color: #fee8e9;
+    --d2h-del-border-color: #e9aeae;
+    --d2h-del-highlight-bg-color: #ffb6ba;
+    --d2h-del-label-color: #c33;
+    --d2h-change-del-color: #fdf2d0;
+    --d2h-change-ins-color: #ded;
+    --d2h-info-bg-color: #f8fafd;
+    --d2h-info-border-color: #d5e4f2;
+    --d2h-change-label-color: #d0b44c;
+    --d2h-moved-label-color: #3572b0;
+}
+
+.cc-diff-viewer .d2h-wrapper {
+    text-align: left;
+}
+
+.cc-diff-viewer .d2h-file-header {
+    display: flex;
+    height: 35px;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--d2h-file-header-border-color);
+    background-color: var(--d2h-file-header-bg-color);
+    font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+.cc-diff-viewer .d2h-file-name-wrapper {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    font-size: 14px;
+}
+
+.cc-diff-viewer .d2h-file-name {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow-x: hidden;
+}
+
+.cc-diff-viewer .d2h-tag,
+.cc-diff-viewer .d2h-file-collapse {
+    font-size: 14px !important;
+}
+
+.cc-diff-viewer .d2h-file-wrapper {
+    border: 1px solid var(--d2h-border-color);
+    border-radius: 3px;
+    margin-bottom: 1em;
+}
+
+.cc-diff-viewer .d2h-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    position: relative;
+    font-family: 'Menlo', 'Consolas', monospace !important;
+    font-size: 12px !important;
+    line-height: normal;
+    margin: 0;
+}
+
+.cc-diff-viewer .d2h-diff-table,
+.cc-diff-viewer .d2h-diff-table * {
+    font-family: 'Menlo', 'Consolas', monospace !important;
+    font-size: 12px !important;
+}
+
+.cc-diff-viewer .d2h-diff-table tr,
+.cc-diff-viewer .d2h-diff-table td,
+.cc-diff-viewer .d2h-diff-table th {
+    border: 0;
+    padding: 0;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: normal;
+}
+
+.cc-diff-viewer .d2h-code-line,
+.cc-diff-viewer .d2h-code-side-line {
+    display: inline-block;
+    white-space: nowrap;
+    user-select: none;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: normal;
+}
+
+.cc-diff-viewer .d2h-code-line {
+    width: calc(100% - 16em);
+    padding: 0 8em;
+}
+
+.cc-diff-viewer .d2h-code-side-line {
+    width: calc(100% - 9em);
+    padding: 0 4.5em;
+}
+
+.cc-diff-viewer .d2h-code-line-ctn {
+    display: inline-block;
+    background: none;
+    padding: 0;
+    word-wrap: normal;
+    white-space: pre;
+    user-select: text;
+    width: 100%;
+    vertical-align: middle;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: normal;
+}
+
+.cc-diff-viewer .d2h-code-line-ctn * {
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: normal;
+}
+
+.cc-diff-viewer .d2h-code-line del,
+.cc-diff-viewer .d2h-code-side-line del {
+    display: inline-block;
+    margin-top: -1px;
+    text-decoration: none;
+    background-color: var(--d2h-del-highlight-bg-color);
+    border-radius: 0.2em;
+}
+
+.cc-diff-viewer .d2h-code-line ins,
+.cc-diff-viewer .d2h-code-side-line ins {
+    display: inline-block;
+    margin-top: -1px;
+    text-decoration: none;
+    background-color: var(--d2h-ins-highlight-bg-color);
+    border-radius: 0.2em;
+    text-align: left;
+}
+
+.cc-diff-viewer .d2h-code-line-prefix {
+    display: inline;
+    background: none;
+    padding: 0;
+    word-wrap: normal;
+    white-space: pre;
+}
+
+.cc-diff-viewer .line-num1 {
+    box-sizing: border-box;
+    display: block;
+    float: left;
+    width: 3.5em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 0.5em;
+    color: var(--d2h-dim-color) !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.cc-diff-viewer .line-num2 {
+    box-sizing: border-box;
+    display: block;
+    float: right;
+    width: 3.5em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 0.5em;
+    color: var(--d2h-dim-color) !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.cc-diff-viewer .d2h-code-linenumber,
+.cc-diff-viewer .d2h-code-side-linenumber {
+    position: absolute;
+    display: inline-block !important;
+    box-sizing: border-box;
+    background-color: var(--d2h-bg-color);
+    color: var(--d2h-dim-color) !important;
+    text-align: right;
+    border: solid var(--d2h-line-border-color) !important;
+    border-width: 0 1px !important;
+    cursor: pointer;
+    direction: rtl;
+    font-family: 'Menlo', 'Consolas', monospace !important;
+    font-size: 12px !important;
+    line-height: normal;
+    left: 0;
+    z-index: 2;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.cc-diff-viewer .d2h-code-linenumber {
+    width: 7.5em;
+}
+
+.cc-diff-viewer .d2h-code-linenumber:after {
+    content: '\200b';
+}
+
+.cc-diff-viewer .d2h-code-side-linenumber {
+    width: 4em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 0.5em;
+}
+
+.cc-diff-viewer .d2h-code-side-linenumber:after {
+    content: '\200b';
+}
+
+.cc-diff-viewer .d2h-code-linenumber,
+.cc-diff-viewer .d2h-code-side-linenumber,
+.cc-diff-viewer .d2h-code-line-prefix,
+.cc-diff-viewer .d2h-emptyplaceholder {
+    user-select: none;
+}
+
+.cc-diff-viewer .d2h-del {
+    background-color: var(--d2h-del-bg-color);
+    border-color: var(--d2h-del-border-color);
+}
+
+.cc-diff-viewer .d2h-ins {
+    background-color: var(--d2h-ins-bg-color);
+    border-color: var(--d2h-ins-border-color);
+}
+
+.cc-diff-viewer .d2h-info {
+    background-color: var(--d2h-info-bg-color);
+    color: var(--d2h-dim-color);
+    border-color: var(--d2h-info-border-color);
+}
+
+.cc-diff-viewer .d2h-file-diff .d2h-del.d2h-change {
+    background-color: var(--d2h-change-del-color);
+}
+
+.cc-diff-viewer .d2h-file-diff .d2h-ins.d2h-change {
+    background-color: var(--d2h-change-ins-color);
+}
+
+.cc-diff-viewer .hljs {
+    color: #24292e;
+}
+
+.cc-diff-viewer .hljs-doctag,
+.cc-diff-viewer .hljs-keyword,
+.cc-diff-viewer .hljs-meta .hljs-keyword,
+.cc-diff-viewer .hljs-template-tag,
+.cc-diff-viewer .hljs-template-variable,
+.cc-diff-viewer .hljs-type,
+.cc-diff-viewer .hljs-variable.language_ {
+    color: #d73a49;
+}
+
+.cc-diff-viewer .hljs-title,
+.cc-diff-viewer .hljs-title.class_,
+.cc-diff-viewer .hljs-title.class_.inherited__,
+.cc-diff-viewer .hljs-title.function_ {
+    color: #6f42c1;
+}
+
+.cc-diff-viewer .hljs-attr,
+.cc-diff-viewer .hljs-attribute,
+.cc-diff-viewer .hljs-literal,
+.cc-diff-viewer .hljs-meta,
+.cc-diff-viewer .hljs-number,
+.cc-diff-viewer .hljs-operator,
+.cc-diff-viewer .hljs-selector-attr,
+.cc-diff-viewer .hljs-selector-class,
+.cc-diff-viewer .hljs-selector-id,
+.cc-diff-viewer .hljs-variable {
+    color: #005cc5;
+}
+
+.cc-diff-viewer .hljs-meta .hljs-string,
+.cc-diff-viewer .hljs-regexp,
+.cc-diff-viewer .hljs-string {
+    color: #032f62;
+}
+
+.cc-diff-viewer .hljs-built_in,
+.cc-diff-viewer .hljs-symbol {
+    color: #e36209;
+}
+
+.cc-diff-viewer .hljs-code,
+.cc-diff-viewer .hljs-comment,
+.cc-diff-viewer .hljs-formula {
+    color: #6a737d;
+}
+
+.cc-diff-viewer .hljs-name,
+.cc-diff-viewer .hljs-quote,
+.cc-diff-viewer .hljs-selector-pseudo,
+.cc-diff-viewer .hljs-selector-tag {
+    color: #22863a;
+}
+
+.cc-diff-viewer .hljs-subst {
+    color: #24292e;
+}
+
+.cc-diff-viewer .hljs-section {
+    color: #005cc5;
+    font-weight: 700;
+}
+
+.cc-diff-viewer .hljs-bullet {
+    color: #735c0f;
+}
+
+.cc-diff-viewer .hljs-emphasis {
+    color: #24292e;
+    font-style: italic;
+}
+
+.cc-diff-viewer .hljs-strong {
+    color: #24292e;
+    font-weight: 700;
+}

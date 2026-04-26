@@ -9,27 +9,29 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="/static/diff-viewer.js?v=20260426-4"></script>
     <style>
         :root {
-            --color-text-primary: #e2e8f0;
-            --color-text-heading: #f8fafc;
-            --color-text-muted: #94a3b8;
-            --color-text-secondary: #64748b;
-            --color-bg-primary: rgba(15, 23, 42, 0.9);
-            --color-bg-secondary: rgba(30, 41, 59, 0.8);
-            --color-bg-tertiary: rgba(255, 255, 255, 0.05);
-            --color-border-primary: rgba(148, 163, 184, 0.2);
-            --color-border-secondary: rgba(71, 85, 105, 0.5);
-            --color-blue-primary: #3b82f6;
-            --color-blue-secondary: #2563eb;
-            --color-emerald: #10b981;
-            --color-red: #ef4444;
-            --color-yellow: #eab308;
-            --font-size-code: 13px;
+            /* LibreChat Light Theme Colors */
+            --color-text-primary: #212121;
+            --color-text-heading: #171717;
+            --color-text-muted: #595959;
+            --color-text-secondary: #424242;
+            --color-bg-primary: #ffffff;
+            --color-bg-secondary: #f7f7f8;
+            --color-bg-tertiary: #ececec;
+            --color-border-primary: #e3e3e3;
+            --color-border-secondary: #cdcdcd;
+            --color-accent-primary: #ab68ff;
+            --color-accent-secondary: #10a37f;
+            --color-emerald: #10a37f;
+            --color-red: #dc2626;
+            --color-yellow: #f59e0b;
+            --font-size-code: 12px;
             --font-size-base: 14px;
             --app-height: 100dvh;
         }
@@ -40,7 +42,7 @@
             min-height: 100%;
             overflow-x: hidden;
             background: var(--color-bg-secondary);
-            color-scheme: dark;
+            color-scheme: light;
         }
         body {
             margin: 0;
@@ -61,28 +63,27 @@
         }
 
         body.gradient-bg {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%) !important;
+            background: #ffffff !important;
         }
 
         .glass {
-            background: rgba(255, 255, 255, 0.05) !important;
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #ffffff !important;
+            border: 1px solid var(--color-border-primary);
         }
 
         .message-user {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+            background: #f7f7f8 !important;
+            color: #212121;
         }
 
         .message-assistant {
-            background: rgba(30, 41, 59, 0.8) !important;
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: #ffffff !important;
             overflow: hidden;
         }
 
         .tool-block {
-            background: rgba(15, 23, 42, 0.9) !important;
-            border: 1px solid rgba(55, 65, 81, 0.5);
+            background: #f7f7f8 !important;
+            border-radius: 8px;
             overflow: hidden;
             min-width: 0;
         }
@@ -90,7 +91,7 @@
         .tool-block pre { max-width: 100%; overflow-x: auto; }
 
         .collapsible-header { cursor: pointer; user-select: none; }
-        .collapsible-header:hover { background: rgba(71, 85, 105, 0.3) !important; }
+        .collapsible-header:hover { background: rgba(0, 0, 0, 0.05) !important; }
 
         .collapsible-content {
             max-height: 0;
@@ -110,7 +111,7 @@
         }
         .assistant-content pre { max-width: 100%; overflow-x: auto; }
 
-        .input-glow:focus { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
+        .input-glow:focus { box-shadow: 0 0 0 2px rgba(171, 104, 255, 0.3); }
 
         .typing-indicator span { animation: blink 1.4s infinite both; }
         .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
@@ -123,61 +124,70 @@
 
         .fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
-        ::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.8); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.9); }
+        ::-webkit-scrollbar-track { background: #f7f7f8; }
+        ::-webkit-scrollbar-thumb { background: #cdcdcd; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #999696; }
 
-        .markdown-body { color: var(--color-text-primary); line-height: 1.6; }
+        .markdown-body { color: var(--color-text-primary); line-height: 1.4; }
         .markdown-body h1, .markdown-body h2, .markdown-body h3 {
             color: var(--color-text-heading);
-            margin-top: 1em;
-            margin-bottom: 0.5em;
+            margin-top: 0.5em;
+            margin-bottom: 0.25em;
             font-weight: 600;
         }
         .markdown-body h1 { font-size: 1.5em; }
         .markdown-body h2 { font-size: 1.25em; }
         .markdown-body h3 { font-size: 1.1em; }
-        .markdown-body p { margin: 0.5em 0; }
+        .markdown-body p { margin: 0.25em 0; }
 
         .markdown-body code {
-            background: rgba(15, 23, 42, 0.8) !important;
+            background: rgba(0, 0, 0, 0.05) !important;
+            color: #171717;
             padding: 0.2em 0.4em;
             border-radius: 4px;
             font-size: 0.9em;
+            font-family: 'JetBrains Mono', monospace;
         }
 
         .markdown-body pre {
-            background: rgba(15, 23, 42, 0.9) !important;
+            background: #f7f7f8 !important;
+            border: 1px solid #e3e3e3;
             padding: 1em;
             border-radius: 8px;
             overflow-x: auto;
-            margin: 0.5em 0;
+            margin: 0.75em 0;
         }
 
-        .markdown-body pre code { background: transparent; padding: 0; }
+        .markdown-body pre code {
+            background: transparent !important;
+            padding: 0;
+            border: none;
+        }
+
         .markdown-body ul, .markdown-body ol { margin: 0.5em 0; padding-left: 1.5em; }
         .markdown-body li { margin: 0.25em 0; }
 
         .markdown-body blockquote {
-            border-left: 4px solid var(--color-blue-primary);
+            border-left: 4px solid #ab68ff;
             padding-left: 1em;
-            margin: 0.5em 0;
-            color: var(--color-text-muted);
+            margin: 0.25em 0;
+            color: #595959;
+            background: rgba(171, 104, 255, 0.05);
         }
 
-        .markdown-body a { color: #60a5fa; text-decoration: underline; }
+        .markdown-body a { color: #0066cc; text-decoration: underline; }
 
         .markdown-table-wrapper {
             width: 100%;
             max-width: 100%;
             overflow-x: auto;
             overflow-y: hidden;
-            margin: 0.5em 0;
+            margin: 0.25em 0;
             -webkit-overflow-scrolling: touch;
         }
 
@@ -187,198 +197,154 @@
             min-width: 100%;
             margin: 0;
         }
-        .markdown-body th, .markdown-body td { border: 1px solid #334155; padding: 0.5em; }
-        .markdown-body th { background: rgba(30, 41, 59, 0.8) !important; }
+        .markdown-body th, .markdown-body td { border: 1px solid #e3e3e3; padding: 0.5em; }
+        .markdown-body th { background: #f7f7f8 !important; }
 
         .file-expansion {
-            background: rgba(30, 64, 175, 0.3);
-            border: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(171, 104, 255, 0.08);
+            border: 1px solid rgba(171, 104, 255, 0.2);
         }
 
-        .diff-container, .diff-container .d2h-dark-color-scheme {
-            --d2h-dark-bg-color: transparent;
-            --d2h-dark-file-header-bg-color: transparent;
-            --d2h-dark-empty-placeholder-bg-color: transparent;
-            --d2h-dark-ins-bg-color: rgba(34, 197, 94, 0.15);
-            --d2h-dark-del-bg-color: rgba(239, 68, 68, 0.15);
-            --d2h-dark-ins-highlight-bg-color: transparent;
-            --d2h-dark-del-highlight-bg-color: transparent;
-            --d2h-dark-info-bg-color: transparent;
-        }
+        .modal-overlay { background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
+        .session-item:hover { background: rgba(171, 104, 255, 0.1); }
 
-        .diff-container {
-            border-radius: 6px;
-            border: 1px solid rgba(71, 85, 105, 0.4);
-            max-width: 100%;
-        }
-
-        .d2h-wrapper { background: transparent !important; }
-        .d2h-file-header {
-            background: transparent !important;
-            padding: 2px 6px !important;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.3) !important;
-        }
-        .d2h-file-name { color: var(--color-text-primary) !important; font-size: var(--font-size-code) !important; }
-        .d2h-diff-table { font-family: 'JetBrains Mono', monospace !important; font-size: var(--font-size-code) !important; line-height: 1.2 !important; }
-        .d2h-diff-table td, .d2h-diff-table th { padding: 0 2px !important; line-height: 1.2 !important; }
-        .d2h-code-line-ctn { color: var(--color-text-primary) !important; padding: 0 2px !important; line-height: 1.2 !important; }
-        .d2h-line-num { 
-            color: var(--color-text-secondary) !important; 
-            padding: 0 4px !important; 
-            min-width: 28px !important;
-            position: relative !important;
-        }
-        .d2h-code-line del, .d2h-code-line ins,
-        .d2h-code-side-line del, .d2h-code-side-line ins {
-            background: transparent !important;
-            color: inherit !important;
-            text-decoration: none !important;
-        }
-        .d2h-file-wrapper { border: none !important; margin: 0 !important; }
-        .d2h-file-list-wrapper { display: none !important; }
-        .d2h-info { background: transparent !important; border: none !important; }
-        .d2h-diff-table td, .d2h-diff-table th,
-        .d2h-diff-table, .d2h-code-line, .d2h-code-side-line { border: none !important; }
-        
-        /* Fix for sticky line numbers in diff2html */
-        .d2h-code-side-linenumber,
-        .d2h-code-linenumber {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-        }
-        
-        .d2h-side-by-side .d2h-code-side-line,
-        .d2h-side-by-side .d2h-code-line {
-            display: table-row !important;
-        }
-
-        .modal-overlay { background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); }
-        .session-item:hover { background: rgba(59, 130, 246, 0.1); }
-
+        /* LibreChat Light Theme - Secondary Definitions */
         :root {
-            --color-text-primary: #abb2bf;
-            --color-text-heading: #e5eaf0;
-            --color-text-muted: #7f848e;
-            --color-text-secondary: #5c6370;
-            --color-bg-primary: #21252b;
-            --color-bg-secondary: #282c34;
-            --color-bg-tertiary: rgba(97, 175, 239, 0.08);
-            --color-border-primary: rgba(97, 175, 239, 0.18);
-            --color-border-secondary: rgba(92, 99, 112, 0.55);
-            --color-blue-primary: #61afef;
-            --color-blue-secondary: #528bff;
-            --color-emerald: #98c379;
-            --color-red: #e06c75;
-            --color-yellow: #e5c07b;
-            --color-purple: #c678dd;
-            --color-orange: #d19a66;
-            --color-cyan: #56b6c2;
+            --color-text-primary: #212121;
+            --color-text-heading: #171717;
+            --color-text-muted: #595959;
+            --color-text-secondary: #424242;
+            --color-bg-primary: #ffffff;
+            --color-bg-secondary: #f7f7f8;
+            --color-bg-tertiary: #ececec;
+            --color-border-primary: #e3e3e3;
+            --color-border-secondary: #cdcdcd;
+            --color-accent-primary: #ab68ff;
+            --color-accent-secondary: #10a37f;
+            --color-emerald: #10a37f;
+            --color-red: #dc2626;
+            --color-yellow: #f59e0b;
+            --color-purple: #ab68ff;
+            --color-orange: #d97706;
+            --color-cyan: #0891b2;
         }
 
         body.gradient-bg {
-            color: var(--color-text-primary) !important;
-            background:
-                radial-gradient(circle at top left, rgba(97, 175, 239, 0.16), transparent 28%),
-                radial-gradient(circle at bottom right, rgba(198, 120, 221, 0.08), transparent 25%),
-                linear-gradient(180deg, #21252b 0%, #282c34 55%, #21252b 100%) !important;
+            color: #212121 !important;
+            background: #ffffff !important;
         }
 
         .glass,
         .editor-frame {
-            background: rgba(33, 37, 43, 0.96) !important;
-            border: 1px solid rgba(97, 175, 239, 0.12);
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+            background: #ffffff !important;
+            border: none;
+            box-shadow: none;
         }
 
         .app-mark {
-            background: linear-gradient(180deg, rgba(97, 175, 239, 0.18), rgba(97, 175, 239, 0.08)) !important;
-            border: 1px solid rgba(97, 175, 239, 0.22);
-            color: var(--color-blue-primary) !important;
+            background: rgba(171, 104, 255, 0.1) !important;
+            border: 1px solid rgba(171, 104, 255, 0.2);
+            color: #ab68ff !important;
         }
 
-        .app-mark svg { color: var(--color-blue-primary) !important; }
+        .app-mark svg { color: #ab68ff !important; }
 
-        .app-title { color: var(--color-text-heading) !important; }
-        .app-subtitle { color: var(--color-text-muted) !important; }
+        .app-title { color: #171717 !important; }
+        .app-subtitle { color: #595959 !important; }
 
         .icon-button,
         .action-button {
-            border: 1px solid rgba(92, 99, 112, 0.55) !important;
-            background: rgba(33, 37, 43, 0.92) !important;
-            color: var(--color-text-primary) !important;
-            transition:
-                background 0.18s ease,
-                border-color 0.18s ease,
-                transform 0.18s ease,
-                box-shadow 0.18s ease;
+            border: none !important;
+            background: transparent !important;
+            color: #212121 !important;
+            transition: background 0.2s ease;
         }
 
         .icon-button:hover,
         .action-button:hover {
-            background: rgba(97, 175, 239, 0.08) !important;
-            border-color: rgba(97, 175, 239, 0.28) !important;
+            background: #f7f7f8 !important;
         }
 
-        .icon-button svg { color: var(--color-text-muted) !important; }
+        .icon-button svg { color: #595959 !important; }
 
         .primary-action {
-            background: var(--color-blue-primary) !important;
-            color: #0f1720 !important;
-            border-color: rgba(97, 175, 239, 0.28) !important;
-            box-shadow: 0 10px 22px rgba(97, 175, 239, 0.24);
+            background: #171717 !important;
+            color: #ffffff !important;
+            border: none !important;
+            box-shadow: none;
+            border-radius: 8px;
         }
 
         .primary-action:hover {
-            background: var(--color-blue-secondary) !important;
-            box-shadow: 0 12px 26px rgba(97, 175, 239, 0.28);
+            background: #424242 !important;
+            box-shadow: none;
+        }
+
+        .primary-action:disabled {
+            background: #e3e3e3 !important;
+            color: #999696 !important;
         }
 
         .danger-action {
-            background: var(--color-red) !important;
-            color: #201316 !important;
-            border-color: rgba(224, 108, 117, 0.24) !important;
-            box-shadow: 0 10px 22px rgba(224, 108, 117, 0.22);
+            background: #dc2626 !important;
+            color: #ffffff !important;
+            border: none !important;
+            box-shadow: none;
+            border-radius: 8px;
         }
 
         .danger-action:hover {
-            background: #be5046 !important;
-            box-shadow: 0 12px 26px rgba(190, 80, 70, 0.26);
+            background: #b91c1c !important;
+            box-shadow: none;
         }
 
-        .status-chip { color: var(--color-text-primary) !important; }
-        .status-dot { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25); }
+        .status-chip { display: none; }
 
         .message-user {
-            background: rgba(97, 175, 239, 0.10) !important;
-            border: 1px solid rgba(97, 175, 239, 0.18);
-            color: var(--color-text-heading) !important;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+            background: #f7f7f8 !important;
+            color: #212121 !important;
         }
 
-        .message-user p { color: inherit !important; }
+        .message-user p { color: #212121 !important; }
 
         .message-assistant {
-            background: rgba(33, 37, 43, 0.96) !important;
-            border: 1px solid rgba(97, 175, 239, 0.12);
+            background: #ffffff !important;
             overflow: hidden;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
         }
 
         .tool-block {
-            background: rgba(33, 37, 43, 0.98) !important;
-            border: 1px solid rgba(92, 99, 112, 0.55);
+            background: #f7f7f8 !important;
+            border-radius: 8px;
             overflow: hidden;
             min-width: 0;
         }
 
-        .collapsible-header:hover { background: rgba(97, 175, 239, 0.06) !important; }
+        .collapsible-header:hover { background: rgba(0, 0, 0, 0.05) !important; }
         .tool-summary { letter-spacing: 0.01em; }
 
         .app-shell {
-            width: min(100%, 96rem);
+            width: 100%;
             min-height: var(--app-height);
             overflow: hidden;
+        }
+
+        .chat-container {
+            max-width: 64rem;
+            margin: 0 auto;
+        }
+
+        .messages-area,
+        .messages-area * {
+            font-size: var(--font-size-base) !important;
+        }
+
+        .messages-area code,
+        .messages-area pre,
+        .messages-area .mono,
+        .messages-area .markdown-body code,
+        .messages-area .markdown-body pre,
+        .messages-area pre code {
+            font-size: var(--font-size-code) !important;
         }
 
         .editor-frame,
@@ -389,7 +355,7 @@
 
         .assistant-content {
             overflow-x: hidden;
-            color: var(--color-text-primary);
+            color: #212121;
             min-width: 0;
             max-width: 100%;
         }
@@ -399,12 +365,19 @@
             max-width: 100%;
         }
 
+        .diff-message {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+            overflow: visible;
+        }
+
         .assistant-content pre,
         .tool-block pre,
         .tool-result-area pre,
         .markdown-body pre,
         .file-expansion pre,
-        .diff-container,
+        .cc-diff-viewer,
         .markdown-table-wrapper {
             max-width: 100%;
             overflow-x: auto;
@@ -412,28 +385,29 @@
         }
 
         .composer-shell {
-            background: rgba(33, 37, 43, 0.98) !important;
-            border-top: 1px solid rgba(97, 175, 239, 0.12);
+            background: #ffffff !important;
+            border-top: none;
+            padding: 1rem 0 1.5rem;
         }
 
         .composer-input {
-            background: rgba(25, 29, 35, 0.96) !important;
-            border-color: rgba(92, 99, 112, 0.65) !important;
-            color: var(--color-text-primary) !important;
+            background: #f7f7f8 !important;
+            border: 1px solid #e3e3e3 !important;
+            color: #212121 !important;
             font-size: 16px !important;
             line-height: 1.5;
+            border-radius: 12px;
         }
 
-        .composer-input::placeholder { color: var(--color-text-secondary) !important; }
+        .composer-input::placeholder { color: #999696 !important; }
 
         .input-glow:focus {
-            box-shadow:
-                0 0 0 1px rgba(97, 175, 239, 0.75),
-                0 0 0 4px rgba(97, 175, 239, 0.12);
+            border-color: #171717 !important;
+            box-shadow: none;
         }
 
         .markdown-body {
-            color: var(--color-text-primary);
+            color: #212121;
             line-height: 1.65;
             min-width: 0;
             max-width: 100%;
@@ -442,7 +416,7 @@
         .markdown-body h1,
         .markdown-body h2,
         .markdown-body h3 {
-            color: var(--color-text-heading);
+            color: #171717;
             margin-top: 1em;
             margin-bottom: 0.5em;
             font-weight: 600;
@@ -451,7 +425,7 @@
         .markdown-body h1 { font-size: 1.5em; }
         .markdown-body h2 { font-size: 1.25em; }
         .markdown-body h3 { font-size: 1.1em; }
-        .markdown-body p { margin: 0.5em 0; }
+        .markdown-body p { margin: 0.25em 0; }
 
         .text-container,
         .message-user p,
@@ -472,11 +446,11 @@
         }
 
         .markdown-body code {
-            background: rgba(33, 37, 43, 0.98) !important;
-            color: #e5c07b;
+            background: #ececec !important;
+            color: #212121;
             padding: 0.2em 0.4em;
             border-radius: 4px;
-            border: 1px solid rgba(97, 175, 239, 0.12);
+            border: 1px solid #e3e3e3;
             font-size: 0.9em;
         }
 
@@ -488,10 +462,9 @@
         }
 
         .markdown-body pre {
-            background: #21252b !important;
+            background: #f7f7f8 !important;
             padding: 1em;
             border-radius: 8px;
-            border: 1px solid rgba(92, 99, 112, 0.55);
             overflow-x: auto;
             margin: 0.5em 0;
         }
@@ -505,24 +478,24 @@
 
         .markdown-body ul,
         .markdown-body ol {
-            margin: 0.5em 0;
+            margin: 0.25em 0;
             padding-left: 1.5em;
         }
 
         .markdown-body li { margin: 0.25em 0; }
 
         .markdown-body blockquote {
-            border-left: 4px solid var(--color-cyan);
+            border-left: 4px solid #ab68ff;
             padding-left: 1em;
-            margin: 0.5em 0;
-            color: var(--color-text-muted);
-            background: rgba(97, 175, 239, 0.04);
+            margin: 0.25em 0;
+            color: #595959;
+            background: rgba(171, 104, 255, 0.05);
         }
 
         .markdown-body a {
-            color: var(--color-blue-primary);
+            color: #0066cc;
             text-decoration: underline;
-            text-decoration-color: rgba(97, 175, 239, 0.35);
+            text-decoration-color: rgba(0, 102, 204, 0.35);
         }
 
         .markdown-table-wrapper {
@@ -530,7 +503,7 @@
             max-width: 100%;
             overflow-x: auto;
             overflow-y: hidden;
-            margin: 0.5em 0;
+            margin: 0.25em 0;
             border-radius: 8px;
             -webkit-overflow-scrolling: touch;
         }
@@ -544,139 +517,46 @@
 
         .markdown-body th,
         .markdown-body td {
-            border: 1px solid rgba(92, 99, 112, 0.45);
+            border: 1px solid #e3e3e3;
             padding: 0.5em;
         }
 
-        .markdown-body th { background: rgba(33, 37, 43, 0.96) !important; }
+        .markdown-body th { background: #f7f7f8 !important; }
 
         .file-expansion {
-            background: rgba(97, 175, 239, 0.08);
-            border: 1px solid rgba(97, 175, 239, 0.18);
+            background: rgba(171, 104, 255, 0.08);
+            border: 1px solid rgba(171, 104, 255, 0.2);
         }
 
         .file-expansion pre {
-            background: rgba(21, 24, 30, 0.96) !important;
-            border: 1px solid rgba(92, 99, 112, 0.45);
-            color: var(--color-text-primary);
-        }
-
-        .diff-container,
-        .diff-container .d2h-dark-color-scheme {
-            --d2h-dark-bg-color: #21252b;
-            --d2h-dark-file-header-bg-color: #21252b;
-            --d2h-dark-empty-placeholder-bg-color: #21252b;
-            --d2h-dark-ins-bg-color: rgba(152, 195, 121, 0.14);
-            --d2h-dark-del-bg-color: rgba(224, 108, 117, 0.14);
-            --d2h-dark-ins-highlight-bg-color: rgba(152, 195, 121, 0.20);
-            --d2h-dark-del-highlight-bg-color: rgba(224, 108, 117, 0.20);
-            --d2h-dark-info-bg-color: rgba(97, 175, 239, 0.08);
-        }
-
-        .diff-container {
-            border-radius: 6px;
-            border: 1px solid rgba(97, 175, 239, 0.12);
-            max-width: 100%;
-            overflow-x: auto;
-            overflow-y: hidden;
-        }
-
-        .d2h-wrapper {
-            background: transparent !important;
-            color: var(--color-text-primary);
-        }
-
-        .d2h-file-header {
-            background: rgba(33, 37, 43, 0.98) !important;
-            padding: 2px 6px !important;
-            border-bottom: 1px solid rgba(92, 99, 112, 0.35) !important;
-        }
-
-        .d2h-file-name {
-            color: var(--color-text-primary) !important;
-            font-size: var(--font-size-code) !important;
-        }
-
-        .d2h-diff-table {
-            font-family: 'JetBrains Mono', monospace !important;
-            font-size: var(--font-size-code) !important;
-            line-height: 1.2 !important;
-            color: var(--color-text-primary) !important;
-        }
-
-        .d2h-diff-table td,
-        .d2h-diff-table th {
-            padding: 0 2px !important;
-            line-height: 1.2 !important;
-        }
-
-        .d2h-code-line-ctn {
-            color: var(--color-text-primary) !important;
-            padding: 0 2px !important;
-            line-height: 1.2 !important;
-        }
-
-        .d2h-line-num {
-            color: var(--color-text-secondary) !important;
-            padding: 0 4px !important;
-            min-width: 28px !important;
-            position: relative !important;
-        }
-
-        .d2h-code-line del,
-        .d2h-code-line ins,
-        .d2h-code-side-line del,
-        .d2h-code-side-line ins {
-            background: transparent !important;
-            color: inherit !important;
-            text-decoration: none !important;
-        }
-
-        .d2h-code-line ins,
-        .d2h-code-side-line ins {
-            color: var(--color-emerald) !important;
-        }
-
-        .d2h-code-line del,
-        .d2h-code-side-line del {
-            color: var(--color-red) !important;
-        }
-
-        .d2h-file-wrapper { border: none !important; margin: 0 !important; }
-        .d2h-file-list-wrapper { display: none !important; }
-        .d2h-info { background: transparent !important; border: none !important; }
-
-        .d2h-diff-table td,
-        .d2h-diff-table th,
-        .d2h-diff-table,
-        .d2h-code-line,
-        .d2h-code-side-line {
-            border: none !important;
+            background: #f7f7f8 !important;
+            border: 1px solid #e3e3e3;
+            color: #212121;
         }
 
         .modal-overlay {
-            background: rgba(13, 17, 23, 0.78);
+            background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(6px);
         }
 
         .session-item {
-            border-color: rgba(92, 99, 112, 0.35);
+            border-color: #e3e3e3;
         }
 
-        .session-item:hover { background: rgba(97, 175, 239, 0.08); }
+        .session-item:hover { background: rgba(171, 104, 255, 0.08); }
 
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
         }
 
-        ::-webkit-scrollbar-track { background: rgba(33, 37, 43, 0.9); }
+        ::-webkit-scrollbar-track { background: #f7f7f8; }
         ::-webkit-scrollbar-thumb {
-            background: rgba(92, 99, 112, 0.8);
+            background: #cdcdcd;
             border-radius: 4px;
         }
 
-        ::-webkit-scrollbar-thumb:hover { background: rgba(97, 175, 239, 0.9); }
+        ::-webkit-scrollbar-thumb:hover { background: #999696; }
 
         @media (max-width: 767px) {
             body {
@@ -719,42 +599,11 @@
                 font-size: 16px !important;
             }
 
-            .d2h-file-header {
-                padding: 0.5rem 0.75rem !important;
-            }
-
-            .diff-container .d2h-tag,
-            .diff-container .d2h-changed-tag {
-                display: none !important;
-            }
-
-            .diff-container .d2h-code-linenumber,
-            .diff-container .d2h-code-side-linenumber {
-                display: none !important;
-                width: 0 !important;
-                min-width: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                overflow: hidden !important;
-            }
-
-            .diff-container .d2h-code-line,
-            .diff-container .d2h-code-side-line {
-                width: 100% !important;
-                padding: 0 !important;
-            }
-
-            .diff-container .d2h-diff-table td,
-            .diff-container .d2h-diff-table th,
-            .diff-container .d2h-code-line-ctn,
-            .diff-container .d2h-code-line-prefix {
-                padding-left: 0 !important;
-                padding-right: 0 !important;
-            }
         }
     </style>
+    <link rel="stylesheet" href="/static/diff-viewer.css?v=20260426-5">
 </head>
-<body class="gradient-bg min-h-screen text-slate-100">
+<body class="gradient-bg min-h-screen text-gray-900">
     <div id="app"></div>
 
     <script>
@@ -833,86 +682,89 @@
         content.includes('diff --git') ||
         (content.includes('-') && content.includes('+') && content.includes('@@'));
 
-    const generateDiff = (oldContent, newContent, filePath) => {
-        const normalizedPath = filePath || 'file';
-        const patch = Diff.createTwoFilesPatch(
-            `a/${normalizedPath}`,
-            `b/${normalizedPath}`,
-            oldContent,
-            newContent,
-            '',
-            '',
-            { context: Number.MAX_SAFE_INTEGER }
-        );
-        return `diff --git a/${normalizedPath} b/${normalizedPath}\n${patch}`;
-    };
-
     // Main App
     const App = {
         template: `
-            <div class="app-shell mx-auto flex min-h-[100dvh] flex-col p-3 sm:p-4 md:p-6">
-                <!-- Header -->
-                <header class="mb-4 flex min-w-0 flex-col gap-3 fade-in sm:flex-row sm:items-center sm:justify-between">
-                    <div class="flex min-w-0 items-center gap-3">
-                        <div class="app-mark w-10 h-10 rounded-xl flex items-center justify-center shadow-lg">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+            <div class="app-shell flex h-screen flex-row overflow-hidden">
+                <!-- Left Sidebar -->
+                <aside class="w-64 h-full bg-gray-50 border-r border-gray-200 flex flex-col hidden md:flex">
+                    <!-- Sidebar Header -->
+                    <div class="p-4 border-b border-gray-200">
+                        <button @click="startNewSession" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors text-sm font-medium">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                             </svg>
-                        </div>
-                        <div class="min-w-0">
-                            <h1 class="app-title truncate text-xl font-semibold">Claude Code Python</h1>
-                            <p class="app-subtitle text-xs">AI Programming Assistant</p>
+                            新会话
+                        </button>
+                    </div>
+                    
+                    <!-- Session List -->
+                    <div class="flex-1 overflow-y-auto p-2">
+                        <div v-if="sessionsLoading" class="p-4 text-center text-gray-500 text-sm">加载中...</div>
+                        <div v-else-if="sessions.length === 0" class="p-4 text-center text-gray-400 text-xs">暂无会话</div>
+                        <div v-else class="space-y-0">
+                            <div
+                                v-for="sess in sessions"
+                                :key="sess.session_id"
+                                @click="loadSession(sess.session_id)"
+                                class="session-item group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-colors"
+                                :class="{ 'bg-white shadow-sm border border-gray-200': sess.session_id === sessionId, 'hover:bg-white/60': sess.session_id !== sessionId }"
+                            >
+                                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                </svg>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm text-gray-700 truncate font-medium">{{ sess.title || '未命名会话' }}</div>
+                                    <div class="text-xs text-gray-400 mt-0.5">{{ sess.message_count || 0 }} 条消息</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-                        <span v-if="currentWorkspace" class="status-chip hidden text-xs sm:inline-flex">
-                            <span class="text-slate-500">Workspace:</span>
-                            <span class="text-green-400">{{ currentWorkspace.split('/').pop() || currentWorkspace }}</span>
-                        </span>
-                        <span class="status-chip hidden text-xs sm:inline-flex">
-                            <span class="text-slate-500">Tokens:</span>
-                            <span class="text-blue-400">{{ formatTokens(tokenUsed) }}</span>
-                            <span class="text-slate-600">/</span>
-                            <span class="text-slate-500">{{ formatTokens(Number(currentModelContext) || 128000) }}</span>
-                        </span>
-                        
-                        <!-- Model Selector -->
-                        <div class="relative" data-model-selector>
-                            <button @click="showModelSelector = !showModelSelector" class="icon-button p-2 rounded-lg hover:bg-slate-700/50 transition-colors flex items-center gap-2" title="切换模型">
+                </aside>
+
+                <!-- Main Content -->
+                <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+                    <!-- Header - LibreChat Style -->
+                    <header class="h-12 border-b border-gray-200 flex items-center justify-between px-3 bg-white">
+                        <div class="flex items-center gap-2">
+                            <!-- Mobile Menu Button -->
+                            <button @click="showMobileSidebar = true" class="md:hidden p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
                                 </svg>
-                                <span class="hidden sm:inline text-xs text-slate-400">{{ currentModelName || '选择模型' }}</span>
                             </button>
-                            
-                            <!-- Model Dropdown -->
-                            <div v-if="showModelSelector" class="absolute right-0 top-full mt-2 w-80 rounded-lg glass shadow-2xl z-50 border border-slate-700/50">
-                                <div class="p-3 border-b border-slate-700/50">
-                                    <h3 class="text-sm font-medium text-white">选择模型</h3>
-                                </div>
-                                <div class="max-h-60 overflow-y-auto">
-                                    <div v-if="modelsLoading" class="p-4 text-center text-slate-400 text-sm">加载中...</div>
-                                    <div v-else-if="models.length === 0" class="p-4 text-center text-slate-400 text-sm">暂无可用模型</div>
-                                    <div v-else>
-                                        <div
-                                            v-for="model in models"
-                                            :key="model.model_id"
-                                            @click.stop="switchModel(model.model_id)"
-                                            class="p-3 cursor-pointer transition-colors hover:bg-slate-700/30 border-b border-slate-700/30 last:border-b-0"
-                                            :class="{ 'bg-blue-500/10 border-blue-500/30': model.model_id === currentModelId }"
-                                        >
-                                            <div class="flex items-center justify-between">
-                                                <div class="flex-1 min-w-0">
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="text-sm font-medium text-white truncate">{{ model.model_name }}</span>
-                                                        <span v-if="model.model_id === currentModelId" class="text-xs bg-blue-500/20 text-blue-300 px-2 py-1 rounded">当前</span>
-                                                    </div>
-                                                    <div class="text-xs text-slate-400 mt-1">{{ model.model_id }}</div>
-                                                    <div class="text-xs text-slate-500 mt-1">
-                                                        上下文: 
-                                                        <span class="text-slate-400">
-                                                            {{ model.context ? formatTokens(model.context) + ' tokens' : 'N/A' }}
-                                                        </span>
+                            <!-- Model Selector - LibreChat Style -->
+                            <div class="relative" data-model-selector>
+                                <button @click="showModelSelector = !showModelSelector" class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-gray-100 text-gray-700 text-sm font-medium transition-colors">
+                                    <span class="truncate max-w-[150px] sm:max-w-[200px]">{{ currentModelName || '选择模型' }}</span>
+                                    <svg class="w-4 h-4 text-gray-500" :class="{ 'rotate-180': showModelSelector }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                
+                                <!-- Model Dropdown -->
+                                <div v-if="showModelSelector" class="absolute left-0 top-full mt-1 w-80 bg-white rounded-xl shadow-lg z-50 border border-gray-200 py-1">
+                                    <div class="px-3 py-2 border-b border-gray-100">
+                                        <h3 class="text-sm font-medium text-gray-700">选择模型</h3>
+                                    </div>
+                                    <div class="max-h-72 overflow-y-auto py-1">
+                                        <div v-if="modelsLoading" class="p-4 text-center text-gray-500 text-sm">加载中...</div>
+                                        <div v-else-if="models.length === 0" class="p-4 text-center text-gray-500 text-sm">暂无可用模型</div>
+                                        <div v-else>
+                                            <div
+                                                v-for="model in models"
+                                                :key="model.model_id"
+                                                @click.stop="switchModel(model.model_id)"
+                                                class="mx-1 px-3 py-2.5 cursor-pointer transition-colors hover:bg-gray-100 rounded-lg"
+                                                :class="{ 'bg-purple-50 hover:bg-purple-100': model.model_id === currentModelId }"
+                                            >
+                                                <div class="flex items-center justify-between">
+                                                    <div class="flex-1 min-w-0">
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="text-sm font-medium text-gray-900 truncate">{{ model.model_name }}</span>
+                                                            <span v-if="model.model_id === currentModelId" class="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">当前</span>
+                                                        </div>
+                                                        <div class="text-xs text-gray-500 mt-0.5">{{ model.model_id }}</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -922,151 +774,249 @@
                             </div>
                         </div>
                         
-                        <button @click="showSessionsModal = true" class="icon-button p-2 rounded-lg hover:bg-slate-700/50 transition-colors" title="会话列表">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-                            </svg>
-                        </button>
-                        <button @click="startNewSession" class="icon-button p-2 rounded-lg hover:bg-slate-700/50 transition-colors" title="新会话">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                            </svg>
-                        </button>
-                        <span class="status-chip flex items-center gap-2 text-sm">
-                            <span :class="['status-dot w-2 h-2 rounded-full', statusColorClass]"></span>
-                            {{ statusText }}
-                        </span>
-                    </div>
-                </header>
-
-                <!-- Chat Container -->
-                <div class="editor-frame glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl shadow-2xl">
-                    <!-- Messages Area -->
-                    <div ref="messagesContainer" class="editor-scroll flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-6 space-y-4" @scroll="handleMessagesScroll">
-                        <!-- Welcome Message -->
-                        <div v-if="messages.length === 0" class="text-center py-12">
-                            <div class="app-mark w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center">
-                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
-                                </svg>
-                            </div>
-                            <h2 class="text-lg font-medium text-white mb-2">开始对话</h2>
-                            <p class="text-slate-400 text-sm max-w-md mx-auto">我可以帮你编写代码、调试问题、解释概念。有什么需要协助的吗？</p>
+                        <!-- Right Side - Session Title or Actions -->
+                        <div class="flex items-center gap-1">
+                            <span v-if="sessionId && messages.length > 0" class="text-sm text-gray-500 truncate max-w-[120px] sm:max-w-[200px]">
+                                {{ messages[0]?.text?.substring(0, 20) || '新会话' }}
+                            </span>
                         </div>
+                    </header>
 
-                        <!-- Messages -->
-                        <message-item
-                            v-for="(msg, index) in messages"
-                            :key="index"
-                            :message="msg"
-                            @toggle-collapse="toggleCollapse"
-                        />
-
-                        <!-- Typing Indicator -->
-                        <div v-if="isTyping" class="flex justify-start fade-in">
-                            <div class="w-full">
-                                <div class="flex items-start gap-3">
-                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center flex-shrink-0">
-                                        <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    <!-- Chat Container -->
+                    <div class="flex-1 flex flex-col min-h-0 bg-white">
+                        <!-- Messages Area -->
+                        <div ref="messagesContainer" class="messages-area flex-1 overflow-y-auto overflow-x-hidden" @scroll="handleMessagesScroll">
+                            <div class="chat-container py-6 space-y-1 px-0">
+                                <!-- Welcome Message -->
+                                <div v-if="messages.length === 0" class="text-center py-16">
+                                    <div class="w-16 h-16 mx-auto mb-6 bg-gray-100 rounded-2xl flex items-center justify-center">
+                                        <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
                                         </svg>
                                     </div>
-                                    <div class="message-assistant rounded-2xl rounded-tl-md px-4 py-3">
-                                        <div class="typing-indicator flex gap-1.5">
-                                            <span class="w-2 h-2 rounded-full bg-slate-400"></span>
-                                            <span class="w-2 h-2 rounded-full bg-slate-400"></span>
-                                            <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                                    <h2 class="text-2xl font-semibold text-gray-900 mb-2">有什么可以帮你的吗？</h2>
+                                    <p class="text-gray-500">我可以帮你编写代码、调试问题、解释概念。</p>
+                                </div>
+
+                                <!-- Messages -->
+                                <message-item
+                                    v-for="(msg, index) in messages"
+                                    :key="index"
+                                    :message="msg"
+                                    @toggle-collapse="toggleCollapse"
+                                />
+
+                                <!-- Typing Indicator -->
+                                <div v-if="isTyping" class="flex justify-start fade-in">
+                                    <div class="w-full">
+                                        <div class="flex items-start gap-3">
+                                            <div class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="message-assistant rounded-2xl rounded-tl-sm px-4 py-2 bg-gray-50">
+                                                <div class="typing-indicator flex gap-1.5">
+                                                    <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+                                                    <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+                                                    <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Input Area -->
-                    <div class="composer-shell border-t border-slate-700/50 bg-slate-900/50 p-3 sm:p-4 md:p-6">
-                        <div v-if="currentInputHasWeb" class="mb-3 flex items-center gap-2 text-xs">
-                            <span class="inline-flex items-center rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-1 font-medium text-blue-300">
-                                @web 已启用
-                            </span>
-                            <span class="text-slate-400">本次请求将启用 Web 能力</span>
-                        </div>
-                        <form @submit.prevent="sendMessage" class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
-                            <div class="relative min-w-0 flex-1">
-                                <textarea
-                                    ref="messageInput"
-                                    v-model="inputText"
-                                    rows="1"
-                                    :placeholder="inputPlaceholder"
-                                    class="composer-input w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 input-glow resize-none transition-all duration-200"
-                                    style="max-height: 200px;"
-                                    @input="autoResize"
-                                    @keydown="handleKeydown"
-                                    :disabled="isStreaming"
-                                ></textarea>
+                        <!-- Input Area -->
+                        <div class="composer-shell bg-white px-0 pb-6">
+                            <div class="chat-container px-0">
+                                <form @submit.prevent="sendMessage">
+                                    <!-- Input Container with Border -->
+                                    <div class="relative bg-white border border-gray-300 rounded-2xl overflow-hidden focus-within:border-gray-400 transition-colors shadow-sm">
+                                        <!-- Textarea -->
+                                        <textarea
+                                            ref="messageInput"
+                                            v-model="inputText"
+                                            rows="1"
+                                            :placeholder="inputPlaceholder"
+                                            class="w-full bg-transparent px-4 py-3.5 text-gray-900 placeholder-gray-500 focus:outline-none resize-none"
+                                            style="max-height: 200px; min-height: 52px;"
+                                            @input="autoResize"
+                                            @keydown="handleKeydown"
+                                            :disabled="isStreaming"
+                                        ></textarea>
+                                        <!-- Button Row (Last Line) -->
+                                        <div class="flex items-center justify-between px-3 py-2">
+                                            <!-- Web Search Toggle (Left) -->
+                                            <button
+                                                type="button"
+                                                @click="webSearchEnabled = !webSearchEnabled"
+                                                class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                                :class="webSearchEnabled ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'"
+                                                :disabled="isStreaming"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                                                </svg>
+                                                联网搜索
+                                            </button>
+                                            <!-- Send/Interrupt Button (Right) -->
+                                            <button
+                                                v-if="!isStreaming"
+                                                type="submit"
+                                                :disabled="isLoading || !inputText.trim()"
+                                                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-medium disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                                </svg>
+                                                发送
+                                            </button>
+                                            <button
+                                                v-else
+                                                type="button"
+                                                @click="sendInterrupt"
+                                                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium transition-colors"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
+                                                </svg>
+                                                停止
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                                <!-- Workspace & Token Info Bar -->
+                                <div class="mt-2 flex items-center justify-between px-1">
+                                    <div class="flex items-center gap-2">
+                                        <!-- Workspace Button -->
+                                        <div class="relative">
+                                            <button
+                                                data-info-popover-trigger
+                                                @click="toggleWorkspaceDetails"
+                                                class="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                                </svg>
+                                                <span class="truncate max-w-[120px] sm:max-w-[200px]">{{ currentWorkspace ? currentWorkspace.split('/').pop() : '未设置' }}</span>
+                                            </button>
+
+                                            <!-- Workspace Details Popover -->
+                                            <div v-if="showWorkspaceDetails" data-info-popover class="absolute bottom-full left-0 z-40 mb-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-3 text-sm shadow-lg">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="font-medium text-gray-700">工作区</span>
+                                                    <button @click="showWorkspaceDetails = false" class="text-gray-400 hover:text-gray-600">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <div class="text-gray-600 break-all font-mono text-xs">{{ currentWorkspace || '未设置工作区' }}</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Token Usage Button -->
+                                        <div class="relative">
+                                            <button
+                                                data-info-popover-trigger
+                                                @click="toggleTokenDetails"
+                                                class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                                </svg>
+                                                <span>{{ formatTokens(tokenUsed) }} / {{ formatTokens(Number(currentModelContext) || 128000) }}</span>
+                                            </button>
+
+                                            <!-- Token Details Popover -->
+                                            <div v-if="showTokenDetails" data-info-popover class="absolute bottom-full left-0 z-40 mb-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-3 text-sm shadow-lg">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="font-medium text-gray-700">Token 使用情况</span>
+                                                    <button @click="showTokenDetails = false" class="text-gray-400 hover:text-gray-600">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <div class="space-y-1">
+                                                    <div class="flex items-center justify-between text-xs">
+                                                        <span class="text-gray-500">已使用</span>
+                                                        <span class="text-gray-700 font-medium">{{ formatTokens(tokenUsed) }}</span>
+                                                    </div>
+                                                    <div class="flex items-center justify-between text-xs">
+                                                        <span class="text-gray-500">上下文限制</span>
+                                                        <span class="text-gray-700 font-medium">{{ formatTokens(Number(currentModelContext) || 128000) }}</span>
+                                                    </div>
+                                                    <div class="flex items-center justify-between text-xs">
+                                                        <span class="text-gray-500">剩余</span>
+                                                        <span class="text-gray-700 font-medium">{{ formatTokens((Number(currentModelContext) || 128000) - tokenUsed) }}</span>
+                                                    </div>
+                                                    <div class="mt-2 pt-2 border-t border-gray-200">
+                                                        <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                                            <div
+                                                                class="bg-purple-500 h-1.5 rounded-full transition-all duration-300"
+                                                                :style="{ width: Math.min((tokenUsed / (Number(currentModelContext) || 128000)) * 100, 100) + '%' }"
+                                                            ></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <span class="text-xs text-gray-400">AI 生成的内容可能不准确</span>
+                                </div>
                             </div>
-                            <button
-                                v-if="!isStreaming"
-                                type="submit"
-                                :disabled="isLoading || !inputText.trim()"
-                                class="action-button primary-action flex w-full shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 text-white font-medium shadow-lg shadow-blue-500/30 transition-all duration-200 hover:from-blue-600 hover:to-indigo-700 hover:scale-[1.02] hover:shadow-blue-500/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 sm:w-auto"
-                            >
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
-                                </svg>
-                            </button>
-                            <button
-                                v-else
-                                type="button"
-                                @click="sendInterrupt"
-                                class="action-button danger-action flex w-full shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-red-500 to-orange-600 px-6 py-3 text-white font-medium shadow-lg shadow-red-500/30 transition-all duration-200 hover:from-red-600 hover:to-orange-700 hover:scale-[1.02] hover:shadow-red-500/50 active:scale-[0.98] sm:w-auto"
-                            >
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
-                                </svg>
-                            </button>
-                        </form>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Sessions Modal -->
-                <div v-if="showSessionsModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
-                    <div class="modal-overlay absolute inset-0" @click="showSessionsModal = false"></div>
-                    <div class="relative w-full max-w-md overflow-hidden rounded-2xl glass shadow-2xl max-h-[80vh]">
-                        <div class="flex items-center justify-between p-4 border-b border-slate-700/50">
-                            <h2 class="text-lg font-semibold text-white">会话列表</h2>
-                            <button @click="showSessionsModal = false" class="p-1 rounded-lg hover:bg-slate-700/50">
-                                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <!-- Mobile Sidebar Overlay -->
+                <div v-if="showMobileSidebar" class="fixed inset-0 z-50 md:hidden" @click="showMobileSidebar = false">
+                    <div class="absolute inset-0 bg-black/50" @click="showMobileSidebar = false"></div>
+                    <aside class="absolute left-0 top-0 h-full w-64 bg-gray-50 border-r border-gray-200 flex flex-col">
+                        <!-- Mobile Sidebar Header -->
+                        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                            <span class="font-semibold text-gray-900">会话列表</span>
+                            <button @click="showMobileSidebar = false" class="p-1 rounded-lg hover:bg-gray-200 text-gray-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                 </svg>
                             </button>
                         </div>
-                        <div class="overflow-y-auto max-h-[60vh]">
-                            <div v-if="sessionsLoading" class="p-4 text-center text-slate-400 text-sm">加载中...</div>
-                            <div v-else-if="sessions.length === 0" class="p-4 text-center text-slate-400 text-sm">暂无会话</div>
-                            <div v-else>
+                        
+                        <!-- Mobile Session List -->
+                        <div class="flex-1 overflow-y-auto p-2">
+                            <button @click="startNewSession(); showMobileSidebar = false" class="w-full flex items-center gap-2 px-3 py-2 mb-3 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors text-sm">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                新会话
+                            </button>
+                            <div v-if="sessionsLoading" class="p-4 text-center text-gray-500 text-sm">加载中...</div>
+                            <div v-else-if="sessions.length === 0" class="p-4 text-center text-gray-400 text-xs">暂无会话</div>
+                            <div v-else class="space-y-0">
                                 <div
                                     v-for="sess in sessions"
                                     :key="sess.session_id"
-                                    class="session-item p-4 border-b border-slate-700/50 cursor-pointer transition-colors"
-                                    @click="loadSession(sess.session_id)"
+                                    @click="loadSession(sess.session_id); showMobileSidebar = false"
+                                    class="session-item group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-colors"
+                                    :class="{ 'bg-white shadow-sm border border-gray-200': sess.session_id === sessionId, 'hover:bg-white/60': sess.session_id !== sessionId }"
                                 >
-                                    <div class="flex items-center justify-between">
-                                        <div class="flex-1 min-w-0">
-                                            <h3 class="text-white font-medium truncate">{{ sess.title || 'Untitled' }}</h3>
-                                            <p class="text-xs text-slate-500 mt-1">
-                                                {{ sess.working_directory || '' }} • {{ sess.message_count || 0 }} 条消息
-                                            </p>
-                                        </div>
-                                        <svg class="w-4 h-4 text-slate-500 flex-shrink-0 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                                        </svg>
+                                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                    </svg>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm text-gray-700 truncate font-medium">{{ sess.title || '未命名会话' }}</div>
+                                        <div class="text-xs text-gray-400 mt-0.5">{{ sess.message_count || 0 }} 条消息</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </aside>
                 </div>
             </div>
         `,
@@ -1086,6 +1036,11 @@
             const sessionsLoading = ref(false);
             const autoFollowOutput = ref(true);
             const isCompactViewport = ref(prefersCompactDiff());
+            const showMobileSidebar = ref(false);
+            
+            // Workspace & Token details state
+            const showWorkspaceDetails = ref(false);
+            const showTokenDetails = ref(false);
             
             // Model selection state
             const showModelSelector = ref(false);
@@ -1101,11 +1056,16 @@
             const navItems = ref([]);
             const historyIndex = ref(0);
 
+            // Web search toggle
+            const webSearchEnabled = ref(false);
+            const sessionHasUsedWebSearch = ref(false);
+
             // Current streaming state
             const currentAssistantMessage = ref(null);
             const accumulatedText = ref('');
             const pendingToolUses = ref({});
             const toolUseCounter = ref(0);
+            const diffMessageCounter = ref(0);
 
             // For aborting fetch request
             const abortController = ref(null);
@@ -1116,7 +1076,6 @@
 
             // Computed
             const statusColorClass = computed(() => `bg-${statusColor.value}-500`);
-            const currentInputHasWeb = computed(() => hasWebReference(inputText.value));
             const inputPlaceholder = computed(() =>
                 isCompactViewport.value ? '输入消息...' : '输入消息... (Shift+Enter 换行, ↑↓ 历史)'
             );
@@ -1278,17 +1237,6 @@
                 const summary = summarizeToolUse(toolName, toolInput);
                 const shouldExpand = isFileEditTool(toolName);
 
-                let inputDetails = '';
-                const excludeKeys = isFileEditTool(toolName) ?
-                    (toolName.toLowerCase() === 'edit' ? ['old_string', 'new_string'] : ['content']) : [];
-
-                for (const [key, value] of Object.entries(toolInput || {})) {
-                    if (excludeKeys.includes(key)) continue;
-                    let displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-                    if (displayValue.length > 100) displayValue = displayValue.substring(0, 97) + '...';
-                    inputDetails += `<div class="text-xs text-slate-400"><span class="text-slate-500">${escapeHtml(key)}:</span> ${escapeHtml(displayValue.split('\n')[0])}</div>`;
-                }
-
                 return {
                     type: 'tool_block',
                     toolName,
@@ -1297,10 +1245,8 @@
                     collapseId,
                     summary,
                     expanded: shouldExpand,
-                    inputDetails,
                     result: null,
-                    isError: false,
-                    diffData: null
+                    isError: false
                 };
             };
 
@@ -1313,17 +1259,66 @@
                     const filePath = toolInput.file_path || 'file';
 
                     if (oldString && newString) {
-                        return generateDiff(oldString, newString, filePath);
+                        return CCCodeDiffViewer.createDiff(oldString, newString, filePath);
                     }
                 } else if (normalizedToolName === 'write') {
                     const content = toolInput.content || '';
                     const filePath = toolInput.file_path || 'file';
 
                     if (content) {
-                        return generateDiff('', content, filePath);
+                        return CCCodeDiffViewer.createDiff('', content, filePath);
                     }
                 }
                 return null;
+            };
+
+            const createDiffMessage = (diffData, toolName, toolInput) => ({
+                type: 'diff',
+                diffId: `diff-message-${++diffMessageCounter.value}`,
+                diffData,
+                toolName,
+                filePath: toolInput?.file_path || 'file'
+            });
+
+            const appendDiffMessage = (diffData, toolName, toolInput, afterMessage = null) => {
+                if (!diffData) return null;
+
+                const diffMessage = createDiffMessage(diffData, toolName, toolInput);
+                const targetMessage = afterMessage || currentAssistantMessage.value;
+                const targetIndex = targetMessage ? messages.value.indexOf(targetMessage) : -1;
+
+                if (targetIndex >= 0) {
+                    messages.value.splice(targetIndex + 1, 0, diffMessage);
+                } else {
+                    messages.value.push(diffMessage);
+                }
+
+                return diffMessage;
+            };
+
+            const removeMessageIfEmpty = (message) => {
+                if (message?.type !== 'assistant' || message.content?.length) return false;
+
+                const messageIndex = messages.value.indexOf(message);
+                if (messageIndex >= 0) {
+                    messages.value.splice(messageIndex, 1);
+                }
+                if (currentAssistantMessage.value === message) {
+                    currentAssistantMessage.value = null;
+                }
+                return true;
+            };
+
+            const removeToolBlock = (assistantMessage, toolUseId) => {
+                if (!assistantMessage?.content) return false;
+
+                const blockIndex = assistantMessage.content.findIndex(
+                    block => block.type === 'tool_block' && block.toolUseId === toolUseId
+                );
+                if (blockIndex < 0) return false;
+
+                assistantMessage.content.splice(blockIndex, 1);
+                return removeMessageIfEmpty(assistantMessage);
             };
 
             const createUserMessage = (text, options = {}) => ({
@@ -1393,6 +1388,23 @@
                 }
             };
 
+            const closeInfoPopovers = () => {
+                showWorkspaceDetails.value = false;
+                showTokenDetails.value = false;
+            };
+
+            const toggleWorkspaceDetails = () => {
+                const nextState = !showWorkspaceDetails.value;
+                closeInfoPopovers();
+                showWorkspaceDetails.value = nextState;
+            };
+
+            const toggleTokenDetails = () => {
+                const nextState = !showTokenDetails.value;
+                closeInfoPopovers();
+                showTokenDetails.value = nextState;
+            };
+
             const handleGlobalKeydown = async (e) => {
                 const key = e.key.toLowerCase();
                 const isCopyShortcut = (e.metaKey || e.ctrlKey) && key === 'c' && !e.altKey;
@@ -1407,6 +1419,8 @@
                         showModelSelector.value = false;
                     } else if (showSessionsModal.value) {
                         showSessionsModal.value = false;
+                    } else if (showWorkspaceDetails.value || showTokenDetails.value) {
+                        closeInfoPopovers();
                     } else if (isStreaming.value) {
                         e.preventDefault();
                         sendInterrupt();
@@ -1422,6 +1436,16 @@
                         console.log('Click outside model selector, closing');
                         showModelSelector.value = false;
                     }
+                }
+
+                const target = e.target;
+                if (
+                    (showWorkspaceDetails.value || showTokenDetails.value) &&
+                    target?.closest &&
+                    !target.closest('[data-info-popover]') &&
+                    !target.closest('[data-info-popover-trigger]')
+                ) {
+                    closeInfoPopovers();
                 }
             };
 
@@ -1482,7 +1506,12 @@
                     }
                     textBlock.text = accumulatedText.value;
                 } else if (data.type === 'thinking') {
-                    content.push({ type: 'thinking', thinking: data.thinking });
+                    const lastBlock = content[content.length - 1];
+                    if (lastBlock?.type === 'thinking') {
+                        lastBlock.thinking += data.thinking;
+                    } else {
+                        content.push({ type: 'thinking', thinking: data.thinking });
+                    }
                 } else if (data.type === 'tool_use') {
                     // Check if tool block already exists
                     const existingBlock = content.find(b => b.type === 'tool_block' && b.toolUseId === data.tool_use_id);
@@ -1506,12 +1535,22 @@
                     // Find and update the tool block
                     const toolBlock = content.find(b => b.type === 'tool_block' && b.toolUseId === data.tool_use_id);
                     if (toolBlock) {
-                        toolBlock.result = data.result;
-                        toolBlock.isError = data.is_error;
-                        toolBlock.summary = summarizeToolResult(toolName, toolInput, data.result, data.is_error);
+                        const diffData = !data.is_error && isFileEditTool(toolName)
+                            ? generateDiffData(toolName, toolInput, data.result)
+                            : null;
 
-                        if (isFileEditTool(toolName) && !data.is_error) {
-                            toolBlock.diffData = generateDiffData(toolName, toolInput, data.result);
+                        if (diffData) {
+                            appendDiffMessage(
+                                diffData,
+                                toolName,
+                                toolInput,
+                                currentAssistantMessage.value
+                            );
+                            removeToolBlock(currentAssistantMessage.value, data.tool_use_id);
+                        } else {
+                            toolBlock.result = data.result;
+                            toolBlock.isError = data.is_error;
+                            toolBlock.summary = summarizeToolResult(toolName, toolInput, data.result, data.is_error);
                         }
                     }
 
@@ -1527,8 +1566,14 @@
             };
 
             const sendMessage = async () => {
-                const text = inputText.value.trim();
+                let text = inputText.value.trim();
                 if (!text || isLoading.value) return;
+
+                // Prepend @web if web search is enabled and session hasn't used it yet
+                if (webSearchEnabled.value && !sessionHasUsedWebSearch.value) {
+                    text = '@web ' + text;
+                    sessionHasUsedWebSearch.value = true;
+                }
 
                 addToHistory(text);
 
@@ -1656,6 +1701,7 @@
                 statusText.value = '就绪';
                 statusColor.value = 'emerald';
                 autoFollowOutput.value = true;
+                sessionHasUsedWebSearch.value = false;
                 // Reload models when starting new session to refresh context
                 loadModels();
                 // Get current workspace
@@ -1841,6 +1887,7 @@
                 showSessionsModal.value = false;
                 messages.value = [];
                 sessionId.value = null;
+                sessionHasUsedWebSearch.value = false;
 
                 try {
                     const response = await fetch(`/api/sessions/${sid}`);
@@ -1862,6 +1909,11 @@
                                 const fileExpansions = msg.file_expansions || [];
                                 const originalText = msg.original_text || '';
                                 let displayText = '';
+
+                                // Check if this message used web search
+                                if (hasWebReference(originalText) || Boolean(msg.web_enabled)) {
+                                    sessionHasUsedWebSearch.value = true;
+                                }
 
                                 if (msg.content_blocks) {
                                     for (const block of msg.content_blocks) {
@@ -1888,6 +1940,7 @@
                                     type: 'assistant',
                                     content: []
                                 };
+                                const assistantDiffMessages = [];
 
                                 if (msg.content_blocks && msg.content_blocks.length > 0) {
                                     for (const block of msg.content_blocks) {
@@ -1919,11 +1972,17 @@
                                                 b => b.type === 'tool_block' && b.toolUseId === block.tool_use_id
                                             );
                                             if (toolBlock) {
-                                                toolBlock.result = block.result;
-                                                toolBlock.isError = block.is_error;
-                                                toolBlock.summary = summarizeToolResult(toolName, toolInput, block.result, block.is_error);
-                                                if (isFileEditTool(toolName) && !block.is_error) {
-                                                    toolBlock.diffData = generateDiffData(toolName, toolInput, block.result);
+                                                const diffData = !block.is_error && isFileEditTool(toolName)
+                                                    ? generateDiffData(toolName, toolInput, block.result)
+                                                    : null;
+
+                                                if (diffData) {
+                                                    assistantDiffMessages.push(createDiffMessage(diffData, toolName, toolInput));
+                                                    removeToolBlock(assistantMsg, block.tool_use_id);
+                                                } else {
+                                                    toolBlock.result = block.result;
+                                                    toolBlock.isError = block.is_error;
+                                                    toolBlock.summary = summarizeToolResult(toolName, toolInput, block.result, block.is_error);
                                                 }
                                             }
                                             if (toolInfo) delete sessionToolUses[block.tool_use_id];
@@ -1931,22 +1990,19 @@
                                     }
                                 }
 
-                                messages.value.push(assistantMsg);
-                                lastAssistantMsg = assistantMsg;
+                                if (assistantMsg.content.length > 0) {
+                                    messages.value.push(assistantMsg);
+                                    lastAssistantMsg = assistantMsg;
+                                } else {
+                                    lastAssistantMsg = null;
+                                }
+                                messages.value.push(...assistantDiffMessages);
                             } else if (msg.role === 'tool') {
                                 if (msg.content_blocks) {
                                     for (const block of msg.content_blocks) {
                                         if (block.type === 'tool_result') {
-                                            let targetMsg = lastAssistantMsg;
-                                            
-                                            if (!targetMsg) {
-                                                targetMsg = {
-                                                    type: 'assistant',
-                                                    content: []
-                                                };
-                                                messages.value.push(targetMsg);
-                                                lastAssistantMsg = targetMsg;
-                                            }
+                                            const targetMsg = lastAssistantMsg;
+                                            if (!targetMsg) continue;
                                             
                                             const toolInfo = sessionToolUses[block.tool_use_id];
                                             const toolName = toolInfo?.tool_name;
@@ -1957,11 +2013,24 @@
                                             );
 											
                                             if (toolBlock) {
-                                                toolBlock.result = block.result;
-                                                toolBlock.isError = block.is_error;
-                                                toolBlock.summary = summarizeToolResult(toolName, toolInput, block.result, block.is_error);
-                                                if (isFileEditTool(toolName) && !block.is_error) {
-                                                    toolBlock.diffData = generateDiffData(toolName, toolInput, block.result);
+                                                const diffData = !block.is_error && isFileEditTool(toolName)
+                                                    ? generateDiffData(toolName, toolInput, block.result)
+                                                    : null;
+
+                                                if (diffData) {
+                                                    appendDiffMessage(
+                                                        diffData,
+                                                        toolName,
+                                                        toolInput,
+                                                        targetMsg
+                                                    );
+                                                    if (removeToolBlock(targetMsg, block.tool_use_id)) {
+                                                        lastAssistantMsg = null;
+                                                    }
+                                                } else {
+                                                    toolBlock.result = block.result;
+                                                    toolBlock.isError = block.is_error;
+                                                    toolBlock.summary = summarizeToolResult(toolName, toolInput, block.result, block.is_error);
                                                 }
                                             }
                                             if (toolInfo) delete sessionToolUses[block.tool_use_id];
@@ -2024,6 +2093,8 @@
                 loadModels();
                 // Get current workspace
                 getCurrentWorkspace();
+                // Load sessions for sidebar
+                loadSessions();
             });
 
             onBeforeUnmount(() => {
@@ -2047,6 +2118,11 @@
                 showSessionsModal,
                 sessions,
                 sessionsLoading,
+                showMobileSidebar,
+                showWorkspaceDetails,
+                showTokenDetails,
+                toggleWorkspaceDetails,
+                toggleTokenDetails,
                 showModelSelector,
                 models,
                 modelsLoading,
@@ -2054,7 +2130,8 @@
                 currentModelName,
                 currentModelContext,
                 currentWorkspace,
-                currentInputHasWeb,
+                webSearchEnabled,
+                sessionHasUsedWebSearch,
                 inputPlaceholder,
                 messagesContainer,
                 messageInput,
@@ -2082,62 +2159,58 @@
         emits: ['toggle-collapse'],
         template: `
             <div v-if="message.type === 'user'" class="flex justify-end fade-in">
-                <div class="max-w-full min-w-0 sm:max-w-[90%]">
+                <div class="max-w-[85%] min-w-0">
                     <div v-if="message.webEnabled" class="mb-2 flex justify-end">
-                        <span class="inline-flex items-center rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-300">
-                            @web 已启用
+                        <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+                            @web
                         </span>
                     </div>
-                    <div v-for="(exp, idx) in message.fileExpansions" :key="idx" class="file-expansion rounded-lg p-3 mb-2">
-                        <div class="text-sm text-blue-300 font-medium mb-1">@{{ exp.display_path || exp.file_path }}</div>
-                        <pre class="mono text-xs text-slate-400 bg-slate-900/50 rounded p-2 overflow-x-auto max-h-32 overflow-y-auto">{{ exp.content.substring(0, 500) }}{{ exp.content.length > 500 ? '\\n... (more lines)' : '' }}</pre>
+                    <div v-for="(exp, idx) in message.fileExpansions" :key="idx" class="file-expansion rounded-lg p-3 mb-2 bg-purple-50/50 border border-purple-100">
+                        <div class="text-sm text-purple-700 font-medium mb-1">@{{ exp.display_path || exp.file_path }}</div>
+                        <pre class="mono text-xs text-gray-600 bg-white rounded p-2 overflow-x-auto max-h-32 overflow-y-auto border border-gray-100">{{ exp.content.substring(0, 500) }}{{ exp.content.length > 500 ? '\\n... (more lines)' : '' }}</pre>
                     </div>
-                    <div class="message-user max-w-full rounded-2xl rounded-tr-md px-4 py-3 shadow-lg">
-                        <p class="text-white whitespace-pre-wrap">{{ message.text }}</p>
+                    <div class="message-user max-w-full rounded-2xl rounded-tr-sm px-4 py-2">
+                        <p class="text-gray-900 whitespace-pre-wrap leading-relaxed">{{ message.text }}</p>
                     </div>
                 </div>
             </div>
 
-            <div v-else-if="message.type === 'assistant'" class="flex justify-start fade-in">
-                <div class="w-full min-w-0">
-                    <div class="flex min-w-0 items-start gap-2 sm:gap-3">
-                        <div class="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 sm:flex">
-                            <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                            </svg>
-                        </div>
-                        <div class="message-assistant min-w-0 flex-1 rounded-2xl rounded-tl-md px-3 py-3 sm:px-4">
-                            <div class="assistant-content markdown-body min-w-0 break-words">
+            <div v-else-if="message.type === 'assistant'" class="flex justify-start fade-in w-full mb-0 -my-3">
+                <div class="message-assistant min-w-0 flex-1 rounded-2xl rounded-tl-sm px-0 py-1 mb-0">
+                    <div class="assistant-content min-w-0 break-words mb-0">
                                 <template v-for="(block, idx) in message.content" :key="idx">
-                                    <div v-if="block.type === 'text'" class="text-container min-w-0 break-words" v-html="renderMarkdown(block.text)"></div>
-                                    <span v-else-if="block.type === 'thinking'" class="text-slate-500 italic thinking-block">{{ block.thinking }}</span>
-                                    <div v-else-if="block.type === 'tool_block'" class="tool-block my-2 max-w-full rounded-lg border-l-4 p-3" :class="block.isError ? 'border-red-500' : (block.result ? 'border-emerald-500' : 'border-blue-500')">
-                                        <div class="collapsible-header flex items-center justify-between rounded -m-3 p-3" @click="$emit('toggle-collapse', block.collapseId)">
-                                            <div class="min-w-0 pr-3 text-sm font-medium tool-summary" :class="block.isError ? 'text-red-400' : (block.result ? 'text-emerald-400' : 'text-blue-400')">
-                                                {{ block.result ? (block.isError ? '✗ ' : '● ') + block.summary : block.summary }}
+                                    <div v-if="block.type === 'text'" class="text-container markdown-body min-w-0 break-words" v-html="renderMarkdown(block.text)"></div>
+                                    <div v-else-if="block.type === 'thinking'" class="text-gray-500 italic thinking-block whitespace-pre-wrap break-words">{{ block.thinking }}</div>
+                                    <div v-else-if="block.type === 'tool_block'" class="tool-block my-0.5 max-w-full rounded-lg p-2.5 bg-transparent border border-transparent">
+                                        <div class="collapsible-header flex items-center justify-between rounded -m-2.5 p-2.5" @click="$emit('toggle-collapse', block.collapseId)">
+                                            <div class="min-w-0 pr-3 text-sm font-medium tool-summary flex items-center gap-2 text-gray-700">
+                                                <span v-if="block.result">
+                                                    {{ block.isError ? '✗' : '✓' }}
+                                                </span>
+                                                {{ block.summary }}
                                             </div>
-                                            <svg class="w-4 h-4 text-slate-400 collapse-icon" :class="{ rotated: block.expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg class="w-4 h-4 text-gray-400 collapse-icon" :class="{ rotated: block.expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                                             </svg>
                                         </div>
                                         <div :id="block.collapseId" class="collapsible-content" :class="{ expanded: block.expanded }">
-                                            <div class="mt-2">
-                                                <div v-html="block.inputDetails"></div>
-                                                <div v-if="block.result" class="tool-result-area mt-2">
-                                                    <div v-if="block.diffData" :id="'diff-' + block.collapseId" class="diff-container"></div>
-                                                    <pre v-else class="mono overflow-x-auto whitespace-pre-wrap rounded bg-slate-900/50 p-2 text-xs text-slate-300">{{ resultPreview(block.result) }}</pre>
+                                            <div v-if="block.result" class="mt-2 pt-2 border-t border-gray-200/50">
+                                                <div class="tool-result-area">
+                                                    <pre class="mono overflow-x-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-gray-700 border border-gray-200">{{ resultPreview(block.result) }}</pre>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-else-if="block.type === 'error'" class="text-red-400 bg-red-900/30 border border-red-800 rounded-lg p-3 my-2">
+                                    <div v-else-if="block.type === 'error'" class="text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 my-1 text-sm">
                                         {{ block.error }}
                                     </div>
                                 </template>
                             </div>
                         </div>
-                    </div>
-                </div>
+            </div>
+
+            <div v-else-if="message.type === 'diff'" class="diff-message fade-in w-full">
+                <div :id="message.diffId" class="cc-diff-viewer"></div>
             </div>
         `,
         setup(props) {
@@ -2150,27 +2223,13 @@
             // Render diff after DOM update
             const renderDiffBlock = () => {
                 nextTick(() => {
-                    if (props.message.type === 'assistant' && props.message.content) {
-                        for (const block of props.message.content) {
-                            if (block.type === 'tool_block' && block.diffData && block.expanded) {
-                                const container = document.getElementById('diff-' + block.collapseId);
-                                if (container && !container.hasChildNodes()) {
-                                    try {
-                                        const compactDiff = prefersCompactDiff();
-                                        const diff2htmlUi = new Diff2HtmlUI(container, block.diffData, {
-                                            drawFileList: false,
-                                            matching: 'lines',
-                                            outputFormat: compactDiff ? 'line-by-line' : 'side-by-side',
-                                            highlight: true,
-                                            synchronisedScroll: !compactDiff,
-                                            colorScheme: 'dark'
-                                        });
-                                        diff2htmlUi.draw();
-                                        diff2htmlUi.highlightCode();
-                                    } catch (e) {
-                                        console.error('Diff render error:', e);
-                                    }
-                                }
+                    if (props.message.type === 'diff' && props.message.diffData) {
+                        const container = document.getElementById(props.message.diffId);
+                        if (container && !container.hasChildNodes()) {
+                            try {
+                                CCCodeDiffViewer.render(container, props.message.diffData);
+                            } catch (e) {
+                                console.error('Diff render error:', e);
                             }
                         }
                     }
