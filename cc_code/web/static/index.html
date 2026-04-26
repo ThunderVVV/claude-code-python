@@ -756,13 +756,13 @@
                                                 :key="model.model_id"
                                                 @click.stop="switchModel(model.model_id)"
                                                 class="mx-1 px-3 py-2.5 cursor-pointer transition-colors hover:bg-gray-100 rounded-lg"
-                                                :class="{ 'bg-purple-50 hover:bg-purple-100': model.model_id === currentModelId }"
+                                                :class="{ 'bg-gray-100 hover:bg-gray-200': model.model_id === currentModelId }"
                                             >
                                                 <div class="flex items-center justify-between">
                                                     <div class="flex-1 min-w-0">
                                                         <div class="flex items-center gap-2">
                                                             <span class="text-sm font-medium text-gray-900 truncate">{{ model.model_name }}</span>
-                                                            <span v-if="model.model_id === currentModelId" class="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">当前</span>
+                                                            <span v-if="model.model_id === currentModelId" class="text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-medium">当前</span>
                                                         </div>
                                                         <div class="text-xs text-gray-500 mt-0.5">{{ model.model_id }}</div>
                                                     </div>
