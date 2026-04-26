@@ -1,3 +1,11 @@
+@import 'highlight.js/styles/github.min.css';
+@import 'diff2html/bundles/css/diff2html.min.css';
+@import '../static/diff-viewer.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 html {
     font-size: var(--font-size-base);
     width: 100%;
@@ -6,6 +14,7 @@ html {
     background: var(--color-bg-secondary);
     color-scheme: light;
 }
+
 body {
     margin: 0;
     width: 100%;
@@ -13,11 +22,13 @@ body {
     overflow-x: hidden;
     overscroll-behavior-x: none;
 }
+
 #app {
     width: 100%;
     min-height: var(--app-height);
     overflow-x: hidden;
 }
+
 * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 code, pre, .mono, .markdown-body pre, .markdown-body code, pre code {
     font-family: 'JetBrains Mono', monospace;
@@ -148,7 +159,7 @@ body.gradient-bg {
 }
 
 .modal-overlay { background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
-/* LibreChat Light Theme - Secondary Definitions */
+
 :root {
     --color-text-primary: #212121;
     --color-text-heading: #171717;
@@ -322,5 +333,4 @@ body.gradient-bg {
     .composer-input {
         font-size: 16px !important;
     }
-
 }

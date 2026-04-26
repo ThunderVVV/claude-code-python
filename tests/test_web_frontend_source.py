@@ -12,6 +12,23 @@ DIFF_VIEWER_SOURCE = Path("cc_code/web/static/diff-viewer.js").read_text(
 DIFF_VIEWER_CSS_SOURCE = Path("cc_code/web/static/diff-viewer.css").read_text(
     encoding="utf-8"
 )
+VITE_APP_SOURCE = Path("cc_code/web/src/App.vue").read_text(encoding="utf-8")
+VITE_MESSAGE_ITEM_SOURCE = Path("cc_code/web/src/components/MessageItem.vue").read_text(
+    encoding="utf-8"
+)
+VITE_CHAT_SOURCE = Path("cc_code/web/src/composables/useChat.js").read_text(
+    encoding="utf-8"
+)
+VITE_FORMAT_SOURCE = Path("cc_code/web/src/utils/format.js").read_text(
+    encoding="utf-8"
+)
+VITE_MARKDOWN_SOURCE = Path("cc_code/web/src/utils/markdown.js").read_text(
+    encoding="utf-8"
+)
+VITE_DIFF_VIEWER_SOURCE = Path("cc_code/web/src/utils/diffViewer.js").read_text(
+    encoding="utf-8"
+)
+VITE_STYLE_SOURCE = Path("cc_code/web/src/style.css").read_text(encoding="utf-8")
 
 
 def test_web_frontend_contains_auto_follow_hooks():
@@ -72,59 +89,62 @@ def test_web_frontend_uses_floating_footer_info_popovers():
 
 
 def test_web_frontend_uses_official_diff2html_demo_viewer():
-    assert "github.min.css" in WEB_FRONTEND_SOURCE
-    assert "highlight.min.js" in WEB_FRONTEND_SOURCE
-    assert '<link rel="stylesheet" href="/static/diff-viewer.css?v=20260426-5">' in WEB_FRONTEND_SOURCE
-    assert WEB_FRONTEND_SOURCE.index("</style>") < WEB_FRONTEND_SOURCE.index('/static/diff-viewer.css')
-    assert '<script src="/static/diff-viewer.js?v=20260426-4"></script>' in WEB_FRONTEND_SOURCE
-    assert "max-width: 64rem;" in WEB_FRONTEND_SOURCE
-    assert 'class="messages-area flex-1 overflow-y-auto overflow-x-hidden"' in WEB_FRONTEND_SOURCE
-    assert ".messages-area,\n        .messages-area * {" in WEB_FRONTEND_SOURCE
-    assert "font-size: var(--font-size-base) !important;" in WEB_FRONTEND_SOURCE
-    assert "--font-size-code: 12px;" in WEB_FRONTEND_SOURCE
-    assert ".messages-area code," in WEB_FRONTEND_SOURCE
-    assert "font-size: var(--font-size-code) !important;" in WEB_FRONTEND_SOURCE
-    assert 'class="chat-container py-6 space-y-1 px-0"' in WEB_FRONTEND_SOURCE
-    assert 'class="composer-shell bg-white px-0 pb-6"' in WEB_FRONTEND_SOURCE
-    assert 'class="chat-container px-0"' in WEB_FRONTEND_SOURCE
-    assert "padding: 1rem 0 1.5rem;" in WEB_FRONTEND_SOURCE
-    assert 'class="message-assistant min-w-0 flex-1 rounded-2xl rounded-tl-sm px-0 py-1 mb-0"' in WEB_FRONTEND_SOURCE
-    assert 'class="message-assistant min-w-0 flex-1 rounded-2xl rounded-tl-sm px-4 py-1 mb-0"' not in WEB_FRONTEND_SOURCE
-    assert 'class="chat-container py-6 space-y-1 px-4"' not in WEB_FRONTEND_SOURCE
-    assert 'class="chat-container px-4"' not in WEB_FRONTEND_SOURCE
-    assert 'class="cc-diff-viewer"' in WEB_FRONTEND_SOURCE
-    assert 'class="assistant-content min-w-0 break-words mb-0"' in WEB_FRONTEND_SOURCE
-    assert 'class="assistant-content markdown-body' not in WEB_FRONTEND_SOURCE
-    assert 'class="text-container markdown-body min-w-0 break-words"' in WEB_FRONTEND_SOURCE
-    assert 'message.type === \'diff\'' in WEB_FRONTEND_SOURCE
-    assert 'class="diff-message fade-in w-full"' in WEB_FRONTEND_SOURCE
-    assert "appendDiffMessage(" in WEB_FRONTEND_SOURCE
-    assert "const removeToolBlock = (assistantMessage, toolUseId) => {" in WEB_FRONTEND_SOURCE
-    assert "if (blockIndex < 0) return false;" in WEB_FRONTEND_SOURCE
-    assert "removeToolBlock(currentAssistantMessage.value, data.tool_use_id);" in WEB_FRONTEND_SOURCE
-    assert "removeToolBlock(assistantMsg, block.tool_use_id);" in WEB_FRONTEND_SOURCE
-    assert "if (assistantMsg.content.length > 0) {" in WEB_FRONTEND_SOURCE
-    assert "const diffData = !data.is_error && isFileEditTool(toolName)" in WEB_FRONTEND_SOURCE
-    assert "const diffData = !block.is_error && isFileEditTool(toolName)" in WEB_FRONTEND_SOURCE
-    assert "if (!targetMsg) continue;" in WEB_FRONTEND_SOURCE
-    assert "inputDetails" not in WEB_FRONTEND_SOURCE
-    assert 'v-html="block.inputDetails"' not in WEB_FRONTEND_SOURCE
-    assert "Object.entries(toolInput || {})" not in WEB_FRONTEND_SOURCE
-    assert "CCCodeDiffViewer.render(container, props.message.diffData);" in WEB_FRONTEND_SOURCE
-    assert "block.diffData" not in WEB_FRONTEND_SOURCE
-    assert "new Diff2HtmlUI" not in WEB_FRONTEND_SOURCE
-    assert "DIFF_HIGHLIGHT_LANGUAGES" not in WEB_FRONTEND_SOURCE
-    assert "langPrefix: 'hljs language-'" in WEB_FRONTEND_SOURCE
-    assert "drawFileList: false" in DIFF_VIEWER_SOURCE
-    assert "fileListToggle: false" in DIFF_VIEWER_SOURCE
-    assert "drawFileList: true" not in DIFF_VIEWER_SOURCE
-    assert "container.querySelectorAll('.d2h-file-list-wrapper').forEach((element) => {" in DIFF_VIEWER_SOURCE
-    assert "element.remove();" in DIFF_VIEWER_SOURCE
-    assert "matching: 'words'" in DIFF_VIEWER_SOURCE
-    assert "outputFormat: 'line-by-line'" in DIFF_VIEWER_SOURCE
-    assert "highlightLanguages: HIGHLIGHT_LANGUAGES" in DIFF_VIEWER_SOURCE
-    assert "py: 'python'" in DIFF_VIEWER_SOURCE
-    assert "html: 'xml'" in DIFF_VIEWER_SOURCE
+    assert "@import 'highlight.js/styles/github.min.css';" in VITE_STYLE_SOURCE
+    assert "@import 'diff2html/bundles/css/diff2html.min.css';" in VITE_STYLE_SOURCE
+    assert "@import '../static/diff-viewer.css';" in VITE_STYLE_SOURCE
+    assert "max-width: 64rem;" in VITE_STYLE_SOURCE
+    assert 'class="messages-area flex-1 overflow-y-auto overflow-x-hidden"' in VITE_APP_SOURCE
+    assert ".messages-area,\n.messages-area * {" in VITE_STYLE_SOURCE
+    assert "font-size: var(--font-size-base) !important;" in VITE_STYLE_SOURCE
+    assert "--font-size-code: 12px;" in VITE_STYLE_SOURCE
+    assert ".messages-area code," in VITE_STYLE_SOURCE
+    assert "font-size: var(--font-size-code) !important;" in VITE_STYLE_SOURCE
+    assert 'class="chat-container py-6 space-y-1 px-4"' in VITE_APP_SOURCE
+    assert 'class="composer-shell bg-white px-4 pb-6"' in VITE_APP_SOURCE
+    assert "padding: 1rem 0 1.5rem;" in VITE_STYLE_SOURCE
+    assert (
+        'class="message-assistant min-w-0 flex-1 rounded-2xl '
+        'rounded-tl-sm px-0 py-1 mb-0"'
+    ) in VITE_MESSAGE_ITEM_SOURCE
+    assert (
+        'class="message-assistant min-w-0 flex-1 rounded-2xl '
+        'rounded-tl-sm px-4 py-1 mb-0"'
+    ) not in VITE_MESSAGE_ITEM_SOURCE
+    assert 'class="cc-diff-viewer"' in VITE_MESSAGE_ITEM_SOURCE
+    assert 'class="assistant-content min-w-0 break-words mb-0"' in VITE_MESSAGE_ITEM_SOURCE
+    assert 'class="assistant-content markdown-body' not in VITE_MESSAGE_ITEM_SOURCE
+    assert (
+        'class="text-container markdown-body min-w-0 break-words"'
+        in VITE_MESSAGE_ITEM_SOURCE
+    )
+    assert "message.type === 'diff'" in VITE_MESSAGE_ITEM_SOURCE
+    assert 'class="diff-message fade-in w-full"' in VITE_MESSAGE_ITEM_SOURCE
+    assert "appendDiffMessage(" in VITE_CHAT_SOURCE
+    assert "const removeToolBlock = (assistantMessage, toolUseId) => {" in VITE_CHAT_SOURCE
+    assert "if (blockIndex < 0) return false" in VITE_CHAT_SOURCE
+    assert "removeToolBlock(targetMessage, block.tool_use_id)" in VITE_CHAT_SOURCE
+    assert "const diffData = !block.is_error && isFileEditTool(toolName)" in VITE_CHAT_SOURCE
+    assert "if (!targetMsg) continue" in VITE_CHAT_SOURCE
+    assert "inputDetails" not in VITE_MESSAGE_ITEM_SOURCE
+    assert 'v-html="block.inputDetails"' not in VITE_MESSAGE_ITEM_SOURCE
+    assert "Object.entries(toolInput || {})" not in VITE_CHAT_SOURCE
+    assert "renderDiff(container, props.message.diffData)" in VITE_MESSAGE_ITEM_SOURCE
+    assert "block.diffData" not in VITE_MESSAGE_ITEM_SOURCE
+    assert "DIFF_HIGHLIGHT_LANGUAGES" not in VITE_DIFF_VIEWER_SOURCE
+    assert "langPrefix: 'hljs language-'" in VITE_MARKDOWN_SOURCE
+    assert "drawFileList: false" in VITE_DIFF_VIEWER_SOURCE
+    assert "fileListToggle: false" in VITE_DIFF_VIEWER_SOURCE
+    assert "drawFileList: true" not in VITE_DIFF_VIEWER_SOURCE
+    assert (
+        "container.querySelectorAll('.d2h-file-list-wrapper').forEach((element) => {"
+        in VITE_DIFF_VIEWER_SOURCE
+    )
+    assert "element.remove()" in VITE_DIFF_VIEWER_SOURCE
+    assert "matching: 'words'" in VITE_DIFF_VIEWER_SOURCE
+    assert "outputFormat: 'line-by-line'" in VITE_DIFF_VIEWER_SOURCE
+    assert "highlightLanguages: HIGHLIGHT_LANGUAGES" in VITE_DIFF_VIEWER_SOURCE
+    assert "py: 'python'" in VITE_DIFF_VIEWER_SOURCE
+    assert "html: 'xml'" in VITE_DIFF_VIEWER_SOURCE
     assert "font-family: 'Menlo', 'Consolas', monospace !important;" in DIFF_VIEWER_CSS_SOURCE
     assert "font-size: 12px !important;" in DIFF_VIEWER_CSS_SOURCE
     assert "font-size: 13px !important;" not in DIFF_VIEWER_CSS_SOURCE
@@ -141,8 +161,7 @@ def test_web_frontend_uses_official_diff2html_demo_viewer():
     assert "z-index: 2;" in DIFF_VIEWER_CSS_SOURCE
     assert "display: inline-block !important;" in DIFF_VIEWER_CSS_SOURCE
     assert "background-color: var(--d2h-bg-color) !important;" not in DIFF_VIEWER_CSS_SOURCE
-    assert ".cc-diff-viewer .hljs-keyword" in DIFF_VIEWER_CSS_SOURCE
-    assert "color: #d73a49;" in DIFF_VIEWER_CSS_SOURCE
+    assert "@import 'highlight.js/styles/github.min.css';" in VITE_STYLE_SOURCE
 
 
 def test_web_frontend_generates_complete_unified_diffs_for_diff2html():
@@ -162,19 +181,36 @@ def test_web_frontend_generates_complete_unified_diffs_for_diff2html():
     assert "context: Number.MAX_SAFE_INTEGER" in DIFF_VIEWER_SOURCE
 
 
+def test_vite_diff_viewer_passes_highlightjs_to_diff2html_base():
+    assert "@import 'highlight.js/styles/github.min.css';" in VITE_STYLE_SOURCE
+    assert (
+        "import { Diff2HtmlUI } from 'diff2html/lib/ui/js/diff2html-ui-base'"
+        in VITE_DIFF_VIEWER_SOURCE
+    )
+    assert "import hljs from 'highlight.js'" in VITE_DIFF_VIEWER_SOURCE
+    assert (
+        "new Diff2HtmlUI(\n        container,\n        diffData,"
+        in VITE_DIFF_VIEWER_SOURCE
+    )
+    assert "\n        hljs\n    )" in VITE_DIFF_VIEWER_SOURCE
+    assert "hljs: hljs" not in VITE_DIFF_VIEWER_SOURCE
+
+
 def test_web_frontend_contains_mobile_overflow_guards():
-    assert "overflow-x: hidden;" in WEB_FRONTEND_SOURCE
-    assert "--app-height: 100dvh;" in WEB_FRONTEND_SOURCE
-    assert "min-height: var(--app-height);" in WEB_FRONTEND_SOURCE
-    assert "const prefersCompactDiff = () => window.matchMedia('(max-width: 767px)').matches;" in WEB_FRONTEND_SOURCE
-    assert "outputFormat: 'line-by-line'" in DIFF_VIEWER_SOURCE
-    assert "synchronisedScroll: true" in DIFF_VIEWER_SOURCE
+    assert "overflow-x: hidden;" in VITE_STYLE_SOURCE
+    assert "min-height: var(--app-height);" in VITE_STYLE_SOURCE
+    assert (
+        "export const prefersCompactDiff = () => "
+        "window.matchMedia('(max-width: 767px)').matches"
+    ) in VITE_FORMAT_SOURCE
+    assert "outputFormat: 'line-by-line'" in VITE_DIFF_VIEWER_SOURCE
+    assert "synchronisedScroll: true" in VITE_DIFF_VIEWER_SOURCE
 
 
 def test_web_frontend_wraps_markdown_tables_for_horizontal_scrolling():
-    assert "wrapper.className = 'markdown-table-wrapper';" in WEB_FRONTEND_SOURCE
-    assert ".markdown-table-wrapper {" in WEB_FRONTEND_SOURCE
-    assert "width: max-content;" in WEB_FRONTEND_SOURCE
+    assert "wrapper.className = 'markdown-table-wrapper'" in VITE_MARKDOWN_SOURCE
+    assert ".markdown-table-wrapper {" in VITE_STYLE_SOURCE
+    assert "overflow-x: auto;" in VITE_STYLE_SOURCE
 
 
 def test_web_frontend_uses_responsive_mobile_layout_classes():
@@ -194,7 +230,7 @@ def test_web_frontend_updates_height_for_ios_keyboard_viewport_changes():
 
 
 def test_web_frontend_prevents_ios_input_zoom_on_focus():
-    assert "font-size: 16px !important;" in WEB_FRONTEND_SOURCE
+    assert "font-size: 16px !important;" in VITE_STYLE_SOURCE
 
 
 def test_web_frontend_uses_short_mobile_placeholder():

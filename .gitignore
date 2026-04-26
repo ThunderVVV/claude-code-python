@@ -52,3 +52,7 @@ Thumbs.db
 binary/*
 !binary/*/
 !binary/*/.gitkeep
+
+# Web UI
+cc_code/web/node_modules/
+cc_code/web/.vite/

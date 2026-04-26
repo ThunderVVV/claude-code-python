@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-27
+
+#### Vite Web UI Diff Highlighting
+- Fixed Vite diff rendering by passing `highlight.js` into `diff2html-ui-base` as the constructor highlighter instead of an ignored config field
+- Moved the Highlight.js GitHub theme import into the Vite global stylesheet so diff and markdown code highlighting share the same bundled CSS path
+- Updated web frontend source tests to validate the Vite component, composable, utility, and stylesheet layout instead of relying on legacy static HTML internals
+- Fixed web-visible file expansion reconstruction so `@web` remains a web-search marker and does not appear as expanded Tavily skill files in restored user messages
+
 ### Added - 2026-04-26
 
 #### DeepSeek Reasoning Content Preservation Across Tool Turns
