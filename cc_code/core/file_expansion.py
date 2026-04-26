@@ -113,8 +113,8 @@ def has_web_reference(text: str) -> bool:
 
 def expand_web(text: str) -> str:
     web_skill_file_prompt = (
-        "@.claude/skills/tavily-search/SKILL.md",
-        "@.claude/skills/tavily-extract/SKILL.md",
+        "@~/.claude/skills/tavily-search/SKILL.md",
+        "@~/.claude/skills/tavily-extract/SKILL.md",
     )
     text = text.replace("@web", " ".join(web_skill_file_prompt) + " ")
     return text

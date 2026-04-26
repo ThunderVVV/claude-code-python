@@ -175,17 +175,17 @@ cc-py-dev --debug      # pip 开发安装
 
 ## 可选 Skills（@web 搜索功能）
 
-项目支持 `@web` 语法触发 Web 搜索能力。此功能通过解析 `.claude/skills/` 目录下的 skill 文件实现，将搜索提示附加到输入消息中。
+项目支持 `@web` 语法触发 Web 搜索能力。此功能通过解析 `~/.claude/skills/` 目录下的 skill 文件实现，将搜索提示附加到输入消息中。
 
 如需使用 `@web` Web 搜索功能，需准备以下 skills：
 
 1. **tavily-search** - Web 搜索能力
 2. **tavily-extract** - Web 内容提取能力
 
-安装方式：在项目根目录创建 `.claude/skills/` 目录，并将 skill 文件放入其中：
+安装方式：在用户主目录创建 `~/.claude/skills/` 目录，并将 skill 文件放入其中：
 
 ```
-.claude/
+~/.claude/
 └── skills/
     ├── tavily-search/
     │   └── SKILL.md
