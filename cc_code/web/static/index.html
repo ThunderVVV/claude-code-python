@@ -699,6 +699,30 @@
                 filePath: toolInput?.file_path || 'file'
             });
 
+            // Update tool block with result - consolidated logic for both streaming and loading
+            const updateToolBlockResult = (targetMessage, block, toolName, toolInput) => {
+                const diffData = !block.is_error && isFileEditTool(toolName)
+                    ? generateDiffData(toolName, toolInput, block.result)
+                    : null;
+
+                if (diffData) {
+                    appendDiffMessage(diffData, toolName, toolInput, targetMessage);
+                    if (removeToolBlock(targetMessage, block.tool_use_id)) {
+                        return null; // Indicate assistant message was removed
+                    }
+                } else {
+                    const toolBlock = targetMessage.content.find(
+                        b => b.type === 'tool_block' && b.toolUseId === block.tool_use_id
+                    );
+                    if (toolBlock) {
+                        toolBlock.result = block.result;
+                        toolBlock.isError = block.is_error;
+                        toolBlock.summary = summarizeToolResult(toolName, toolInput, block.result, block.is_error);
+                    }
+                }
+                return targetMessage;
+            };
+
             const appendDiffMessage = (diffData, toolName, toolInput, afterMessage = null) => {
                 if (!diffData) return null;
 
@@ -929,29 +953,9 @@
                     const toolInfo = pendingToolUses.value[data.tool_use_id];
                     const toolName = toolInfo?.tool_name || data.tool_name;
                     const toolInput = toolInfo?.input || {};
+                    const block = { tool_use_id: data.tool_use_id, result: data.result, is_error: data.is_error };
 
-                    // Find and update the tool block
-                    const toolBlock = content.find(b => b.type === 'tool_block' && b.toolUseId === data.tool_use_id);
-                    if (toolBlock) {
-                        const diffData = !data.is_error && isFileEditTool(toolName)
-                            ? generateDiffData(toolName, toolInput, data.result)
-                            : null;
-
-                        if (diffData) {
-                            appendDiffMessage(
-                                diffData,
-                                toolName,
-                                toolInput,
-                                currentAssistantMessage.value
-                            );
-                            removeToolBlock(currentAssistantMessage.value, data.tool_use_id);
-                        } else {
-                            toolBlock.result = data.result;
-                            toolBlock.isError = data.is_error;
-                            toolBlock.summary = summarizeToolResult(toolName, toolInput, data.result, data.is_error);
-                        }
-                    }
-
+                    updateToolBlockResult(currentAssistantMessage.value, block, toolName, toolInput);
                     if (toolInfo) delete pendingToolUses.value[data.tool_use_id];
                 } else if (data.type === 'error') {
                     content.push({
@@ -1309,22 +1313,9 @@
                                             const toolName = toolInfo?.tool_name;
                                             const toolInput = toolInfo?.input || {};
 
-                                            const toolBlock = assistantMsg.content.find(
-                                                b => b.type === 'tool_block' && b.toolUseId === block.tool_use_id
-                                            );
-                                            if (toolBlock) {
-                                                const diffData = !block.is_error && isFileEditTool(toolName)
-                                                    ? generateDiffData(toolName, toolInput, block.result)
-                                                    : null;
-
-                                                if (diffData) {
-                                                    assistantDiffMessages.push(createDiffMessage(diffData, toolName, toolInput));
-                                                    removeToolBlock(assistantMsg, block.tool_use_id);
-                                                } else {
-                                                    toolBlock.result = block.result;
-                                                    toolBlock.isError = block.is_error;
-                                                    toolBlock.summary = summarizeToolResult(toolName, toolInput, block.result, block.is_error);
-                                                }
+                                            const result = updateToolBlockResult(assistantMsg, block, toolName, toolInput);
+                                            if (result === null) {
+                                                lastAssistantMsg = null;
                                             }
                                             if (toolInfo) delete sessionToolUses[block.tool_use_id];
                                         }
@@ -1344,35 +1335,14 @@
                                         if (block.type === 'tool_result') {
                                             const targetMsg = lastAssistantMsg;
                                             if (!targetMsg) continue;
-                                            
+
                                             const toolInfo = sessionToolUses[block.tool_use_id];
                                             const toolName = toolInfo?.tool_name;
                                             const toolInput = toolInfo?.input || {};
-                                            
-                                            const toolBlock = targetMsg.content.find(
-                                                b => b.type === 'tool_block' && b.toolUseId === block.tool_use_id
-                                            );
-											
-                                            if (toolBlock) {
-                                                const diffData = !block.is_error && isFileEditTool(toolName)
-                                                    ? generateDiffData(toolName, toolInput, block.result)
-                                                    : null;
 
-                                                if (diffData) {
-                                                    appendDiffMessage(
-                                                        diffData,
-                                                        toolName,
-                                                        toolInput,
-                                                        targetMsg
-                                                    );
-                                                    if (removeToolBlock(targetMsg, block.tool_use_id)) {
-                                                        lastAssistantMsg = null;
-                                                    }
-                                                } else {
-                                                    toolBlock.result = block.result;
-                                                    toolBlock.isError = block.is_error;
-                                                    toolBlock.summary = summarizeToolResult(toolName, toolInput, block.result, block.is_error);
-                                                }
+                                            const result = updateToolBlockResult(targetMsg, block, toolName, toolInput);
+                                            if (result === null) {
+                                                lastAssistantMsg = null;
                                             }
                                             if (toolInfo) delete sessionToolUses[block.tool_use_id];
                                         }
