@@ -814,6 +814,20 @@
         document.documentElement.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
     };
 
+    const formatTokens = (tokens) => {
+        const num = Number(tokens);
+        if (isNaN(num) || num < 0) {
+            return '0';
+        }
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        } else {
+            return num.toString();
+        }
+    };
+
     const isDiffContent = (content) =>
         content.includes('---') && content.includes('+++') ||
         content.includes('diff --git') ||
@@ -851,12 +865,63 @@
                         </div>
                     </div>
                     <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-                        <span v-if="tokenUsed > 0" class="status-chip hidden text-xs sm:inline-flex">
-                            <span class="text-slate-500">Tokens:</span>
-                            <span class="text-blue-400">{{ tokenUsed.toLocaleString() }}</span>
-                            <span class="text-slate-600">/</span>
-                            <span class="text-slate-500">128000</span>
+                        <span v-if="currentWorkspace" class="status-chip hidden text-xs sm:inline-flex">
+                            <span class="text-slate-500">Workspace:</span>
+                            <span class="text-green-400">{{ currentWorkspace.split('/').pop() || currentWorkspace }}</span>
                         </span>
+                        <span class="status-chip hidden text-xs sm:inline-flex">
+                            <span class="text-slate-500">Tokens:</span>
+                            <span class="text-blue-400">{{ formatTokens(tokenUsed) }}</span>
+                            <span class="text-slate-600">/</span>
+                            <span class="text-slate-500">{{ formatTokens(Number(currentModelContext) || 128000) }}</span>
+                        </span>
+                        
+                        <!-- Model Selector -->
+                        <div class="relative" data-model-selector>
+                            <button @click="showModelSelector = !showModelSelector" class="icon-button p-2 rounded-lg hover:bg-slate-700/50 transition-colors flex items-center gap-2" title="切换模型">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                </svg>
+                                <span class="hidden sm:inline text-xs text-slate-400">{{ currentModelName || '选择模型' }}</span>
+                            </button>
+                            
+                            <!-- Model Dropdown -->
+                            <div v-if="showModelSelector" class="absolute right-0 top-full mt-2 w-80 rounded-lg glass shadow-2xl z-50 border border-slate-700/50">
+                                <div class="p-3 border-b border-slate-700/50">
+                                    <h3 class="text-sm font-medium text-white">选择模型</h3>
+                                </div>
+                                <div class="max-h-60 overflow-y-auto">
+                                    <div v-if="modelsLoading" class="p-4 text-center text-slate-400 text-sm">加载中...</div>
+                                    <div v-else-if="models.length === 0" class="p-4 text-center text-slate-400 text-sm">暂无可用模型</div>
+                                    <div v-else>
+                                        <div
+                                            v-for="model in models"
+                                            :key="model.model_id"
+                                            @click.stop="switchModel(model.model_id)"
+                                            class="p-3 cursor-pointer transition-colors hover:bg-slate-700/30 border-b border-slate-700/30 last:border-b-0"
+                                            :class="{ 'bg-blue-500/10 border-blue-500/30': model.model_id === currentModelId }"
+                                        >
+                                            <div class="flex items-center justify-between">
+                                                <div class="flex-1 min-w-0">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-sm font-medium text-white truncate">{{ model.model_name }}</span>
+                                                        <span v-if="model.model_id === currentModelId" class="text-xs bg-blue-500/20 text-blue-300 px-2 py-1 rounded">当前</span>
+                                                    </div>
+                                                    <div class="text-xs text-slate-400 mt-1">{{ model.model_id }}</div>
+                                                    <div class="text-xs text-slate-500 mt-1">
+                                                        上下文: 
+                                                        <span class="text-slate-400">
+                                                            {{ model.context ? formatTokens(model.context) + ' tokens' : 'N/A' }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <button @click="showSessionsModal = true" class="icon-button p-2 rounded-lg hover:bg-slate-700/50 transition-colors" title="会话列表">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
@@ -1021,6 +1086,15 @@
             const sessionsLoading = ref(false);
             const autoFollowOutput = ref(true);
             const isCompactViewport = ref(prefersCompactDiff());
+            
+            // Model selection state
+            const showModelSelector = ref(false);
+            const models = ref([]);
+            const modelsLoading = ref(false);
+            const currentModelId = ref('');
+            const currentModelName = ref('');
+            const currentModelContext = ref('128000');
+            const currentWorkspace = ref('');
 
             // Input history
             const inputHistory = ref(JSON.parse(localStorage.getItem('inputHistory') || '[]'));
@@ -1329,11 +1403,24 @@
                 }
 
                 if (e.key === 'Escape') {
-                    if (showSessionsModal.value) {
+                    if (showModelSelector.value) {
+                        showModelSelector.value = false;
+                    } else if (showSessionsModal.value) {
                         showSessionsModal.value = false;
                     } else if (isStreaming.value) {
                         e.preventDefault();
                         sendInterrupt();
+                    }
+                }
+            };
+            
+            const handleGlobalClick = (e) => {
+                // Close model selector when clicking outside
+                if (showModelSelector.value) {
+                    const modelSelector = document.querySelector('[data-model-selector]');
+                    if (modelSelector && !modelSelector.contains(e.target)) {
+                        console.log('Click outside model selector, closing');
+                        showModelSelector.value = false;
                     }
                 }
             };
@@ -1347,6 +1434,13 @@
                 if (data.type === 'message_complete') {
                     if (data.message?.role === 'user') {
                         applyServerUserMessage(data.message);
+                    } else if (data.message?.role === 'assistant' && data.message?.usage) {
+                        // Update token usage from assistant message
+                        tokenUsed.value = data.message.usage.input_tokens + data.message.usage.output_tokens;
+                        console.log('Token usage updated:', tokenUsed.value, {
+                            input_tokens: data.message.usage.input_tokens,
+                            output_tokens: data.message.usage.output_tokens
+                        });
                     }
                     scrollToBottom();
                     return;
@@ -1359,6 +1453,8 @@
                     statusText.value = '就绪';
                     statusColor.value = 'emerald';
                     scrollToBottom();
+                    // Reload models after conversation completion to get updated context
+                    loadModels();
                     return;
                 }
 
@@ -1540,13 +1636,30 @@
                 }
             };
 
+            const getCurrentWorkspace = async () => {
+                try {
+                    const response = await fetch('/api/workspace');
+                    const data = await response.json();
+                    if (data.workspace) {
+                        currentWorkspace.value = data.workspace;
+                    }
+                } catch (error) {
+                    console.error('Failed to get current workspace:', error);
+                }
+            };
+
             const startNewSession = () => {
                 messages.value = [];
                 sessionId.value = null;
                 accumulatedText.value = '';
+                tokenUsed.value = 0; // Reset token usage to 0
                 statusText.value = '就绪';
                 statusColor.value = 'emerald';
                 autoFollowOutput.value = true;
+                // Reload models when starting new session to refresh context
+                loadModels();
+                // Get current workspace
+                getCurrentWorkspace();
             };
 
             const loadSessions = async () => {
@@ -1559,6 +1672,168 @@
                     console.error('Failed to load sessions:', error);
                 } finally {
                     sessionsLoading.value = false;
+                }
+            };
+
+            const loadModels = async () => {
+                console.log('loadModels called');
+                modelsLoading.value = true;
+                try {
+                    const response = await fetch('/api/models');
+                    const data = await response.json();
+                    console.log('Models response:', data);
+                    models.value = data.models || [];
+                    currentModelId.value = data.current_model || '';
+                    
+                    // Debug: Log each model's context
+                    models.value.forEach((model, index) => {
+                        console.log(`Model ${index}:`, {
+                            model_id: model.model_id,
+                            model_name: model.model_name,
+                            context: model.context,
+                            context_type: typeof model.context,
+                            context_valid: model.context && model.context > 0,
+                            api_url: model.api_url
+                        });
+                    });
+                    
+                    // Set current model name and context
+                    const currentModel = models.value.find(m => m.model_id === currentModelId.value);
+                    currentModelName.value = currentModel ? currentModel.model_name : '';
+                    currentModelContext.value = currentModel ? currentModel.context.toLocaleString() : '128000';
+                    console.log('Current model set to:', currentModelId.value, currentModelName.value, 'Context:', currentModelContext.value);
+                    console.log('Models array after loading:', models.value);
+                    
+                    // Debug template context values
+                    setTimeout(() => {
+                        console.log('Template context check - models.value:', models.value);
+                        if (models.value.length > 0) {
+                            console.log('First model context check:', {
+                                context: models.value[0].context,
+                                context_string: models.value[0].context ? models.value[0].context.toLocaleString() + ' tokens' : 'N/A'
+                            });
+                        }
+                    }, 100);
+                } catch (error) {
+                    console.error('Failed to load models:', error);
+                } finally {
+                    modelsLoading.value = false;
+                }
+            };
+
+            const ensureSession = async () => {
+                if (!sessionId.value) {
+                    console.log('No session ID, creating new session via chat endpoint');
+                    // Create a new session by sending a minimal chat request
+                    try {
+                        const response = await fetch('/api/chat', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                session_id: '',
+                                user_text: '', // Empty message to just create session
+                                working_directory: ''
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        
+                        // Get session ID from SSE stream
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+                        
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split('\n\n');
+                            buffer = lines.pop() || '';
+                            
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    try {
+                                        const data = JSON.parse(line.slice(6));
+                                        if (data.type === 'session_id') {
+                                            sessionId.value = data.session_id;
+                                            console.log('Created new session:', sessionId.value);
+                                            // Don't reload models immediately after session creation
+                                            // Wait for first message completion to reload
+                                            return true;
+                                        }
+                                    } catch (e) {
+                                        console.error('Failed to parse SSE data:', e);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to create session:', error);
+                        flashStatus('创建会话失败', 'red');
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            const switchModel = async (modelId) => {
+                console.log('switchModel called with:', modelId);
+                console.log('sessionId.value:', sessionId.value);
+                console.log('currentModelId.value:', currentModelId.value);
+                
+                // Ensure we have a session
+                const hasSession = await ensureSession();
+                if (!hasSession) {
+                    return;
+                }
+                
+                if (modelId === currentModelId.value) {
+                    console.log('Model is already current, closing selector');
+                    showModelSelector.value = false;
+                    return;
+                }
+                
+                console.log('Switching to model:', modelId);
+                try {
+                    const response = await fetch('/api/model', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            session_id: sessionId.value,
+                            model_id: modelId
+                        })
+                    });
+                    
+                    console.log('Response status:', response.status);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Response data:', data);
+                    
+                    if (data.success) {
+                        currentModelId.value = modelId;
+                        currentModelName.value = data.model_name;
+                        currentModelContext.value = data.context ? data.context.toLocaleString() : '128000';
+                        flashStatus(`已切换到 ${data.model_name}`, 'blue');
+                        showModelSelector.value = false;
+                        // Reload models after switching to get updated context
+                        loadModels();
+                    } else {
+                        throw new Error(data.detail || 'Failed to switch model');
+                    }
+                } catch (error) {
+                    console.error('Failed to switch model:', error);
+                    flashStatus('切换模型失败', 'red');
                 }
             };
 
@@ -1702,6 +1977,11 @@
                     if (data.total_usage) {
                         tokenUsed.value = data.total_usage.input_tokens + data.total_usage.output_tokens;
                     }
+                    
+                    // Update workspace from session data
+                    if (data.working_directory) {
+                        currentWorkspace.value = data.working_directory;
+                    }
                 } catch (error) {
                     console.error('Failed to load session:', error);
                     alert('加载会话失败: ' + error.message);
@@ -1726,18 +2006,29 @@
             watch(showSessionsModal, (val) => {
                 if (val) loadSessions();
             });
+            
+            // Watch for model selector open
+            watch(showModelSelector, (val) => {
+                if (val) loadModels();
+            });
 
             // Keyboard shortcuts
             onMounted(() => {
                 syncViewportMetrics();
                 document.addEventListener('keydown', handleGlobalKeydown);
+                document.addEventListener('click', handleGlobalClick);
                 window.addEventListener('resize', syncViewportMetrics);
                 window.visualViewport?.addEventListener('resize', syncViewportMetrics);
                 window.visualViewport?.addEventListener('scroll', syncViewportMetrics);
+                // Load models on page initialization
+                loadModels();
+                // Get current workspace
+                getCurrentWorkspace();
             });
 
             onBeforeUnmount(() => {
                 document.removeEventListener('keydown', handleGlobalKeydown);
+                document.removeEventListener('click', handleGlobalClick);
                 window.removeEventListener('resize', syncViewportMetrics);
                 window.visualViewport?.removeEventListener('resize', syncViewportMetrics);
                 window.visualViewport?.removeEventListener('scroll', syncViewportMetrics);
@@ -1756,6 +2047,13 @@
                 showSessionsModal,
                 sessions,
                 sessionsLoading,
+                showModelSelector,
+                models,
+                modelsLoading,
+                currentModelId,
+                currentModelName,
+                currentModelContext,
+                currentWorkspace,
                 currentInputHasWeb,
                 inputPlaceholder,
                 messagesContainer,
@@ -1767,8 +2065,12 @@
                 sendInterrupt,
                 startNewSession,
                 loadSession,
+                ensureSession,
+                switchModel,
                 toggleCollapse,
-                scrollToBottom
+                scrollToBottom,
+                formatTokens,
+                getCurrentWorkspace
             };
         }
     };

@@ -470,6 +470,20 @@ async def get_debug_state(session_id: str, http_request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.get("/workspace")
+async def get_workspace(http_request: Request):
+    """Get current working directory"""
+    logger.info("GET /workspace")
+    try:
+        import os
+        return {
+            "workspace": os.getcwd()
+        }
+    except Exception as e:
+        logger.exception("Failed to get workspace")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.get("/sessions")
 async def list_sessions(http_request: Request):
     """List all sessions"""
