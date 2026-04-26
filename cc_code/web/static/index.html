@@ -96,12 +96,6 @@
         content.includes('diff --git') ||
         (content.includes('-') && content.includes('+') && content.includes('@@'));
 
-    const checkResponseOk = (response) => {
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-    };
-
     const getNonEmptyLines = (text) => (text || '').split('\n').filter(l => l.trim());
 
     // Main App
@@ -451,7 +445,6 @@
             const isTyping = ref(false);
             const sessionId = ref(null);
             const tokenUsed = ref(0);
-            const showSessionsModal = ref(false);
             const sessions = ref([]);
             const sessionsLoading = ref(false);
             const autoFollowOutput = ref(true);
@@ -806,8 +799,7 @@
 
             const copySelectedText = async (e) => {
                 const selectedText = getSelectedText();
-                if (!selectedText) return false;
-                if (!navigator.clipboard?.writeText) return false;
+                if (!selectedText || !navigator.clipboard?.writeText) return false;
 
                 try {
                     e.preventDefault();
@@ -848,8 +840,6 @@
                 if (e.key === 'Escape') {
                     if (showModelSelector.value) {
                         showModelSelector.value = false;
-                    } else if (showSessionsModal.value) {
-                        showSessionsModal.value = false;
                     } else if (showWorkspaceDetails.value || showTokenDetails.value) {
                         closeInfoPopovers();
                     } else if (isStreaming.value) {
@@ -1146,8 +1136,6 @@
                             })
                         });
                         
-                        checkResponseOk(response);
-                        
                         // Get session ID from SSE stream
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
@@ -1209,8 +1197,6 @@
                         })
                     });
                     
-                    checkResponseOk(response);
-                    
                     const data = await response.json();
                     
                     if (data.success) {
@@ -1229,7 +1215,6 @@
             };
 
             const loadSession = async (sid) => {
-                showSessionsModal.value = false;
                 messages.value = [];
                 sessionId.value = null;
                 sessionHasUsedWebSearch.value = false;
@@ -1285,7 +1270,6 @@
                                     type: 'assistant',
                                     content: []
                                 };
-                                const assistantDiffMessages = [];
 
                                 if (msg.content_blocks && msg.content_blocks.length > 0) {
                                     for (const block of msg.content_blocks) {
@@ -1328,7 +1312,6 @@
                                 } else {
                                     lastAssistantMsg = null;
                                 }
-                                messages.value.push(...assistantDiffMessages);
                             } else if (msg.role === 'tool') {
                                 if (msg.content_blocks) {
                                     for (const block of msg.content_blocks) {
@@ -1382,11 +1365,6 @@
                 }
             };
 
-            // Watch for modal open
-            watch(showSessionsModal, (val) => {
-                if (val) loadSessions();
-            });
-            
             // Watch for model selector open
             watch(showModelSelector, (val) => {
                 if (val) loadModels();
@@ -1423,7 +1401,6 @@
                 isStreaming,
                 isTyping,
                 tokenUsed,
-                showSessionsModal,
                 sessions,
                 sessionsLoading,
                 showMobileSidebar,

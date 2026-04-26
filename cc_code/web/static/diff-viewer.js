@@ -100,10 +100,5 @@
     window.CCCodeDiffViewer = {
         createDiff,
         render,
-        normalizeDiffPath,
-        getDiffDisplayPath,
-        getRenderedDisplayName,
-        demoRenderConfig: DEMO_RENDER_CONFIG,
-        highlightLanguages: HIGHLIGHT_LANGUAGES,
     };
 })();
