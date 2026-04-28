@@ -33,7 +33,6 @@ class RevertStateData:
 
     message_id: str = ""
     part_id: Optional[str] = None
-    snapshot: Optional[str] = None
     additions: int = 0
     deletions: int = 0
     files: int = 0
@@ -127,7 +126,6 @@ class SessionStore:
                 RevertState(
                     message_id=revert_state.message_id,
                     part_id=revert_state.part_id,
-                    snapshot=revert_state.snapshot,
                     diff=DiffSummary(
                         additions=revert_state.additions,
                         deletions=revert_state.deletions,
@@ -161,7 +159,6 @@ class SessionStore:
             revert_data = {
                 "message_id": revert.message_id,
                 "part_id": revert.part_id,
-                "snapshot": revert.snapshot,
                 "additions": revert.diff.additions if revert.diff else 0,
                 "deletions": revert.diff.deletions if revert.diff else 0,
                 "files": revert.diff.files if revert.diff else 0,
@@ -246,7 +243,6 @@ class SessionStore:
                 state.set_revert_state(RevertState(
                     message_id=str(revert_data.get("message_id", "")),
                     part_id=revert_data.get("part_id"),
-                    snapshot=revert_data.get("snapshot"),
                     diff=DiffSummary(
                         additions=int(revert_data.get("additions", 0)),
                         deletions=int(revert_data.get("deletions", 0)),

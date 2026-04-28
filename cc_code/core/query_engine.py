@@ -464,20 +464,6 @@ class QueryEngine:
 
         return paths
 
-    def _collect_patch_file_paths(self, patches: List["Patch"]) -> List[str]:
-        """Collect unique file paths from patches while preserving order."""
-        paths: List[str] = []
-        seen: set[str] = set()
-
-        for patch in patches:
-            for file_path in patch.files:
-                if not file_path or file_path in seen:
-                    continue
-                seen.add(file_path)
-                paths.append(file_path)
-
-        return paths
-
     def _collect_patches(
         self,
         messages: List[Message],
@@ -571,9 +557,6 @@ class QueryEngine:
             )
 
         existing_revert = self.get_revert_state()
-        if existing_revert:
-            if existing_revert.snapshot:
-                self._snapshot_manager.restore(existing_revert.snapshot)
 
         patches = self._collect_patches(
             messages,
@@ -582,19 +565,11 @@ class QueryEngine:
         )
         candidate_files = self._collect_patch_file_paths(patches)
 
-        current_snapshot: Optional[str] = None
-        if candidate_files:
-            current_snapshot = self._snapshot_manager.track(candidate_files)
-            revert_point.snapshot = current_snapshot
-
         earliest_prev_hash = ""
         if patches:
             earliest_prev_hash = patches[0].prev_hash
-            if current_snapshot:
-                diff = self._snapshot_manager.diff(earliest_prev_hash, current_snapshot)
-            else:
-                latest_hash = patches[-1].hash
-                diff = self._snapshot_manager.diff(earliest_prev_hash, latest_hash)
+            latest_hash = patches[-1].hash
+            diff = self._snapshot_manager.diff(earliest_prev_hash, latest_hash)
             revert_point.diff = diff
             self._snapshot_manager.restore(earliest_prev_hash)
         else:
@@ -854,7 +829,6 @@ class QueryEngine:
                 revert_data = RevertStateData(
                     message_id=self._revert_state.message_id,
                     part_id=self._revert_state.part_id,
-                    snapshot=self._revert_state.snapshot,
                     additions=self._revert_state.diff.additions
                     if self._revert_state.diff
                     else 0,

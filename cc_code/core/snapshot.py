@@ -116,10 +116,6 @@ class SnapshotManager:
         self._initialized = False
         self._lock = asyncio.Lock()
 
-    def _compute_project_id(self) -> str:
-        """Compute a unique project ID from working directory (legacy behavior)."""
-        return build_snapshot_project_id(self.working_directory)
-
     def _run_git(
         self,
         args: List[str],
@@ -376,10 +372,9 @@ class SnapshotManager:
 class RevertState:
     """State tracking for a revert operation"""
 
-    message_id: str  # Message ID where revert started
-    part_id: Optional[str] = None  # Specific part ID (if reverting partial message)
-    snapshot: Optional[str] = None  # Snapshot hash before revert (for unrevert)
-    diff: Optional[DiffSummary] = None  # Diff summary of reverted changes
+    message_id: str
+    part_id: Optional[str] = None
+    diff: Optional[DiffSummary] = None
 
 
 @dataclass
