@@ -273,24 +273,6 @@ class SnapshotManager:
                 pass
         return result
 
-    def _sync_large_files_to_gitignore(self, large_files: List[str]) -> None:
-        """Add large files to a sparse checkout exclude list"""
-        if not large_files:
-            return
-
-        sparse_file = self.gitdir / "info" / "sparse-checkout"
-        sparse_file.parent.mkdir(parents=True, exist_ok=True)
-
-        existing = set()
-        if sparse_file.exists():
-            existing = set(sparse_file.read_text().splitlines())
-
-        rel_paths = [os.path.relpath(f, self.working_directory) for f in large_files]
-        for rel in rel_paths:
-            existing.add(f"!/{rel}")
-
-        sparse_file.write_text("\n".join(sorted(existing)) + "\n")
-
     def track(self, candidate_files: List[str]) -> str:
         """Create a snapshot of the current file state.
 
@@ -301,26 +283,13 @@ class SnapshotManager:
         changed_files = self._get_changed_candidate_files(candidate_files)
 
         changed_files = self._filter_ignored_files(changed_files)
-
-        # Safely find large files (skip deleted files)
-        large_files = []
-        for f in changed_files:
-            try:
-                if os.path.getsize(f) > MAX_FILE_SIZE:
-                    large_files.append(f)
-            except OSError:
-                pass
-
         changed_files = self._filter_large_files(changed_files)
-
-        if large_files:
-            self._sync_large_files_to_gitignore(large_files)
 
         if changed_files:
             rel_paths = [
                 os.path.relpath(f, self.working_directory) for f in changed_files
             ]
-            self._run_git(["add", "--sparse", "--"] + rel_paths)
+            self._run_git(["add", "--"] + rel_paths)
 
         result = self._run_git(["write-tree"])
         tree_hash = result.stdout.strip()
@@ -369,59 +338,6 @@ class SnapshotManager:
             )
 
         logger.info(f"Restored snapshot: {tree_hash[:8]}")
-
-    def revert_files(self, patches: List[Patch]) -> None:
-        """Revert files to their state as recorded in the patches.
-
-        For each file in the patches, restore it to the version in the patch's hash.
-        If a file doesn't exist in the snapshot, delete it.
-        """
-        self._ensure_initialized()
-
-        ops: List[dict] = []
-        seen: Set[str] = set()
-
-        for patch in reversed(patches):
-            for file_path in patch.files:
-                if file_path in seen:
-                    continue
-                seen.add(file_path)
-                rel_path = os.path.relpath(file_path, self.working_directory)
-                ops.append(
-                    {
-                        "hash": patch.hash,
-                        "file": file_path,
-                        "rel": rel_path,
-                    }
-                )
-
-        for op in ops:
-            self._revert_single_file(op["hash"], op["file"], op["rel"])
-
-    def _revert_single_file(
-        self, tree_hash: str, file_path: str, rel_path: str
-    ) -> None:
-        """Revert a single file to the version in the given tree"""
-        result = self._run_git(["checkout", tree_hash, "--", file_path])
-
-        if result.returncode == 0:
-            logger.debug(f"Reverted {rel_path} to {tree_hash[:8]}")
-            return
-
-        tree_result = self._run_git(["ls-tree", tree_hash, "--", rel_path])
-
-        if tree_result.returncode == 0 and tree_result.stdout.strip():
-            logger.warning(
-                f"File {rel_path} exists in snapshot {tree_hash[:8]} but checkout failed"
-            )
-            return
-
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                logger.debug(f"Deleted {rel_path} (not in snapshot {tree_hash[:8]})")
-            except OSError as e:
-                logger.warning(f"Failed to delete {rel_path}: {e}")
 
     def diff(self, tree_hash1: str, tree_hash2: str) -> DiffSummary:
         """Compute diff summary between two trees."""
