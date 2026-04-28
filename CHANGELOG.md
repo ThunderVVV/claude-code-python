@@ -21,6 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Web UI Context Usage Not Updating on Model Switch
 - Fixed `currentModelContext` stored as locale-formatted string (e.g. `"200,000"`) which `Number()` parsed as `NaN`, causing context display to fall back to 128000 after switching models; now stored as raw number with formatting handled by `formatTokens` at display time
 
+#### @web Skill Validation
+- `expand_web()` now raises `ValueError` when tavily-search or tavily-extract skill files are missing under `~/.claude/skills/`, instead of silently expanding to non-existent file references that the model then fails to read repeatedly
+
 ### Fixed - 2026-04-27
 
 #### Vite Web UI Diff Highlighting

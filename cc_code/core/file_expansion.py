@@ -112,10 +112,28 @@ def has_web_reference(text: str) -> bool:
 
 
 def expand_web(text: str) -> str:
+    import os
+    from pathlib import Path
+
     web_skill_file_prompt = (
         "@~/.claude/skills/tavily-search/SKILL.md",
         "@~/.claude/skills/tavily-extract/SKILL.md",
     )
+
+    skill_dir = Path.home() / ".claude" / "skills"
+    missing_skills = []
+    for skill_path in ("tavily-search/SKILL.md", "tavily-extract/SKILL.md"):
+        if not (skill_dir / skill_path).is_file():
+            skill_name = skill_path.split("/")[0]
+            missing_skills.append(skill_name)
+
+    if missing_skills:
+        names = ", ".join(missing_skills)
+        raise ValueError(
+            f"@web requires skill(s) [{names}] but they are not installed. "
+            f"Please install them under ~/.claude/skills/ or remove @web from your message."
+        )
+
     text = text.replace("@web", " ".join(web_skill_file_prompt) + " ")
     return text
 
