@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Made `/api/model` accept optional `session_id` instead of requiring one; switching models only updates global settings and hot-swaps in-memory engines when present, no longer creates an engine just to change the config
 - Added empty `user_text` validation to `/api/chat` (400 error) to prevent any code path from submitting blank messages
 
+#### Web UI Context Usage Not Updating on Model Switch
+- Fixed `currentModelContext` stored as locale-formatted string (e.g. `"200,000"`) which `Number()` parsed as `NaN`, causing context display to fall back to 128000 after switching models; now stored as raw number with formatting handled by `formatTokens` at display time
+
 ### Fixed - 2026-04-27
 
 #### Vite Web UI Diff Highlighting

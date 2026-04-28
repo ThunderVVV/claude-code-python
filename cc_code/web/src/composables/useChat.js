@@ -609,7 +609,7 @@ export function useChat() {
 
             const currentModel = models.value.find(m => m.model_id === currentModelId.value)
             currentModelName.value = currentModel ? currentModel.model_name : ''
-            currentModelContext.value = currentModel ? currentModel.context.toLocaleString() : '128000'
+            currentModelContext.value = currentModel ? currentModel.context : 128000
         } catch (error) {
             console.error('Failed to load models:', error)
         } finally {
@@ -640,7 +640,7 @@ export function useChat() {
             if (data.success) {
                 currentModelId.value = modelId
                 currentModelName.value = data.model_name
-                currentModelContext.value = data.context ? data.context.toLocaleString() : '128000'
+                currentModelContext.value = data.context || 128000
                 showModelSelector.value = false
                 loadModels()
             } else {
