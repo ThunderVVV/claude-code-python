@@ -173,7 +173,7 @@ body.gradient-bg {
     --color-accent-primary: #ab68ff;
     --color-accent-secondary: #10a37f;
     --font-size-code: 12px;
-    --font-size-base: 14px;
+    --font-size-base: 1rem;
 }
 
 .message-user {

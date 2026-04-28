@@ -42,6 +42,7 @@ export function useChat() {
 
     // For aborting fetch request
     const abortController = ref(null)
+    const isInterrupting = ref(false)
 
     // Refs
     const messagesContainer = ref(null)
@@ -456,7 +457,7 @@ export function useChat() {
 
     const sendMessage = async () => {
         let text = inputText.value.trim()
-        if (!text || isLoading.value) return
+        if (!text || isLoading.value || isInterrupting.value) return
 
         if (webSearchEnabled.value && !sessionHasUsedWebSearch.value) {
             text = '@web ' + text
@@ -521,15 +522,19 @@ export function useChat() {
                 console.error('Chat error:', error)
             }
         } finally {
-            isLoading.value = false
-            isStreaming.value = false
-            isTyping.value = false
+            if (!isInterrupting.value) {
+                isLoading.value = false
+                isStreaming.value = false
+                isTyping.value = false
+            }
             abortController.value = null
         }
     }
 
     const sendInterrupt = async () => {
         if (!abortController.value) return
+
+        isInterrupting.value = true
 
         try {
             abortController.value.abort()
@@ -550,6 +555,11 @@ export function useChat() {
             pendingToolUses.value = {}
         } catch (error) {
             console.error('Interrupt error:', error)
+        } finally {
+            isInterrupting.value = false
+            isLoading.value = false
+            isStreaming.value = false
+            isTyping.value = false
         }
     }
 

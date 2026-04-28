@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-29
+
+#### Web UI Offline Support and Interrupt Race Condition
+- Removed Google Fonts CDN dependency from Vite entry `index.html` so the web UI loads fully offline (fonts fall back to system UI/monospace)
+- Changed base font size from hardcoded `14px` to `1rem` to respect browser default font size
+- Fixed race condition where clicking Stop during streaming then sending a new message would get no response: `sendInterrupt()` now sets `isInterrupting` flag before abort, preventing `sendMessage`'s `finally` from prematurely resetting UI state while the server-side interrupt is still in flight; state is only released after `/api/interrupt` completes
+
 ### Fixed - 2026-04-27
 
 #### Vite Web UI Diff Highlighting
