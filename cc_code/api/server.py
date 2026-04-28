@@ -154,8 +154,8 @@ class RevertRequest(BaseModel):
 
 
 class SwitchModelRequest(BaseModel):
-    session_id: str
     model_id: str
+    session_id: Optional[str] = None
 
 
 class CompactRequest(BaseModel):
@@ -210,6 +210,8 @@ async def event_stream(chat_request: ChatRequest, session_manager: SessionManage
 @api_router.post("/chat")
 async def chat(request: ChatRequest, http_request: Request):
     """Stream chat response via SSE"""
+    if not request.user_text.strip():
+        raise HTTPException(status_code=400, detail="user_text must not be empty")
     logger.info(
         f"POST /chat - session_id={request.session_id}, user_text={request.user_text[:50]}..."
     )
@@ -355,7 +357,6 @@ async def switch_model(request: SwitchModelRequest, http_request: Request):
     )
     try:
         session_manager = http_request.app.state.session_manager
-        engine = session_manager.get_engine(request.session_id)
         settings = session_manager.get_settings()
         if request.model_id not in settings.models:
             raise HTTPException(status_code=404, detail="Model configuration not found")
@@ -364,12 +365,12 @@ async def switch_model(request: SwitchModelRequest, http_request: Request):
         session_manager._settings_store.save(settings)
 
         client_config = build_client_config(settings, request.model_id)
-        if engine is None:
-            engine = await session_manager.get_or_create_engine(
-                request.session_id,
-                "",
-            )
-        await engine.switch_model(client_config)
+
+        if request.session_id:
+            engine = session_manager.get_engine(request.session_id)
+            if engine:
+                await engine.switch_model(client_config)
+
         return {
             "success": True,
             "model_id": request.model_id,

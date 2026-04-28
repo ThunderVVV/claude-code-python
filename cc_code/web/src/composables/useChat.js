@@ -617,61 +617,7 @@ export function useChat() {
         }
     }
 
-    const ensureSession = async () => {
-        if (!sessionId.value) {
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        session_id: '',
-                        user_text: '',
-                        working_directory: ''
-                    })
-                })
-
-                const reader = response.body.getReader()
-                const decoder = new TextDecoder()
-                let buffer = ''
-
-                while (true) {
-                    const { done, value } = await reader.read()
-                    if (done) break
-
-                    buffer += decoder.decode(value, { stream: true })
-                    const lines = buffer.split('\n\n')
-                    buffer = lines.pop() || ''
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.slice(6))
-                                if (data.type === 'session_id') {
-                                    sessionId.value = data.session_id
-                                    return true
-                                }
-                            } catch (e) {
-                                console.error('Failed to parse SSE data:', e)
-                            }
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to create session:', error)
-                return false
-            }
-        }
-        return true
-    }
-
     const switchModel = async (modelId) => {
-        const hasSession = await ensureSession()
-        if (!hasSession) {
-            return
-        }
-
         if (modelId === currentModelId.value) {
             showModelSelector.value = false
             return
@@ -684,7 +630,7 @@ export function useChat() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    session_id: sessionId.value,
+                    session_id: sessionId.value || undefined,
                     model_id: modelId
                 })
             })

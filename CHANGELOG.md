@@ -13,6 +13,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Changed base font size from hardcoded `14px` to `1rem` to respect browser default font size
 - Fixed race condition where clicking Stop during streaming then sending a new message would get no response: `sendInterrupt()` now sets `isInterrupting` flag before abort, preventing `sendMessage`'s `finally` from prematurely resetting UI state while the server-side interrupt is still in flight; state is only released after `/api/interrupt` completes
 
+#### Web UI Empty Session Message and Model Switch
+- Removed `ensureSession()` which sent an empty `user_text` to `/api/chat` just to obtain a `session_id`, creating a bogus empty user message that caused session titles to fall back to the session ID prefix instead of the first real user text
+- Made `/api/model` accept optional `session_id` instead of requiring one; switching models only updates global settings and hot-swaps in-memory engines when present, no longer creates an engine just to change the config
+- Added empty `user_text` validation to `/api/chat` (400 error) to prevent any code path from submitting blank messages
+
 ### Fixed - 2026-04-27
 
 #### Vite Web UI Diff Highlighting
