@@ -56,3 +56,4 @@ binary/*
 # Web UI
 cc_code/web/node_modules/
 cc_code/web/.vite/
+cc_code/web/package-lock.json
