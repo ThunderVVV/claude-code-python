@@ -299,7 +299,17 @@ body {
 
 * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 code, pre, .mono, .markdown-body pre, .markdown-body code, pre code {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 
+        'Menlo',
+        'Monaco',
+        'Consolas',
+        'Ubuntu Mono',
+        'Source Code Pro',
+        'Liberation Mono',
+        'DejaVu Sans Mono',
+        'Courier New',
+        'Courier',
+        monospace;
     font-size: var(--font-size-code);
 }
 
@@ -368,7 +378,17 @@ body.gradient-bg {
     padding: 0.2em 0.4em;
     border-radius: 4px;
     font-size: 0.9em;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 
+        'Menlo',
+        'Monaco',
+        'Consolas',
+        'Ubuntu Mono',
+        'Source Code Pro',
+        'Liberation Mono',
+        'DejaVu Sans Mono',
+        'Courier New',
+        'Courier',
+        monospace;
 }
 
 .markdown-body pre {
