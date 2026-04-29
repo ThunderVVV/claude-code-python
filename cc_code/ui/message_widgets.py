@@ -181,6 +181,7 @@ class ThinkingBlockWidget(VerticalGroup):
             self._content_widget = Static(
                 sanitize_terminal_text(self._thinking),
                 classes="thinking-content",
+                markup=False,
             )
             yield self._content_widget
 

@@ -107,7 +107,7 @@ class RewindModal(ModalScreen[Optional[Tuple[str, int]]]):
             yield Markdown(HELP)
             with Center(id="table-container"):
                 yield DataTable(id="messages", cursor_type="row")
-            yield Static("", id="revert-info")
+            yield Static("", id="revert-info", markup=False)
             with HorizontalGroup(id="buttons"):
                 yield Button(
                     "Rewind",
