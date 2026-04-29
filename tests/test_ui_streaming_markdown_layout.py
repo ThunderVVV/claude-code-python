@@ -129,7 +129,7 @@ def test_streaming_table_flush_deferred_until_finish() -> None:
     asyncio.run(_run_streaming_table_flush_deferred_until_finish_test())
 
 
-async def _run_streaming_text_pauses_when_not_at_bottom_test() -> None:
+async def _run_streaming_text_continues_when_not_at_bottom_test() -> None:
     app = _StreamingMarkdownLayoutApp()
 
     async with app.run_test(size=(100, 30)) as pilot:
@@ -138,35 +138,55 @@ async def _run_streaming_text_pauses_when_not_at_bottom_test() -> None:
         screen = app.screen
         message_list = screen.query_one("#message-list", MessageList)
         screen._hide_welcome_widget()
+        screen._is_processing = True
         await pilot.pause()
 
         original_should_follow = screen._should_follow_transcript
+        calls = {"count": 0}
+        original_schedule_scroll_to_latest = message_list.schedule_scroll_to_latest
+
+        def tracked_schedule_scroll_to_latest(auto_follow: bool = True) -> None:
+            if auto_follow:
+                calls["count"] += 1
+            original_schedule_scroll_to_latest(auto_follow=auto_follow)
+
+        message_list.schedule_scroll_to_latest = tracked_schedule_scroll_to_latest  # type: ignore[method-assign]
         screen._should_follow_transcript = lambda: False
         try:
-            await screen._handle_query_event(TextEvent(text="| Name | Value |\n"), message_list)
-            await screen._handle_query_event(TextEvent(text="| --- | --- |\n"), message_list)
-            await pilot.pause()
+            await screen._handle_query_event(TextEvent(text="hello "), message_list)
+            await screen._handle_query_event(TextEvent(text="world"), message_list)
 
             assistant_widget = screen._current_assistant_widget
             assert assistant_widget is not None
-            assert assistant_widget._streaming_widget is None
-            assert "".join(screen._buffered_assistant_chunks) == "| Name | Value |\n| --- | --- |\n"
+            markdown = None
+            for _ in range(10):
+                await pilot.pause()
+                markdown = assistant_widget._streaming_widget
+                if markdown is not None:
+                    break
+            assert markdown is not None
+            assert markdown.source == "hello world"
+            assert screen._buffered_assistant_char_count == 0
+            assert calls["count"] == 0
 
             screen._should_follow_transcript = lambda: True
-            await screen._handle_query_event(TextEvent(text="| alpha | 1 |\n"), message_list)
-            await pilot.pause()
+            await screen._handle_query_event(TextEvent(text=" again"), message_list)
+            for _ in range(10):
+                await pilot.pause()
+                if calls["count"] > 0:
+                    break
 
-            markdown = assistant_widget._streaming_widget
+            assert calls["count"] > 0
             assert markdown is not None
-            assert "| Name | Value |" in markdown.source
-            assert "| alpha | 1 |" in markdown.source
+            assert markdown.source == "hello world again"
             assert screen._buffered_assistant_char_count == 0
         finally:
+            message_list.schedule_scroll_to_latest = original_schedule_scroll_to_latest  # type: ignore[method-assign]
             screen._should_follow_transcript = original_should_follow
 
 
-def test_streaming_text_pauses_when_not_at_bottom() -> None:
-    asyncio.run(_run_streaming_text_pauses_when_not_at_bottom_test())
+def test_streaming_text_continues_when_not_at_bottom() -> None:
+    asyncio.run(_run_streaming_text_continues_when_not_at_bottom_test())
 
 
 async def _run_streaming_text_continues_without_user_scroll_test() -> None:

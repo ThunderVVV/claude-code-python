@@ -812,7 +812,7 @@ class REPLScreen(Screen):
         *,
         auto_follow: bool,
     ) -> bool:
-        """Flush buffered assistant markdown text to the streaming widget."""
+        """Flush any queued assistant markdown text to the streaming widget."""
         async with self._buffered_assistant_flush_lock:
             if not self._has_buffered_assistant_text():
                 return False
@@ -823,12 +823,15 @@ class REPLScreen(Screen):
         )
         try:
             await assistant_widget.append_text(buffered_text)
-            if auto_follow:
-                await assistant_widget.flush_pending_streaming_text()
-            message_list.schedule_scroll_to_latest(auto_follow)
+            await assistant_widget.flush_pending_streaming_text()
+
+            # Keep rendering live content even when the user scrolls away,
+            # but only request bottom anchoring when follow mode is active.
+            if auto_follow and self._should_follow_transcript():
+                message_list.schedule_scroll_to_latest(True)
             return True
         except Exception:
-            # Preserve buffered output if flush failed; retry on next follow cycle.
+            # Preserve buffered output if flush failed; retry on a later flush cycle.
             self._prepend_buffered_assistant_text(buffered_text)
             raise
 
@@ -844,11 +847,7 @@ class REPLScreen(Screen):
                 return False
             live_text = self._drain_live_stream_text()
 
-        should_render_now = auto_follow and self._should_follow_transcript()
-        if not should_render_now:
-            self._buffer_assistant_text(live_text)
-            return False
-
+        # Continue streaming content immediately; scroll only when follow mode is active.
         await self._flush_buffered_assistant_text(
             message_list,
             auto_follow=auto_follow,
@@ -859,7 +858,11 @@ class REPLScreen(Screen):
         )
         await assistant_widget.append_text(live_text)
         await assistant_widget.flush_pending_streaming_text()
-        message_list.schedule_scroll_to_latest(auto_follow)
+
+        # Keep rendering live content even when the user scrolls away,
+        # but only request bottom anchoring when follow mode is active.
+        if auto_follow and self._should_follow_transcript():
+            message_list.schedule_scroll_to_latest(True)
         return True
 
     def _schedule_live_stream_flush(self, message_list: MessageList) -> None:
@@ -926,7 +929,7 @@ class REPLScreen(Screen):
         self._buffered_assistant_text_flush_task = asyncio.create_task(_runner())
 
     def _on_transcript_scroll_position_changed(self) -> None:
-        """Resume buffered streaming updates when user returns to transcript bottom."""
+        """Restore follow mode at transcript bottom and flush any queued recovery buffers."""
         try:
             content_area = self.query_one("#content-area", ScrollableContainer)
             if content_area.is_vertical_scroll_end:
@@ -1650,21 +1653,16 @@ class REPLScreen(Screen):
         elif isinstance(event, TextEvent):
             auto_follow = self._should_follow_transcript()
             await self._ensure_assistant_widget(message_list, auto_follow=False)
-            if auto_follow:
-                self._buffer_live_stream_text(event.text)
-                if self._has_buffered_assistant_text():
-                    await self._flush_live_stream_text(
-                        message_list,
-                        auto_follow=auto_follow,
-                    )
-                else:
-                    self._schedule_live_stream_flush(message_list)
-            else:
+            # Batch live stream chunks for efficient rendering, but do not pause
+            # streaming just because the user scrolled away from the bottom.
+            self._buffer_live_stream_text(event.text)
+            if self._has_buffered_assistant_text():
                 await self._flush_live_stream_text(
                     message_list,
-                    auto_follow=False,
+                    auto_follow=auto_follow,
                 )
-                self._buffer_assistant_text(event.text)
+            else:
+                self._schedule_live_stream_flush(message_list)
 
         elif isinstance(event, ToolUseEvent):
             tui_log(f"Received ToolUseEvent: tool_name={event.tool_name}, tool_use_id={event.tool_use_id}")
