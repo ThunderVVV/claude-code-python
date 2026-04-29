@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed - 2026-04-29
 
+#### Strict OpenAI Tool Schemas
+- Normalized exported tool input schemas so `required` includes every declared property when generating strict OpenAI function schemas
+- Updated tool definition tests to assert `required` matches the schema property list
+
 #### Web UI Offline Support and Interrupt Race Condition
 - Removed Google Fonts CDN dependency from Vite entry `index.html` so the web UI loads fully offline (fonts fall back to system UI/monospace)
 - Changed base font size from hardcoded `14px` to `1rem` to respect browser default font size

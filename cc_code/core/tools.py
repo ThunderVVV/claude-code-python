@@ -22,7 +22,15 @@ class ToolInputSchema:
     additionalProperties: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        schema = asdict(self)
+
+        # OpenAI strict function schemas require every declared property to be
+        # listed in required, so normalize the exported schema here while
+        # keeping the source declarations aligned with the TypeScript version.
+        properties = schema.get("properties", {})
+        schema["required"] = list(properties.keys())
+
+        return schema
 
 
 @dataclass

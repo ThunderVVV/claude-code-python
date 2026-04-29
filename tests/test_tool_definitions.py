@@ -12,4 +12,6 @@ def test_default_tool_definitions_are_strict() -> None:
     for tool in definitions:
         assert tool["type"] == "function"
         assert tool["function"]["strict"] is True
-        assert tool["function"]["parameters"]["additionalProperties"] is False
+        parameters = tool["function"]["parameters"]
+        assert parameters["additionalProperties"] is False
+        assert parameters["required"] == list(parameters["properties"].keys())
