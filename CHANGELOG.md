@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-30
+
+#### TUI Auto-Copy Selection
+- Changed TUI copy behavior to automatically copy selected text on mouse release
+- Replaced explicit `Ctrl+C` copy shortcut with auto-copy on primary mouse button release
+- Added duplicate selection detection to avoid repeated copy operations for the same text
+- Showed toast notification "Copied to clipboard" when auto-copy succeeds
+- Updated `Ctrl+C` binding to quit the app instead of copying (now redundant)
+- Added `tests/test_ui_auto_copy_selection.py` with auto-copy behavior coverage
+
 ### Changed - 2026-04-30
 
 #### TUI Streaming While Scrolled Away

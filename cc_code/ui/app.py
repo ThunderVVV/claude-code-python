@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Mapping
 
+from textual import events
 from textual.app import App
 from textual.binding import Binding
 from textual.widget import Widget
@@ -51,9 +52,9 @@ class CCCodeApp(App):
     ALLOW_SELECT = True
     BINDINGS = [
         Binding(
-            "ctrl+c,ctrl+shift+c,super+c",
-            "copy_selection",
-            "Copy selected text",
+            "ctrl+c",
+            "quit",
+            "Quit",
             show=False,
             priority=True,
         ),
@@ -70,6 +71,7 @@ class CCCodeApp(App):
         super().__init__(**kwargs)
         self.settings_store = SettingsStore()
         self.settings = self.settings_store.ensure_settings()
+        self._last_auto_copied_selection = ""
         self.theme = _resolve_theme_name(
             self.available_themes,
             self.settings.theme,
@@ -92,26 +94,38 @@ class CCCodeApp(App):
         """Clean up resources on exit."""
         await self.client.close()
 
-    def action_copy_selection(self) -> None:
-        """Copy the active Textual selection to the clipboard."""
+    def on_mouse_up(self, event: events.MouseUp) -> None:
+        """Auto-copy the current selection when the primary mouse button is released."""
+        if event.button == 1:
+            self.set_timer(0.01, self._auto_copy_selection_after_mouse_up)
+
+    def _auto_copy_selection_after_mouse_up(self) -> None:
+        """Copy the current selection after drag-selection has settled."""
         selection = self._get_selected_text()
         if not selection:
+            self._last_auto_copied_selection = ""
             return
+        if selection == self._last_auto_copied_selection:
+            return
+        if self._copy_text_to_clipboard(selection):
+            self._last_auto_copied_selection = selection
+            self.notify(
+                "Copied to clipboard",
+                title="Clipboard",
+                timeout=1.5,
+                markup=False,
+            )
 
+    def _copy_text_to_clipboard(self, text: str) -> bool:
+        """Write text to the clipboard using pyperclip when available."""
         if pyperclip is not None:
             try:
-                pyperclip.copy(selection)
+                pyperclip.copy(text)
+                return True
             except Exception:
-                self.copy_to_clipboard(selection)
-        else:
-            self.copy_to_clipboard(selection)
-
-        self.notify(
-            "Copied to clipboard",
-            title="Clipboard",
-            timeout=1.5,
-            markup=False,
-        )
+                pass
+        self.copy_to_clipboard(text)
+        return True
 
     def _get_selected_text(self) -> str:
         """Return text selected in the focused widget or active screen."""
