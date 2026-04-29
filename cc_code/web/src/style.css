@@ -298,7 +298,7 @@ body {
 }
 
 * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
-code, pre, .mono, .markdown-body pre, .markdown-body code, pre code {
+code, pre, .mono, .markdown-body pre, .markdown-body code, pre code, .hljs, .hljs * {
     font-family: 
         'Menlo',
         'Monaco',
@@ -311,6 +311,7 @@ code, pre, .mono, .markdown-body pre, .markdown-body code, pre code {
         'Courier',
         monospace;
     font-size: var(--font-size-code);
+    font-weight: normal;
 }
 
 body.gradient-bg {
@@ -509,6 +510,15 @@ body.gradient-bg {
 .messages-area .markdown-body pre,
 .messages-area pre code {
     font-size: var(--font-size-code) !important;
+}
+
+.messages-area .markdown-body pre code,
+.messages-area .markdown-body pre code *,
+.messages-area .markdown-body pre .hljs,
+.messages-area .markdown-body pre .hljs * {
+    font-size: inherit !important;
+    font-family: inherit !important;
+    line-height: inherit !important;
 }
 
 .assistant-content > * {

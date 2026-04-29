@@ -1,5 +1,26 @@
 import { marked } from 'marked'
 import hljs from 'highlight.js'
+import { markedHighlight } from 'marked-highlight'
+
+// 注册highlight扩展
+marked.use(markedHighlight({
+    langPrefix: 'hljs language-',
+    highlight: (code, language) => {
+        if (!hljs) {
+            return escapeHtml(code)
+        }
+
+        try {
+            if (language && hljs.getLanguage(language)) {
+                return hljs.highlight(code, { language }).value
+            }
+            return hljs.highlightAuto(code).value
+        } catch (error) {
+            console.warn('Markdown code highlight failed:', error)
+            return escapeHtml(code)
+        }
+    }
+}))
 
 export const escapeHtml = (text) => {
     const div = document.createElement('div')
@@ -7,27 +28,8 @@ export const escapeHtml = (text) => {
     return div.innerHTML
 }
 
-const highlightCode = (code, language) => {
-    if (!hljs) {
-        return escapeHtml(code)
-    }
-
-    try {
-        if (language && hljs.getLanguage(language)) {
-            return hljs.highlight(code, { language }).value
-        }
-        return hljs.highlightAuto(code).value
-    } catch (error) {
-        console.warn('Markdown code highlight failed:', error)
-        return escapeHtml(code)
-    }
-}
-
 export const renderMarkdown = (text) => {
-    const rendered = marked.parse(text || '', {
-        langPrefix: 'hljs language-',
-        highlight: highlightCode,
-    })
+    const rendered = marked.parse(text || '')
 
     const container = document.createElement('div')
     container.innerHTML = rendered
