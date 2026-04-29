@@ -277,6 +277,7 @@ class CCCodeHttpClient:
             response = await self._client.post(
                 f"{self._base_url}/api/interrupt",
                 json=request_data,
+                timeout=5.0,
             )
             response.raise_for_status()
             result = response.json()

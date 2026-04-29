@@ -195,6 +195,7 @@ class REPLScreen(Screen):
         self._snapshot_status: Optional[dict] = None
         self._transcript_collapsible_mode_expanded = False
         self._transcript_mode_switch_in_progress = False
+        self._interrupt_task: Optional[asyncio.Task] = None
         self._follow_transcript_output = True
         self._buffered_assistant_chunks: list[str] = []
         self._buffered_assistant_char_count: int = 0
@@ -1517,7 +1518,7 @@ class REPLScreen(Screen):
         if not self._is_processing:
             return
 
-        await self.client.interrupt(self.session_id, "user-cancel")
+        self._request_interrupt()
 
         if self._query_worker and not self._query_worker.is_finished:
             self._query_worker.cancel()
@@ -1531,6 +1532,25 @@ class REPLScreen(Screen):
 
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.focus()
+
+    def _request_interrupt(self) -> None:
+        """Interrupt the backend without blocking the TUI event loop."""
+        if self._interrupt_task is not None and not self._interrupt_task.done():
+            return
+
+        async def _runner() -> None:
+            try:
+                tui_log(f"Sending interrupt for session {self.session_id}")
+                success = await self.client.interrupt(self.session_id, "user-cancel")
+                tui_log(
+                    f"Interrupt response received for session {self.session_id}: success={success}"
+                )
+            except Exception as e:
+                tui_log(f"Interrupt request failed for session {self.session_id}: {e}")
+            finally:
+                self._interrupt_task = None
+
+        self._interrupt_task = asyncio.create_task(_runner())
 
     async def _process_message(self, user_text: str) -> None:
         """Send message to server and process event stream."""

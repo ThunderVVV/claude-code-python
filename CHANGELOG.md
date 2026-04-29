@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Normalized exported tool input schemas so `required` includes every declared property when generating strict OpenAI function schemas
 - Updated tool definition tests to assert `required` matches the schema property list
 
+#### TUI Interrupt Cancellation and Auto-Started API Server Debugging
+- Made interrupt handling fire-and-forget so cancelling a running query no longer blocks the TUI while `/api/interrupt` is in flight
+- Added a timeout to interrupt requests and tracked the in-flight interrupt task to avoid duplicate interrupts
+- Passed CLI `--debug` through to the auto-started API server so child server startup matches the parent TUI mode
+- Added regression tests for CLI debug propagation and hanging interrupt cancellation
+
 #### Web UI Offline Support and Interrupt Race Condition
 - Removed Google Fonts CDN dependency from Vite entry `index.html` so the web UI loads fully offline (fonts fall back to system UI/monospace)
 - Changed base font size from hardcoded `14px` to `1rem` to respect browser default font size

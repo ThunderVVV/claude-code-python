@@ -26,7 +26,12 @@ def check_server_available(host: str, port: int, timeout: float = 1.0) -> bool:
         return False
 
 
-def start_api_server(host: str, port: int) -> Optional[subprocess.Popen]:
+def start_api_server(
+    host: str,
+    port: int,
+    *,
+    debug: bool = False,
+) -> Optional[subprocess.Popen]:
     try:
         if getattr(sys, "frozen", False):
             cmd = [sys.executable, "api", "--host", host, "--port", str(port)]
@@ -42,10 +47,14 @@ def start_api_server(host: str, port: int) -> Optional[subprocess.Popen]:
                 str(port),
             ]
 
+        if debug:
+            cmd.append("--debug")
+
         process = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
         )
         return process
     except Exception as e:
@@ -139,7 +148,7 @@ def cli(
                 fg="yellow",
             )
         )
-        server_process = start_api_server(api_host, api_port)
+        server_process = start_api_server(api_host, api_port, debug=debug)
         if not server_process:
             sys.exit(1)
 
