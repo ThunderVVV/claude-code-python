@@ -58,6 +58,7 @@ from cc_code.ui.autocomplete import (
     CommandRegistry,
     AtOption,
 )
+from cc_code.ui.query_guard import QueryGuard
 from cc_code.ui.utils import sanitize_terminal_text
 from cc_code.utils.logging_config import log_full_exception, tui_log
 
@@ -192,6 +193,9 @@ class REPLScreen(Screen):
         self._show_welcome = True
         self._tool_widget_context: dict[str, ToolUseWidget] = {}
         self._query_worker: Optional[Worker] = None
+        self._query_worker_generation: Optional[int] = None
+        self._query_guard = QueryGuard()
+        self._active_query_generation: Optional[int] = None
         self._snapshot_status: Optional[dict] = None
         self._transcript_collapsible_mode_expanded = False
         self._transcript_mode_switch_in_progress = False
@@ -651,20 +655,26 @@ class REPLScreen(Screen):
 
     def _set_processing_state(self, is_processing: bool) -> None:
         self._is_processing = is_processing
+        self._refresh_processing_ui()
+
+    def _refresh_processing_ui(self) -> None:
         input_widget = self.query_one("#user-input", InputTextArea)
         processing_row = self.query_one("#processing-row", Horizontal)
-        input_widget.disabled = is_processing
-        processing_row.display = is_processing
+        processing_label = self.query_one("#processing-label", Label)
+        is_busy = self._is_processing
+        input_widget.disabled = is_busy
+        processing_row.display = is_busy
 
-        if is_processing:
+        if is_busy:
             input_widget.set_styles("height: 3;")
         else:
             input_widget.set_styles("height: auto;")
 
         input_widget.refresh()
+        processing_label.update("Working... (esc to interrupt)")
         input_widget.placeholder = (
             "Agent is responding..."
-            if is_processing
+            if self._is_processing
             else self._input_placeholder_text()
         )
 
@@ -947,9 +957,12 @@ class REPLScreen(Screen):
         """Reset tool widget contexts."""
         self._tool_widget_context = {}
 
+    def _is_current_query_generation(self, generation: int) -> bool:
+        return self._active_query_generation == generation
+
     def _start_message_submission(self, submitted_value: str) -> None:
         tui_log(f"_start_message_submission: {submitted_value!r}")
-        if self._is_processing:
+        if self._is_processing or self._query_guard.is_active:
             return
 
         input_widget = self.query_one("#user-input", InputTextArea)
@@ -1023,11 +1036,17 @@ class REPLScreen(Screen):
         self._reset_tool_contexts()
         self._anchor_transcript()
 
+        generation = self._query_guard.try_start()
+        if generation is None:
+            return
+
+        self._active_query_generation = generation
         self._set_processing_state(True)
         self.refresh()
 
+        self._query_worker_generation = generation
         self._query_worker = self.run_worker(
-            self._process_message(user_text),
+            self._process_message(user_text, generation),
             group="query",
             exclusive=True,
             exit_on_error=False,
@@ -1514,45 +1533,57 @@ class REPLScreen(Screen):
         )
 
     async def _cancel_current_query(self) -> None:
-        """Send interrupt to server and reset UI."""
+        """Interrupt the current query and immediately release the prompt."""
         if not self._is_processing:
             return
-
-        self._request_interrupt()
 
         if self._query_worker and not self._query_worker.is_finished:
             self._query_worker.cancel()
 
+        message_list = self.query_one("#message-list", MessageList)
+        self._query_guard.force_end()
+        self._active_query_generation = None
+        if self._current_assistant_widget is not None:
+            await self._flush_live_stream_text(
+                message_list,
+                auto_follow=False,
+            )
+            await self._flush_buffered_assistant_text(
+                message_list,
+                auto_follow=False,
+            )
+            await self._current_assistant_widget.finish_streaming()
+        self._current_assistant_widget = None
         self._set_processing_state(False)
         self._reset_streaming_state()
         self._reset_tool_contexts()
-
-        message_list = self.query_one("#message-list", MessageList)
         message_list.reset_auto_follow_output()
+        self._request_interrupt()
 
         input_widget = self.query_one("#user-input", InputTextArea)
         input_widget.focus()
 
     def _request_interrupt(self) -> None:
         """Interrupt the backend without blocking the TUI event loop."""
-        if self._interrupt_task is not None and not self._interrupt_task.done():
-            return
-
         async def _runner() -> None:
+            current_task = asyncio.current_task()
             try:
                 tui_log(f"Sending interrupt for session {self.session_id}")
                 success = await self.client.interrupt(self.session_id, "user-cancel")
                 tui_log(
                     f"Interrupt response received for session {self.session_id}: success={success}"
                 )
+            except asyncio.CancelledError:
+                tui_log(f"Interrupt task cancelled for session {self.session_id}")
             except Exception as e:
                 tui_log(f"Interrupt request failed for session {self.session_id}: {e}")
             finally:
-                self._interrupt_task = None
+                if self._interrupt_task is current_task:
+                    self._interrupt_task = None
 
         self._interrupt_task = asyncio.create_task(_runner())
 
-    async def _process_message(self, user_text: str) -> None:
+    async def _process_message(self, user_text: str, generation: int) -> None:
         """Send message to server and process event stream."""
         message_list = self.query_one("#message-list", MessageList)
         try:
@@ -1565,7 +1596,7 @@ class REPLScreen(Screen):
                 self.working_directory,
                 model=self._current_model_id if self._current_model_id else None,
             ):
-                if not self._is_processing:
+                if not self._is_current_query_generation(generation):
                     break
                 await self._handle_query_event(event, message_list)
                 await asyncio.sleep(0)
@@ -1574,18 +1605,22 @@ class REPLScreen(Screen):
             pass
         except Exception as e:
             log_full_exception(logger, "Query error in _run_query", e)
-            if self._is_processing:
+            if self._is_current_query_generation(generation):
                 error_msg = Message.system_message(f"Error: {str(e)}")
                 await message_list.add_message(error_msg)
 
         finally:
-            self._query_worker = None
-            self._set_processing_state(False)
-            self._reset_streaming_state()
-            self._reset_tool_contexts()
+            if self._query_worker_generation == generation:
+                self._query_worker = None
+                self._query_worker_generation = None
+            if self._query_guard.end(generation):
+                self._active_query_generation = None
+                self._set_processing_state(False)
+                self._reset_streaming_state()
+                self._reset_tool_contexts()
 
-            input_widget = self.query_one("#user-input", InputTextArea)
-            input_widget.focus()
+                input_widget = self.query_one("#user-input", InputTextArea)
+                input_widget.focus()
 
     async def _ensure_assistant_widget(
         self,

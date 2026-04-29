@@ -261,8 +261,8 @@ async def interrupt(request: InterruptRequest, http_request: Request):
         session_manager = http_request.app.state.session_manager
         engine = session_manager.get_engine(request.session_id)
         if engine:
-            engine.interrupt(request.reason or "user_interrupt")
-            return {"success": True}
+            success = await engine.interrupt(request.reason or "user_interrupt")
+            return {"success": success}
         return {"success": False}
     except Exception as e:
         logger.exception("Failed to send interrupt")

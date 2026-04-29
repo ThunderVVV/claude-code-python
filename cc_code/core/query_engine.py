@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncGenerator, List, Optional
 
 if TYPE_CHECKING:
@@ -47,6 +48,15 @@ from cc_code.services.openai_client import (
 from cc_code.utils.logging_config import log_full_exception
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _RunControl:
+    """Per-submit cancellation state, aligned with TS AbortController ownership."""
+
+    task: asyncio.Task[Any]
+    cancel_event: asyncio.Event
+    interrupt_reason: Optional[str] = None
 
 
 class QueryEngine:
@@ -99,10 +109,8 @@ class QueryEngine:
         self.state.title = session_title or ""
         self.state.created_at = session_created_at or ""
         self._is_initialized = False
-        self._interrupt_reason: Optional[str] = None
+        self._active_run: Optional[_RunControl] = None
         self._active_task: Optional[asyncio.Task[Any]] = None
-        self._cancelled_tasks: set[asyncio.Task[Any]] = set()
-        self._cancel_event = asyncio.Event()
 
         # Working directory
         self._cwd = working_directory or os.getcwd()
@@ -617,13 +625,17 @@ class QueryEngine:
             file_paths=all_file_paths,
         )
 
-    def _get_tool_context(self, message_id: Optional[str] = None) -> ToolContext:
+    def _get_tool_context(
+        self,
+        run_control: _RunControl,
+        message_id: Optional[str] = None,
+    ) -> ToolContext:
         """Get tool execution context"""
         return ToolContext(
             working_directory=self._cwd,
             project_root=self._cwd,
             session_id=self.state.session_id,
-            cancel_event=self._cancel_event,
+            cancel_event=run_control.cancel_event,
             instruction_service=self._instruction_service,
             message_id=message_id,
             messages=self.state.messages,
@@ -761,23 +773,29 @@ class QueryEngine:
         except Exception:
             pass
 
-    def interrupt(self, reason: str = "interrupt") -> None:
-        """Interrupt the in-flight query, matching the TypeScript QueryEngine API."""
-        self._interrupt_reason = reason
-        self._cancel_event.set()
-        if self._active_task and not self._active_task.done():
-            self._cancelled_tasks.add(self._active_task)
-            self._active_task.cancel()
+    def _request_interrupt(self, reason: str = "interrupt") -> bool:
+        """Abort the current run immediately, like TS QueryEngine.interrupt()."""
+        active_run = self._active_run
+        if active_run is None or active_run.task.done():
+            return False
+
+        active_run.interrupt_reason = reason
+        active_run.cancel_event.set()
+        active_run.task.cancel()
+        return True
+
+    async def interrupt(self, reason: str = "interrupt") -> bool:
+        """Interrupt the in-flight query and return immediately."""
+        return self._request_interrupt(reason)
 
     def clear_interrupt(self) -> None:
-        """Reset interrupt state before a fresh query starts."""
-        self._interrupt_reason = None
-        if self._cancel_event.is_set():
-            self._cancel_event = asyncio.Event()
+        """Clear active run bookkeeping."""
+        self._active_run = None
+        self._active_task = None
 
     def get_interrupt_reason(self) -> Optional[str]:
         """Return the current interrupt reason, if any."""
-        return self._interrupt_reason
+        return self._active_run.interrupt_reason if self._active_run else None
 
     def persist_session(self) -> None:
         """Persist session to disk."""
@@ -866,9 +884,9 @@ class QueryEngine:
         except Exception as e:
             logger.warning(f"Failed to persist session: {e}")
 
-    def _raise_if_interrupted(self) -> None:
+    def _raise_if_interrupted(self, run_control: _RunControl) -> None:
         """Abort the current query loop when an interrupt has been requested."""
-        if self._interrupt_reason is not None:
+        if run_control.interrupt_reason is not None or run_control.cancel_event.is_set():
             raise asyncio.CancelledError
 
     async def submit_message(
@@ -892,15 +910,24 @@ class QueryEngine:
         if not self._is_initialized:
             await self.initialize()
 
-        self._active_task = asyncio.current_task()
+        current_task = asyncio.current_task()
+        if current_task is None:
+            raise RuntimeError("submit_message must run inside an asyncio task")
+
+        run_control = _RunControl(
+            task=current_task,
+            cancel_event=asyncio.Event(),
+        )
+        self._active_run = run_control
+        self._active_task = current_task
 
         try:
-            self._raise_if_interrupted()
+            self._raise_if_interrupted(run_control)
 
             # Check for /compact command
             user_text_lower = user_text.strip().lower()
             if user_text_lower in ("/compact", "/summarize"):
-                async for event in self._handle_compact():
+                async for event in self._handle_compact(run_control):
                     yield event
                 return
 
@@ -956,18 +983,11 @@ class QueryEngine:
             yield MessageCompleteEvent(message=user_message)
 
             # Run the query loop
-            async for event in self._query_loop():
+            async for event in self._query_loop(run_control):
                 yield event
         except asyncio.CancelledError:
-            current_task = asyncio.current_task()
-            if (
-                current_task in self._cancelled_tasks
-                or self._interrupt_reason is not None
-            ):
-                if current_task in self._cancelled_tasks:
-                    self._cancelled_tasks.discard(current_task)
+            if run_control.cancel_event.is_set() or run_control.interrupt_reason is not None:
                 self.persist_session()
-                self.clear_interrupt()
                 return
             raise
         except Exception as e:
@@ -975,13 +995,15 @@ class QueryEngine:
             error_msg = f"Error processing message: {str(e)}"
             yield ErrorEvent(error=error_msg, is_fatal=True)
         finally:
-            current_task = asyncio.current_task()
-            if current_task in self._cancelled_tasks:
-                self._cancelled_tasks.discard(current_task)
+            if self._active_run is run_control:
+                self._active_run = None
             if self._active_task is current_task:
                 self._active_task = None
 
-    async def _handle_compact(self) -> AsyncGenerator[QueryEvent, None]:
+    async def _handle_compact(
+        self,
+        run_control: _RunControl,
+    ) -> AsyncGenerator[QueryEvent, None]:
         """Handle /compact command to generate streaming summary of conversation.
 
         Aligns with opencode principle:
@@ -1058,7 +1080,7 @@ class QueryEngine:
             )
 
             async for chunk in stream_response:
-                self._raise_if_interrupted()
+                self._raise_if_interrupted(run_control)
 
                 chunk_dict = chunk.model_dump()
 
@@ -1121,7 +1143,10 @@ class QueryEngine:
             log_full_exception(logger, "Error during compaction", e)
             yield ErrorEvent(error=f"Compaction failed: {str(e)}", is_fatal=True)
 
-    async def _query_loop(self) -> AsyncGenerator[QueryEvent, None]:
+    async def _query_loop(
+        self,
+        run_control: _RunControl,
+    ) -> AsyncGenerator[QueryEvent, None]:
         """
         Internal query loop - aligned with query() in TypeScript query.ts
 
@@ -1149,7 +1174,7 @@ class QueryEngine:
             current_usage: Optional[Usage] = None
 
             try:
-                self._raise_if_interrupted()
+                self._raise_if_interrupted(run_control)
 
                 # Filter compacted messages - only send messages after the last summary
                 filtered_messages = self._filter_compacted_messages()
@@ -1160,7 +1185,7 @@ class QueryEngine:
                     stream=True,
                     system_prompt=system_prompt,
                 ):
-                    self._raise_if_interrupted()
+                    self._raise_if_interrupted(run_control)
                     extract_final_reasoning = getattr(
                         self._client, "extract_final_message_reasoning", None
                     )
@@ -1239,7 +1264,7 @@ class QueryEngine:
                             stop_reason = finish_reason
 
                 # Build content blocks
-                self._raise_if_interrupted()
+                self._raise_if_interrupted(run_control)
                 content_blocks: List[ContentBlock] = []
 
                 if current_thinking:
@@ -1315,7 +1340,7 @@ class QueryEngine:
                 assistant_message_id = assistant_message.uuid
 
                 for tool_use in tool_use_blocks:
-                    self._raise_if_interrupted()
+                    self._raise_if_interrupted(run_control)
                     if not tool_use.id or not tool_use.name:
                         continue
 
@@ -1341,7 +1366,8 @@ class QueryEngine:
                     try:
                         # Execute tool with message ID for nearby instruction loading
                         result = await tool.call(
-                            tool_use.input, self._get_tool_context(assistant_message_id)
+                            tool_use.input,
+                            self._get_tool_context(run_control, assistant_message_id),
                         )
                         
                         # Handle structured tool results (e.g., Read tool with metadata)
@@ -1409,7 +1435,7 @@ class QueryEngine:
                         logger.warning(f"Failed to create patch: {e}")
 
                 # Add tool result messages
-                self._raise_if_interrupted()
+                self._raise_if_interrupted(run_control)
                 for tool_use_id, result, is_error, metadata in tool_results:
                     tool_msg = Message.tool_result_message(
                         tool_use_id, result, is_error, metadata

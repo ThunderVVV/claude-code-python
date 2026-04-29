@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed - 2026-04-29
 
+#### TUI Interrupt Immediate Resubmit and Query Guard
+- Added `QueryGuard` state machine with generation tracking to prevent overlapping queries and allow immediate resubmit after interrupt
+- Refactored `QueryEngine` interrupt handling with `_RunControl` dataclass to properly track per-submit cancellation state (aligned with TypeScript implementation)
+- Made `QueryEngine.interrupt()` async and return a boolean indicating whether an active query was actually interrupted
+- Changed `/api/interrupt` endpoint to return `{"success": <boolean>}` instead of always returning `{"success": true}`
+- TUI now immediately releases the prompt when user hits Escape, without waiting for the server's interrupt response
+- Added `tests/test_ui_interrupt_cancel.py` with test for interrupt allowing immediate resubmit
+
+#### Web UI Interrupt Immediate UI Reset and Query Guard
+- Added `QueryGuard` class to web frontend composables and static HTML
+- Rewrote `sendInterrupt()` to immediately reset UI state instead of waiting for server response
+- Added request generation tracking to handle stale streaming events after interrupt/resubmit
+- Extracted `requestInterrupt()` helper to send server interrupt in fire-and-forget fashion without blocking UI
+- Fixed race condition where streaming events from an interrupted query could still update UI after a new query had been submitted
+
 #### Strict OpenAI Tool Schemas
 - Normalized exported tool input schemas so `required` includes every declared property when generating strict OpenAI function schemas
 - Updated tool definition tests to assert `required` matches the schema property list

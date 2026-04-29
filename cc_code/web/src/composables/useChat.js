@@ -2,6 +2,36 @@ import { ref, computed, nextTick } from 'vue'
 import { formatTokens, hasWebReference, getNonEmptyLines, prefersCompactDiff, updateAppViewportHeight } from '@/utils/format'
 import { createDiff } from '@/utils/diffViewer'
 
+class QueryGuard {
+    constructor() {
+        this._status = 'idle'
+        this._generation = 0
+    }
+
+    tryStart() {
+        if (this._status === 'running') return null
+        this._status = 'running'
+        this._generation += 1
+        return this._generation
+    }
+
+    end(generation) {
+        if (this._generation !== generation || this._status !== 'running') return false
+        this._status = 'idle'
+        return true
+    }
+
+    forceEnd() {
+        if (this._status === 'idle') return
+        this._status = 'idle'
+        this._generation += 1
+    }
+
+    get isActive() {
+        return this._status !== 'idle'
+    }
+}
+
 export function useChat() {
     // State
     const messages = ref([])
@@ -42,7 +72,8 @@ export function useChat() {
 
     // For aborting fetch request
     const abortController = ref(null)
-    const isInterrupting = ref(false)
+    const queryGuard = new QueryGuard()
+    const activeRequestGeneration = ref(null)
 
     // Refs
     const messagesContainer = ref(null)
@@ -360,6 +391,24 @@ export function useChat() {
         showTokenDetails.value = false
     }
 
+    const isCurrentRequestGeneration = (generation) => activeRequestGeneration.value === generation
+
+    const requestInterrupt = async () => {
+        if (!sessionId.value) return
+        try {
+            await fetch('/api/interrupt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId.value,
+                    reason: 'user_interrupt'
+                })
+            })
+        } catch (error) {
+            console.error('Interrupt error:', error)
+        }
+    }
+
     const toggleWorkspaceDetails = () => {
         const nextState = !showWorkspaceDetails.value
         closeInfoPopovers()
@@ -457,7 +506,7 @@ export function useChat() {
 
     const sendMessage = async () => {
         let text = inputText.value.trim()
-        if (!text || isLoading.value || isInterrupting.value) return
+        if (!text || queryGuard.isActive) return
 
         if (webSearchEnabled.value && !sessionHasUsedWebSearch.value) {
             text = '@web ' + text
@@ -477,7 +526,17 @@ export function useChat() {
         isTyping.value = true
         accumulatedText.value = ''
 
-        abortController.value = new AbortController()
+        const generation = queryGuard.tryStart()
+        if (generation === null) {
+            isLoading.value = false
+            isStreaming.value = false
+            isTyping.value = false
+            return
+        }
+
+        activeRequestGeneration.value = generation
+        const requestAbortController = new AbortController()
+        abortController.value = requestAbortController
 
         autoFollowOutput.value = true
         scrollToBottom(true)
@@ -490,7 +549,7 @@ export function useChat() {
                     session_id: sessionId.value,
                     user_text: text
                 }),
-                signal: abortController.value.signal
+                signal: requestAbortController.signal
             })
 
             const reader = response.body.getReader()
@@ -498,6 +557,8 @@ export function useChat() {
             let buffer = ''
 
             while (true) {
+                if (!isCurrentRequestGeneration(generation)) break
+
                 const { done, value } = await reader.read()
                 if (done) break
 
@@ -506,6 +567,7 @@ export function useChat() {
                 buffer = lines.pop() || ''
 
                 for (const line of lines) {
+                    if (!isCurrentRequestGeneration(generation)) break
                     if (!line.startsWith('data: ')) continue
                     try {
                         const data = JSON.parse(line.slice(6))
@@ -522,45 +584,38 @@ export function useChat() {
                 console.error('Chat error:', error)
             }
         } finally {
-            if (!isInterrupting.value) {
+            if (abortController.value === requestAbortController) {
+                abortController.value = null
+            }
+            if (queryGuard.end(generation)) {
+                activeRequestGeneration.value = null
                 isLoading.value = false
                 isStreaming.value = false
                 isTyping.value = false
             }
-            abortController.value = null
         }
     }
 
     const sendInterrupt = async () => {
-        if (!abortController.value) return
+        if (!queryGuard.isActive && !abortController.value) return
 
-        isInterrupting.value = true
+        queryGuard.forceEnd()
+        activeRequestGeneration.value = null
 
-        try {
-            abortController.value.abort()
-
-            if (sessionId.value) {
-                await fetch('/api/interrupt', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: sessionId.value,
-                        reason: 'user_interrupt'
-                    })
-                })
-            }
-
-            currentAssistantMessage.value = null
-            accumulatedText.value = ''
-            pendingToolUses.value = {}
-        } catch (error) {
-            console.error('Interrupt error:', error)
-        } finally {
-            isInterrupting.value = false
-            isLoading.value = false
-            isStreaming.value = false
-            isTyping.value = false
+        const activeAbortController = abortController.value
+        abortController.value = null
+        if (activeAbortController) {
+            activeAbortController.abort('user-cancel')
         }
+
+        currentAssistantMessage.value = null
+        accumulatedText.value = ''
+        pendingToolUses.value = {}
+        isLoading.value = false
+        isStreaming.value = false
+        isTyping.value = false
+
+        void requestInterrupt()
     }
 
     const getCurrentWorkspace = async () => {

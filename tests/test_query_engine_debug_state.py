@@ -29,7 +29,7 @@ def test_query_engine_debug_state_serializes_members(tmp_path):
     assert debug_state["class"] == "QueryEngine"
     assert debug_state["member_count"] > 0
     assert "_snapshot_manager" in debug_state["members"]
-    assert "_cancel_event" in debug_state["members"]
+    assert "_active_run" in debug_state["members"]
 
     # Must be JSON-serializable for /api/debug responses.
     json.dumps(debug_state, ensure_ascii=False)
