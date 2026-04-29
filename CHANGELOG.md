@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-04-30
+
+#### Web UI Interrupt Abort Controller Order
+- Fixed race condition in web UI interrupt handling by reordering abort controller operations
+- Now clear UI state first, then abort controller, then send server interrupt request (fire-and-forget)
+- Changed `requestInterrupt()` to only send request if `sessionId` is available
+- Updated both Vite source (`useChat.js`) and static build (`index.html`)
+- Aligns interrupt flow with the TUI implementation for consistent behavior
+
 ### Added - 2026-04-30
 
 #### Session Restore for Revert Endpoint

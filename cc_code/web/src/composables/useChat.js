@@ -394,18 +394,19 @@ export function useChat() {
     const isCurrentRequestGeneration = (generation) => activeRequestGeneration.value === generation
 
     const requestInterrupt = async () => {
-        if (!sessionId.value) return
-        try {
-            await fetch('/api/interrupt', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: sessionId.value,
-                    reason: 'user_interrupt'
+        if (sessionId.value) {
+            try {
+                await fetch('/api/interrupt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId.value,
+                        reason: 'user_interrupt'
+                    })
                 })
-            })
-        } catch (error) {
-            console.error('Interrupt error:', error)
+            } catch (error) {
+                console.error('Interrupt error:', error)
+            }
         }
     }
 
@@ -602,18 +603,18 @@ export function useChat() {
         queryGuard.forceEnd()
         activeRequestGeneration.value = null
 
-        const activeAbortController = abortController.value
-        abortController.value = null
-        if (activeAbortController) {
-            activeAbortController.abort('user-cancel')
-        }
-
         currentAssistantMessage.value = null
         accumulatedText.value = ''
         pendingToolUses.value = {}
         isLoading.value = false
         isStreaming.value = false
         isTyping.value = false
+
+        if (!abortController.value) return
+
+        const activeAbortController = abortController.value
+        abortController.value = null
+        activeAbortController.abort('user-cancel')
 
         void requestInterrupt()
     }
