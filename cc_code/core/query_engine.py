@@ -507,6 +507,22 @@ class QueryEngine:
                     )
         return patches
 
+    def _collect_patch_file_paths(self, patches: List["Patch"]) -> List[str]:
+        """Collect unique candidate file paths referenced by stored patches."""
+        paths: List[str] = []
+        seen: set[str] = set()
+
+        for patch in patches:
+            for file_path in patch.files:
+                normalized = file_path.strip()
+                if not normalized or normalized in seen:
+                    continue
+
+                seen.add(normalized)
+                paths.append(normalized)
+
+        return paths
+
     def _find_revert_point(
         self,
         messages: List[Message],
@@ -576,8 +592,11 @@ class QueryEngine:
         earliest_prev_hash = ""
         if patches:
             earliest_prev_hash = patches[0].prev_hash
-            latest_hash = patches[-1].hash
-            diff = self._snapshot_manager.diff(earliest_prev_hash, latest_hash)
+            compare_hash = patches[-1].hash
+            if candidate_files:
+                compare_hash = self._snapshot_manager.track(candidate_files)
+
+            diff = self._snapshot_manager.diff(earliest_prev_hash, compare_hash)
             revert_point.diff = diff
             self._snapshot_manager.restore(earliest_prev_hash)
         else:

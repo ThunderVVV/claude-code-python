@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added - 2026-04-30
 
+#### Session Restore for Revert Endpoint
+- Added `SessionManager.get_or_restore_engine()` to restore engine from persisted session
+- Modified `/api/revert` endpoint to restore engine from session store if not in memory
+- Modified `/api/snapshot_status` endpoint to also restore engine when needed
+- Updated `QueryEngine._find_revert_point()` with improved candidate file tracking
+- Added `_collect_patch_file_paths()` helper to collect unique file paths from patches
+- Added test `test_revert_restores_persisted_session_engine()` for revert with persisted session
+
 #### TUI Auto-Copy Selection
 - Changed TUI copy behavior to automatically copy selected text on mouse release
 - Replaced explicit `Ctrl+C` copy shortcut with auto-copy on primary mouse button release

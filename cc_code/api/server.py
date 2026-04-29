@@ -133,6 +133,21 @@ class SessionManager:
 
         return self._session_store.load_session(session_id)
 
+    async def get_or_restore_engine(self, session_id: str) -> Optional[QueryEngine]:
+        """Return a live engine, restoring it from persisted session state if needed."""
+        engine = self._engines.get(session_id)
+        if engine:
+            return engine
+
+        session = self._session_store.load_session(session_id)
+        if not session:
+            return None
+
+        return await self.get_or_create_engine(
+            session_id,
+            session.working_directory or "",
+        )
+
 
 # Request models
 class ChatRequest(BaseModel):
@@ -289,7 +304,7 @@ async def revert(request: RevertRequest, http_request: Request):
         )
 
         session_manager = http_request.app.state.session_manager
-        engine = session_manager.get_engine(request.session_id)
+        engine = await session_manager.get_or_restore_engine(request.session_id)
         if not engine:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -419,7 +434,7 @@ async def get_snapshot_status(session_id: str, http_request: Request):
     logger.info(f"GET /snapshot_status/{session_id}")
     try:
         session_manager = http_request.app.state.session_manager
-        engine = session_manager.get_engine(session_id)
+        engine = await session_manager.get_or_restore_engine(session_id)
         if not engine:
             raise HTTPException(status_code=404, detail="Session not found")
 

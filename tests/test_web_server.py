@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from fastapi.testclient import TestClient
+
+from cc_code.core.snapshot import DiffSummary, RevertResult
 from cc_code.core.messages import (
     Message,
     MessageCompleteEvent,
+    SessionState,
     message_to_api_dict,
     event_to_api_dict,
 )
@@ -67,6 +71,7 @@ def test_create_api_app_uses_prefixed_routes_by_default():
 
     assert "/api/chat" in paths
     assert "/api/interrupt" in paths
+    assert "/api/revert" in paths
     assert "/api/debug/{session_id}" in paths
     assert "/api/sessions" in paths
     assert "/health" in paths
@@ -83,3 +88,64 @@ def test_create_api_app_can_build_unprefixed_routes():
     assert "/sessions" in paths
     assert "/health" in paths
     assert "/api/chat" not in paths
+
+
+def test_revert_restores_persisted_session_engine(tmp_path, monkeypatch):
+    app = create_api_app()
+    session_manager = app.state.session_manager
+    persisted = SessionState(
+        session_id="session-1",
+        working_directory=str(tmp_path),
+        messages=[Message.user_message("hello")],
+    )
+
+    class _FakeEngine:
+        async def revert(self, target_message_id=None, target_part_id=None):
+            assert target_message_id == "msg-1"
+            assert target_part_id is None
+            return RevertResult(
+                success=True,
+                message="reverted",
+                summary=DiffSummary(additions=1, deletions=2, files=1),
+            )
+
+    fake_engine = _FakeEngine()
+
+    monkeypatch.setattr(
+        session_manager._session_store,
+        "load_session",
+        lambda session_id: persisted if session_id == "session-1" else None,
+    )
+    monkeypatch.setattr(session_manager, "get_engine", lambda session_id: None)
+
+    async def _fake_get_or_create_engine(session_id, working_directory="", model_id=None):
+        assert session_id == "session-1"
+        assert working_directory == str(tmp_path)
+        assert model_id is None
+        return fake_engine
+
+    monkeypatch.setattr(
+        session_manager,
+        "get_or_create_engine",
+        _fake_get_or_create_engine,
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/revert",
+        json={
+            "session_id": "session-1",
+            "target_message_id": "msg-1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "message": "reverted",
+        "summary": {
+            "additions": 1,
+            "deletions": 2,
+            "files": 1,
+        },
+    }
