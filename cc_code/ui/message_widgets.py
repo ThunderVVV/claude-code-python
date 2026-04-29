@@ -416,15 +416,6 @@ class ToolUseWidget(VerticalGroup):
         """Compose the detail widgets."""
         diff_view = self._build_diff_view()
 
-        # Input parameters
-        exclude_keys = self._get_input_exclusions(diff_view)
-        detail_lines = format_tool_input_details(self.tool_input, exclude_keys)
-        if detail_lines:
-            for line in detail_lines:
-                yield Static(line, classes="tool-param", markup=False)
-        elif self._result is None:
-            yield Static("Waiting for parameters", classes="tool-param", markup=False)
-
         # Diff view or output
         if diff_view is not None:
             yield diff_view
