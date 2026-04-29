@@ -206,6 +206,7 @@ WelcomeWidget:focus {
 }
 
 .system-message-block {
+    padding: 1 2;
     background: $surface;
 }
 
