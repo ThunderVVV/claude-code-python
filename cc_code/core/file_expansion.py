@@ -112,6 +112,9 @@ def has_web_reference(text: str) -> bool:
 
 
 def expand_web(text: str) -> str:
+    if not has_web_reference(text):
+        return text
+
     import os
     from pathlib import Path
 
