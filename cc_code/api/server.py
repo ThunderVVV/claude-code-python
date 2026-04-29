@@ -600,16 +600,12 @@ def create_app(
 
     # Web UI dist path (Vite build output)
     web_dist_path = Path(__file__).parent.parent / "web" / "dist"
-    web_static_path = Path(__file__).parent.parent / "web" / "static"
 
     @app.get("/", response_class=HTMLResponse)
     async def index():
-        """Serve Vue app"""
+        """Serve Vue app from Vite build"""
         logger.info("GET /")
-        # Try Vite build first, then fallback to static
         html_path = web_dist_path / "index.html"
-        if not html_path.exists():
-            html_path = web_static_path / "index.html"
         if html_path.exists():
             return HTMLResponse(content=html_path.read_text(), media_type="text/html")
         return HTMLResponse(
@@ -618,12 +614,9 @@ def create_app(
 
     app.include_router(api_router, prefix=_normalize_api_prefix(api_prefix))
 
-    # Mount static files - Vite build output takes priority
+    # Mount static files from Vite build output
     if web_dist_path.exists():
         # Vite build: assets are in dist/assets/
         app.mount("/assets", StaticFiles(directory=web_dist_path / "assets"), name="assets")
-    elif web_static_path.exists():
-        # Legacy static files
-        app.mount("/static", StaticFiles(directory=web_static_path), name="static")
 
     return app

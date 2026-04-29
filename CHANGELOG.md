@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed - 2026-04-30
+
+#### Legacy Static HTML + CDN Web UI
+- Removed `cc_code/web/static/` directory with legacy CDN-based web UI
+- Removed `/static` mount from FastAPI server
+- Removed fallback to static HTML in index route
+- Removed `tests/test_web_frontend_source.py` that tested legacy static files
+- Merged `diff-viewer.css` content into `src/style.css`
+- Server now only serves Vite-built web UI from `dist/` directory
+
 ### Fixed - 2026-04-30
 
 #### Web UI Interrupt Abort Controller Order

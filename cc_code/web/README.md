@@ -57,17 +57,4 @@ npm run preview
 
 - 开发时 API 请求会自动代理到 `http://localhost:8000`
 - 生产构建输出到 `dist/` 目录
-- 后端会自动优先使用 `dist/` 目录，回退到 `static/` 目录
-
-## 从旧版迁移
-
-原 `static/` 目录中的文件保留作为备份，新的 Vite 项目使用 `src/` 目录结构：
-
-| 旧版 (CDN) | 新版 (Vite) |
-|-----------|------------|
-| Vue 3 CDN | `vue` npm 包 |
-| Tailwind CDN | `tailwindcss` + PostCSS |
-| Marked CDN | `marked` npm 包 |
-| Highlight.js CDN | `highlight.js` npm 包 |
-| Diff2Html CDN | `diff2html` + `diff` npm 包 |
-| 单 HTML 文件 | 组件化拆分 |
+- 后端会自动使用 `dist/` 目录作为 Web UI
