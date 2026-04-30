@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-05-01
+
+#### Web UI Stylesheet Architecture Refactor
+- Refactored `cc_code/web/src/style.css` into a layered stylesheet entrypoint that imports focused files from `cc_code/web/src/styles/`
+- Added `foundation/` stylesheet modules for vendor CSS, Tailwind directives, design tokens, base rules, and shared utilities
+- Added `app/` stylesheet modules for shell layout, chat surface, markdown rendering, composer UI, overlays, and responsive breakpoints
+- Kept `src/style.css` as the single Vite entrypoint so existing frontend imports and bundling behavior remain unchanged
+- Updated `cc_code/web/README.md` to document the new stylesheet layout
+
 ### Added - 2026-04-30
 
 #### Web UI Session Workspace Picker

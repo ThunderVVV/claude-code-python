@@ -1,0 +1,124 @@
+.markdown-body {
+    color: var(--text-main);
+    line-height: 1.72;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    color: var(--text-strong);
+    line-height: 1.2;
+    margin: 0.85em 0 0.28em;
+    font-family: 'Manrope', var(--font-sans);
+    letter-spacing: -0.02em;
+}
+
+.markdown-body h1 {
+    font-size: 1.6em;
+}
+
+.markdown-body h2 {
+    font-size: 1.34em;
+}
+
+.markdown-body h3 {
+    font-size: 1.16em;
+}
+
+.markdown-body p,
+.markdown-body li,
+.markdown-body blockquote,
+.text-container,
+.tool-summary,
+.tool-result-frame {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol {
+    margin: 0.34em 0;
+}
+
+.markdown-body p {
+    color: #2f3d4f;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    padding-left: 1.4em;
+}
+
+.markdown-body li {
+    margin: 0.24em 0;
+}
+
+.markdown-body :not(pre) > code,
+.tool-result-frame code {
+    padding: 0.15em 0.42em;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.06);
+    color: #0f172a;
+    white-space: break-spaces;
+}
+
+.markdown-body pre,
+.file-expansion pre {
+    margin: 0.8em 0;
+    padding: 1em;
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    background: #f8fafc !important;
+    color: #0f172a;
+}
+
+.markdown-body pre code {
+    background: transparent !important;
+    padding: 0;
+}
+
+.markdown-body a {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-decoration-color: rgba(15, 23, 42, 0.18);
+}
+
+.markdown-body blockquote {
+    margin: 0.5em 0;
+    padding-left: 1em;
+    border-left: 3px solid rgba(15, 23, 42, 0.14);
+    color: var(--text-muted);
+}
+
+.markdown-table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0.5em 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.markdown-table-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.markdown-table-wrapper th,
+.markdown-table-wrapper td {
+    padding: 0.72em 0.9em;
+    border-bottom: 1px solid rgba(59, 66, 82, 0.08);
+    text-align: left;
+}
+
+.markdown-table-wrapper th {
+    color: var(--text-strong);
+    font-weight: 700;
+    background: rgba(248, 250, 252, 0.9);
+}

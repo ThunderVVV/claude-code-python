@@ -23,7 +23,10 @@ cc_code/web/
 ├── src/
 │   ├── main.js          # 入口脚本
 │   ├── App.vue          # 根组件
-│   ├── style.css        # 全局样式
+│   ├── style.css        # 全局样式入口
+│   ├── styles/          # 分层样式模块
+│   │   ├── foundation/  # vendor / tailwind / tokens / base / utilities
+│   │   └── app/         # shell / chat / markdown / composer / overlays / responsive
 │   ├── components/      # Vue 组件
 │   │   └── MessageItem.vue
 │   ├── composables/     # 组合式函数
