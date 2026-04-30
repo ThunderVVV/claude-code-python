@@ -151,27 +151,98 @@ cc-py-dev --debug      # pip 开发安装
 
 配置统一保存在 `~/.cc-py/settings.json`。
 
-示例：
+### 基础配置示例
 
 ```json
 {
-  "current_model": "gpt-4-1",
+  "current_model": "openai:gpt-4",
   "theme": "atom-one-dark",
-  "models": {
-    "gpt-4-1": {
-      "api_key": "your-api-key",
+  "providers": {
+    "openai": {
+      "api_key": "your-openai-api-key",
       "api_url": "https://api.openai.com/v1",
-      "model_name": "gpt-4.1",
-      "context": 128000
+      "models": {
+        "gpt-4": {
+          "model_name": "gpt-4",
+          "context": 128000
+        },
+        "gpt-3.5-turbo": {
+          "model_name": "gpt-3.5-turbo",
+          "context": 16384
+        }
+      }
     }
   }
 }
 ```
 
-说明：
-- `current_model`：当前默认模型配置 ID
-- `theme`：`cc-py` 的 TUI 主题，默认 `atom-one-dark`, 可选 `tokyo-night`等其他textual支持主题
-- `models.<id>`：每个模型固定包含 `api_key`、`api_url`、`model_name`、`context`
+### 多提供商配置示例
+
+```json
+{
+  "current_model": "openai:gpt-4",
+  "theme": "atom-one-dark",
+  "providers": {
+    "openai": {
+      "api_key": "your-openai-api-key",
+      "api_url": "https://api.openai.com/v1",
+      "models": {
+        "gpt-4": {
+          "model_name": "gpt-4",
+          "context": 128000
+        },
+        "gpt-3.5-turbo": {
+          "model_name": "gpt-3.5-turbo",
+          "context": 16384
+        }
+      }
+    },
+    "doubao": {
+      "api_key": "your-doubao-api-key",
+      "api_url": "https://ark.cn-beijing.volces.com/api/v3",
+      "models": {
+        "doubao-pro": {
+          "model_name": "doubao-seed-2-0-pro-260215",
+          "context": 32000
+        }
+      }
+    }
+  }
+}
+```
+
+### 配置项说明
+
+- `current_model`：当前默认模型配置 ID，格式为 `provider_id:model_id`
+- `theme`：`cc-py` 的 TUI 主题，默认 `atom-one-dark`，支持以下主题：
+  - atom-one-dark
+  - atom-one-light
+  - catppuccin-frappe
+  - catppuccin-latte
+  - catppuccin-macchiato
+  - catppuccin-mocha
+  - dracula
+  - flexoki
+  - gruvbox
+  - monokai
+  - nord
+  - rose-pine
+  - rose-pine-dawn
+  - rose-pine-moon
+  - solarized-dark
+  - solarized-light
+  - textual-ansi
+  - textual-dark
+  - textual-light
+  - tokyo-night
+- `providers`：包含一个或多个模型提供商的配置
+  - `provider_id`：提供商的唯一标识符（如 "openai"、"doubao"）
+    - `api_key`：API 密钥
+    - `api_url`：API 端点 URL
+    - `models`：包含该提供商下的所有模型
+      - `model_id`：模型的唯一标识符
+        - `model_name`：模型的实际名称（API 调用时使用）
+        - `context`：模型的上下文窗口大小
 
 ## 可选 Skills（@web 搜索功能）
 
