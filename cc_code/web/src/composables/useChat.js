@@ -605,7 +605,12 @@ export function useChat() {
             currentAssistantMessage.value = null
             accumulatedText.value = ''
             pendingToolUses.value = {}
-            void loadSessions()
+            // A single request can contain multiple tool-execution turns.
+            // Refresh sessions only after the final turn to avoid redundant
+            // /api/sessions requests while the same response is still running.
+            if (!data.has_more_turns) {
+                void loadSessions()
+            }
             scrollToBottom()
             return
         }
