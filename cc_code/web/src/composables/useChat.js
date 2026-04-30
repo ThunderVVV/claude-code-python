@@ -521,6 +521,8 @@ export function useChat() {
     watch(showSettingsModal, (val) => {
         if (val) {
             loadSettings()
+            availableModels.value = []
+            selectedModels.value = []
         }
     })
 
