@@ -16,14 +16,32 @@ DEFAULT_THEME_NAME = "atom-one-dark"
 
 SETTINGS_EXAMPLE = """
 {
-  "current_model": "gpt-4",
+  "current_model": "openai:gpt-4",
   "theme": "atom-one-dark",
-  "models": {
-    "gpt-4": {
-      "api_key": "your-api-key",
+  "providers": {
+    "openai": {
+      "api_key": "your-openai-api-key",
       "api_url": "https://api.openai.com/v1",
-      "model_name": "gpt-4",
-      "context": 128000
+      "models": {
+        "gpt-4": {
+          "model_name": "gpt-4",
+          "context": 128000
+        },
+        "gpt-3.5-turbo": {
+          "model_name": "gpt-3.5-turbo",
+          "context": 16384
+        }
+      }
+    },
+    "doubao": {
+      "api_key": "your-doubao-api-key",
+      "api_url": "https://ark.cn-beijing.volces.com/api/v3",
+      "models": {
+        "doubao-pro": {
+          "model_name": "doubao-seed-2-0-pro-260215",
+          "context": 32000
+        }
+      }
     }
   }
 }
@@ -31,24 +49,36 @@ SETTINGS_EXAMPLE = """
 
 
 @dataclass
-class ModelSettings:
-    api_key: str
-    api_url: str
+class ModelInProviderSettings:
     model_name: str
     context: int
+
+
+@dataclass
+class ProviderSettings:
+    api_key: str
+    api_url: str
+    models: dict[str, ModelInProviderSettings] = field(default_factory=dict)
 
 
 @dataclass
 class AppSettings:
     current_model: str = ""
     theme: str = DEFAULT_THEME_NAME
-    models: dict[str, ModelSettings] = field(default_factory=dict)
+    providers: dict[str, ProviderSettings] = field(default_factory=dict)
     instructions: list[str] = field(default_factory=list)
 
-    def get_current_model(self) -> Optional[ModelSettings]:
-        if not self.current_model:
+    def get_current_model(self) -> Optional[tuple[ProviderSettings, ModelInProviderSettings]]:
+        if not self.current_model or ":" not in self.current_model:
             return None
-        return self.models.get(self.current_model)
+        provider_id, model_id = self.current_model.split(":", 1)
+        provider = self.providers.get(provider_id)
+        if not provider:
+            return None
+        model = provider.models.get(model_id)
+        if not model:
+            return None
+        return provider, model
 
 
 class SettingsStore:
@@ -66,35 +96,55 @@ class SettingsStore:
         except Exception:
             return AppSettings()
 
-        models: dict[str, ModelSettings] = {}
-        raw_models = payload.get("models", {})
-        if isinstance(raw_models, dict):
-            for model_id, model_payload in raw_models.items():
-                if not isinstance(model_payload, dict):
+        providers: dict[str, ProviderSettings] = {}
+        raw_providers = payload.get("providers", {})
+        if isinstance(raw_providers, dict):
+            for provider_id, provider_payload in raw_providers.items():
+                if not isinstance(provider_payload, dict):
                     continue
-                try:
-                    context = int(model_payload.get("context", 0))
-                except (TypeError, ValueError):
-                    context = 0
-                if context <= 0:
+                api_key = str(provider_payload.get("api_key", "")).strip()
+                api_url = str(provider_payload.get("api_url", "")).strip()
+                if not api_key or not api_url:
                     continue
-
-                api_key = str(model_payload.get("api_key", "")).strip()
-                api_url = str(model_payload.get("api_url", "")).strip()
-                model_name = str(model_payload.get("model_name", "")).strip()
-                if not api_key or not api_url or not model_name:
-                    continue
-
-                models[str(model_id)] = ModelSettings(
-                    api_key=api_key,
-                    api_url=api_url,
-                    model_name=model_name,
-                    context=context,
-                )
+                raw_models = provider_payload.get("models", {})
+                provider_models = {}
+                if isinstance(raw_models, dict):
+                    for model_id, model_payload in raw_models.items():
+                        if not isinstance(model_payload, dict):
+                            continue
+                        try:
+                            context = int(model_payload.get("context", 0))
+                        except (TypeError, ValueError):
+                            context = 0
+                        if context <= 0:
+                            continue
+                        model_name = str(model_payload.get("model_name", "")).strip()
+                        if not model_name:
+                            continue
+                        provider_models[str(model_id)] = ModelInProviderSettings(
+                            model_name=model_name,
+                            context=context,
+                        )
+                if provider_models:
+                    providers[str(provider_id)] = ProviderSettings(
+                        api_key=api_key,
+                        api_url=api_url,
+                        models=provider_models
+                    )
 
         current_model = str(payload.get("current_model", "")).strip()
-        if current_model not in models and models:
-            current_model = next(iter(models))
+        # Validate current model exists
+        valid_current = False
+        if current_model and ":" in current_model:
+            provider_id, model_id = current_model.split(":", 1)
+            if provider_id in providers and model_id in providers[provider_id].models:
+                valid_current = True
+        if not valid_current and providers:
+            # Pick first provider, first model as default
+            first_provider_id = next(iter(providers))
+            first_provider = providers[first_provider_id]
+            first_model_id = next(iter(first_provider.models))
+            current_model = f"{first_provider_id}:{first_model_id}"
 
         theme = (
             str(payload.get("theme", DEFAULT_THEME_NAME)).strip() or DEFAULT_THEME_NAME
@@ -110,7 +160,7 @@ class SettingsStore:
         return AppSettings(
             current_model=current_model,
             theme=theme,
-            models=models,
+            providers=providers,
             instructions=instructions,
         )
 
@@ -119,9 +169,9 @@ class SettingsStore:
         payload = {
             "current_model": settings.current_model,
             "theme": settings.theme,
-            "models": {
-                model_id: asdict(model_settings)
-                for model_id, model_settings in settings.models.items()
+            "providers": {
+                provider_id: asdict(provider_settings)
+                for provider_id, provider_settings in settings.providers.items()
             },
             "instructions": settings.instructions,
         }
@@ -133,8 +183,8 @@ class SettingsStore:
     def ensure_settings(self) -> AppSettings:
         """Load settings, exit with error if not configured."""
         settings = self.load()
-        if not settings.models:
-            print(f"Error: No model settings found in {self.path}")
+        if not settings.providers:
+            print(f"Error: No provider settings found in {self.path}")
             print("\nPlease create the file with the following format:")
             print(SETTINGS_EXAMPLE)
             sys.exit(1)
@@ -146,20 +196,24 @@ def build_client_config(
 ) -> OpenAIClientConfig:
     """Build an OpenAI client config for the selected model."""
     resolved_model_id = model_id or settings.current_model
-    if not resolved_model_id:
-        raise ValueError("No model configured")
+    if not resolved_model_id or ":" not in resolved_model_id:
+        raise ValueError("No valid model configured, expected format provider:model_id")
 
-    model_settings = settings.models.get(resolved_model_id)
+    provider_id, model_short_id = resolved_model_id.split(":", 1)
+    provider = settings.providers.get(provider_id)
+    if provider is None:
+        raise ValueError(f"Unknown provider: {provider_id}")
+    model_settings = provider.models.get(model_short_id)
     if model_settings is None:
-        raise ValueError(f"Unknown model configuration: {resolved_model_id}")
+        raise ValueError(f"Unknown model {model_short_id} for provider {provider_id}")
 
-    api_url = model_settings.api_url
+    api_url = provider.api_url
     if api_url.endswith("/v1/chat/completions"):
         api_url = api_url.removesuffix("/chat/completions")
 
     return OpenAIClientConfig(
         api_url=api_url,
-        api_key=model_settings.api_key,
+        api_key=provider.api_key,
         model_name=model_settings.model_name,
         model_id=resolved_model_id,
     )
@@ -168,8 +222,9 @@ def build_client_config(
 def find_model_id_by_model_name(
     settings: AppSettings, model_name: str
 ) -> Optional[str]:
-    """Resolve a saved model name back to a settings model id."""
-    for model_id, model_settings in settings.models.items():
-        if model_settings.model_name == model_name:
-            return model_id
+    """Resolve a saved model name back to a settings model id (format: provider:model_id)."""
+    for provider_id, provider in settings.providers.items():
+        for model_id, model_settings in provider.models.items():
+            if model_settings.model_name == model_name:
+                return f"{provider_id}:{model_id}"
     return None

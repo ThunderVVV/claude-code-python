@@ -234,7 +234,7 @@ def api_cmd(host: str, port: int, debug: bool) -> None:
     settings_store = SettingsStore()
     settings = settings_store.ensure_settings()
 
-    if not settings.models or not settings.current_model:
+    if not settings.providers or not settings.current_model:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
             + "No model settings found in ~/.cc-py/settings.json.",

@@ -1,4 +1,4 @@
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { formatTokens, hasWebReference, getNonEmptyLines, prefersCompactDiff, updateAppViewportHeight } from '@/utils/format'
 import { createDiff } from '@/utils/diffViewer'
 
@@ -57,6 +57,15 @@ export function useChat() {
     const currentWorkspace = ref('')
     const webSearchEnabled = ref(false)
     const sessionHasUsedWebSearch = ref(false)
+
+    // Settings
+    const showSettingsModal = ref(false)
+    const activeSettingsTab = ref('models')
+    const settings = ref({})
+    const settingsLoading = ref(false)
+    const selectedProvider = ref('')
+    const availableModels = ref([])
+    const selectedModels = ref([])
 
     // Input history
     const inputHistory = ref(JSON.parse(localStorage.getItem('inputHistory') || '[]'))
@@ -421,6 +430,99 @@ export function useChat() {
         closeInfoPopovers()
         showTokenDetails.value = nextState
     }
+
+    // Settings methods
+    const loadSettings = async () => {
+        settingsLoading.value = true
+        try {
+            const res = await fetch('/api/settings')
+            if (res.ok) {
+                settings.value = await res.json()
+                if (settings.value.providers && Object.keys(settings.value.providers).length > 0) {
+                    selectedProvider.value = Object.keys(settings.value.providers)[0]
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load settings:', error)
+        } finally {
+            settingsLoading.value = false
+        }
+    }
+
+    const fetchProviderModels = async () => {
+        if (!selectedProvider.value) return
+        try {
+            const res = await fetch(`/api/providers/${selectedProvider.value}/models`)
+            if (res.ok) {
+                const data = await res.json()
+                availableModels.value = data.models
+                selectedModels.value = []
+            }
+        } catch (error) {
+            console.error('Failed to fetch provider models:', error)
+            alert(`获取模型失败: ${error.message}`)
+        }
+    }
+
+    const addSelectedModels = () => {
+        if (!selectedProvider.value || selectedModels.value.length === 0) return
+        const provider = settings.value.providers[selectedProvider.value]
+        if (!provider) return
+        if (!provider.models) provider.models = {}
+        selectedModels.value.forEach(modelId => {
+            const model = availableModels.value.find(m => m.id === modelId)
+            if (model) {
+                provider.models[modelId] = {
+                    model_name: model.name,
+                    context: model.context || 32000
+                }
+            }
+        })
+        selectedModels.value = []
+        availableModels.value = []
+    }
+
+    const deleteModel = (modelId) => {
+        if (!selectedProvider.value) return
+        const provider = settings.value.providers[selectedProvider.value]
+        if (provider && provider.models) {
+            delete provider.models[modelId]
+        }
+    }
+
+    const saveSettings = async () => {
+        try {
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings.value)
+            })
+            if (res.ok) {
+                alert('设置保存成功')
+                showSettingsModal.value = false
+                loadModels() // 重新加载模型列表
+            } else {
+                const err = await res.json()
+                alert(`保存失败: ${err.detail || '未知错误'}`)
+            }
+        } catch (error) {
+            console.error('Failed to save settings:', error)
+            alert(`保存失败: ${error.message}`)
+        }
+    }
+
+    // Computed for current provider
+    const currentProvider = computed(() => {
+        if (!selectedProvider.value || !settings.value.providers) return {}
+        return settings.value.providers[selectedProvider.value] || {}
+    })
+
+    // Watch settings modal open
+    watch(showSettingsModal, (val) => {
+        if (val) {
+            loadSettings()
+        }
+    })
 
     const handleEvent = (data) => {
         if (data.type === 'session_id') {
@@ -867,6 +969,14 @@ export function useChat() {
         currentWorkspace,
         webSearchEnabled,
         sessionHasUsedWebSearch,
+        showSettingsModal,
+        activeSettingsTab,
+        settings,
+        settingsLoading,
+        selectedProvider,
+        availableModels,
+        selectedModels,
+        currentProvider,
         inputPlaceholder,
         messagesContainer,
         messageInput,
@@ -891,5 +1001,9 @@ export function useChat() {
         closeInfoPopovers,
         syncViewportMetrics,
         updateAutoFollowState,
+        fetchProviderModels,
+        addSelectedModels,
+        deleteModel,
+        saveSettings,
     }
 }

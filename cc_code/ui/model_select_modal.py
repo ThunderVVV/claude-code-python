@@ -97,12 +97,13 @@ class ModelSelectModal(ModalScreen[Optional[str]]):
 
     async def on_mount(self) -> None:
         table = self.query_one("#models", DataTable)
-        table.add_columns("Model ID", "Model Name", "Context", "API URL")
+        table.add_columns("Provider", "Model ID", "Model Name", "Context", "API URL")
 
         for model in self.models:
             model_id = model.get("model_id", "")
-            model_label = f"{'→ ' if model_id == self.current_model_id else ''}{model_id}"
+            model_label = f"{'→ ' if model_id == self.current_model_id else ''}{model_id.split(':', 1)[-1]}"
             table.add_row(
+                model.get("provider", ""),
                 model_label,
                 model.get("model_name", ""),
                 str(model.get("context", "")),

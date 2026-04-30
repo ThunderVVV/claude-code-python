@@ -8,8 +8,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List
 
+import httpx
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +29,10 @@ from cc_code.core.settings import (
     SettingsStore,
     build_client_config,
     find_model_id_by_model_name,
+    DEFAULT_THEME_NAME,
+    AppSettings,
+    ProviderSettings,
+    ModelInProviderSettings,
 )
 from cc_code.core.instruction import InstructionConfig
 from cc_code.services.openai_client import OpenAIClientConfig
@@ -94,14 +99,18 @@ class SessionManager:
     ) -> OpenAIClientConfig:
         settings = self.get_settings()
 
-        if model_id and model_id in settings.models:
-            return build_client_config(settings, model_id)
+        if model_id and ":" in model_id:
+            provider_id, model_short_id = model_id.split(":", 1)
+            if provider_id in settings.providers and model_short_id in settings.providers[provider_id].models:
+                return build_client_config(settings, model_id)
 
         if session_id:
             persisted = self._session_store.load_session(session_id)
             if persisted:
-                if persisted.model_id and persisted.model_id in settings.models:
-                    return build_client_config(settings, persisted.model_id)
+                if persisted.model_id and ":" in persisted.model_id:
+                    provider_id, model_short_id = persisted.model_id.split(":", 1)
+                    if provider_id in settings.providers and model_short_id in settings.providers[provider_id].models:
+                        return build_client_config(settings, persisted.model_id)
 
                 if persisted.model_name:
                     persisted_model_id = find_model_id_by_model_name(
@@ -177,6 +186,24 @@ class CompactRequest(BaseModel):
     session_id: str
     working_directory: str = os.getcwd()
     model: Optional[str] = None
+
+
+class ModelItem(BaseModel):
+    model_name: str
+    context: int = 0
+
+
+class SaveProviderSettings(BaseModel):
+    api_key: Optional[str] = None
+    api_url: str
+    models: Dict[str, ModelItem]
+
+
+class SaveSettingsRequest(BaseModel):
+    current_model: str
+    theme: str = DEFAULT_THEME_NAME
+    providers: Dict[str, SaveProviderSettings]
+    instructions: List[str] = []
 
 
 def _normalize_api_prefix(api_prefix: str) -> str:
@@ -344,16 +371,19 @@ async def list_models(http_request: Request):
         settings = session_manager.get_settings()
 
         models_list = []
-        for model_id, model_settings in settings.models.items():
-            models_list.append(
-                {
-                    "model_id": model_id,
-                    "model_name": model_settings.model_name,
-                    "context": model_settings.context,
-                    "api_url": model_settings.api_url,
-                    "is_current": model_id == settings.current_model,
-                }
-            )
+        for provider_id, provider in settings.providers.items():
+            for model_id, model_settings in provider.models.items():
+                full_model_id = f"{provider_id}:{model_id}"
+                models_list.append(
+                    {
+                        "model_id": full_model_id,
+                        "model_name": model_settings.model_name,
+                        "context": model_settings.context,
+                        "api_url": provider.api_url,
+                        "provider": provider_id,
+                        "is_current": full_model_id == settings.current_model,
+                    }
+                )
 
         return {
             "models": models_list,
@@ -373,7 +403,11 @@ async def switch_model(request: SwitchModelRequest, http_request: Request):
     try:
         session_manager = http_request.app.state.session_manager
         settings = session_manager.get_settings()
-        if request.model_id not in settings.models:
+        # Validate model exists
+        if ":" not in request.model_id:
+            raise HTTPException(status_code=400, detail="Invalid model_id format, expected provider:model_id")
+        provider_id, model_short_id = request.model_id.split(":", 1)
+        if provider_id not in settings.providers or model_short_id not in settings.providers[provider_id].models:
             raise HTTPException(status_code=404, detail="Model configuration not found")
 
         settings.current_model = request.model_id
@@ -390,7 +424,7 @@ async def switch_model(request: SwitchModelRequest, http_request: Request):
             "success": True,
             "model_id": request.model_id,
             "model_name": client_config.model_name,
-            "context": settings.models[request.model_id].context,
+            "context": settings.providers[provider_id].models[model_short_id].context,
         }
     except HTTPException:
         raise
@@ -557,6 +591,118 @@ async def get_session_endpoint(session_id: str, http_request: Request):
         raise
     except Exception as e:
         logger.exception("Failed to get session")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/settings")
+async def get_settings(http_request: Request):
+    """Get current application settings"""
+    logger.info("GET /settings")
+    try:
+        session_manager = http_request.app.state.session_manager
+        settings = session_manager.get_settings()
+        return {
+            "current_model": settings.current_model,
+            "theme": settings.theme,
+            "providers": {
+                provider_id: {
+                    "api_url": provider.api_url,
+                    "models": {
+                        model_id: {
+                            "model_name": model.model_name,
+                            "context": model.context
+                        } for model_id, model in provider.models.items()
+                    }
+                } for provider_id, provider in settings.providers.items()
+            },
+            "instructions": settings.instructions
+        }
+    except Exception as e:
+        logger.exception("Failed to get settings")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/settings")
+async def save_settings(http_request: Request, request: SaveSettingsRequest):
+    """Save application settings"""
+    logger.info("POST /settings")
+    try:
+        session_manager = http_request.app.state.session_manager
+        settings_store = session_manager._settings_store
+        existing_settings = session_manager.get_settings()
+        
+        # Convert request to AppSettings
+        providers = {}
+        for provider_id, provider_data in request.providers.items():
+            models = {}
+            for model_id, model_data in provider_data.models.items():
+                models[model_id] = ModelInProviderSettings(
+                    model_name=model_data.model_name,
+                    context=model_data.context
+                )
+            # Preserve existing api_key if not provided in request
+            api_key = provider_data.api_key
+            if not api_key and provider_id in existing_settings.providers:
+                api_key = existing_settings.providers[provider_id].api_key
+            providers[provider_id] = ProviderSettings(
+                api_key=api_key,
+                api_url=provider_data.api_url,
+                models=models
+            )
+        
+        settings = AppSettings(
+            current_model=request.current_model,
+            theme=request.theme,
+            providers=providers,
+            instructions=request.instructions
+        )
+        
+        settings_store.save(settings)
+        return {"status": "ok"}
+    except Exception as e:
+        logger.exception("Failed to save settings")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/providers/{provider_id}/models")
+async def get_provider_models(provider_id: str, http_request: Request):
+    """Get available models from provider's API"""
+    logger.info(f"GET /providers/{provider_id}/models")
+    try:
+        session_manager = http_request.app.state.session_manager
+        settings = session_manager.get_settings()
+        
+        provider = settings.providers.get(provider_id)
+        if not provider:
+            raise HTTPException(status_code=404, detail=f"Provider {provider_id} not found")
+        
+        # Call provider's models API (api_url already contains /vX version suffix)
+        api_url = provider.api_url.rstrip("/")
+        models_url = f"{api_url}/models"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                models_url,
+                headers={"Authorization": f"Bearer {provider.api_key}"},
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+        
+        models = []
+        for item in data.get("data", []):
+            models.append({
+                "id": item["id"],
+                "name": item["id"],
+                "context": 0  # Default context, user can edit later
+            })
+        
+        return {"models": models}
+    except httpx.HTTPError as e:
+        logger.error(f"Failed to fetch models from provider {provider_id}: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch models from provider: {str(e)}")
+    except Exception as e:
+        logger.exception("Failed to get provider models")
         raise HTTPException(status_code=500, detail=str(e))
 
 

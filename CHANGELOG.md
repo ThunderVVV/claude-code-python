@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed - 2026-05-01
+
+#### Multi-Provider Architecture Refactor
+- Refactored settings system from single model configuration to multi-provider architecture
+- Changed data structure: `models` → `providers` where each provider contains multiple models
+- Changed model ID format: `model_id` → `provider_id:model_id` (e.g., "openai:gpt-4")
+- Added new dataclasses: `ProviderSettings`, `ModelInProviderSettings`
+- Removed deprecated: `ModelSettings` class
+- Updated `SETTINGS_EXAMPLE` with new provider-based configuration format
+- Updated `AppSettings.get_current_model()` to return tuple of (ProviderSettings, ModelInProviderSettings)
+- Updated `SettingsStore.load()` to parse provider-based settings with validation
+- Updated `SettingsStore.save()` to serialize provider-based settings
+- Updated `build_client_config()` to resolve provider and model from composite ID
+- Updated `find_model_id_by_model_name()` to search across all providers
+- Updated CLI validation to check `settings.providers` instead of `settings.models`
+- Updated `SessionManager.get_client_config()` to handle provider:model_id format
+- Updated `/api/models` endpoint to return models with provider information
+- Updated `/api/model` endpoint to validate provider:model_id format
+- Updated TUI `ModelSelectModal` to display provider column and parse composite IDs
+- Updated `tests/test_settings.py` to use new provider-based data structures
+
+### Added - 2026-05-01
+
+#### Web UI Settings Management
+- Added settings modal in web UI for managing provider and model configurations
+- Added `GET /api/settings` endpoint to retrieve current application settings (excludes api_key for security)
+- Added `POST /api/settings` endpoint to save application settings (api_key is optional, preserves existing values)
+- Added `GET /api/providers/{provider_id}/models` endpoint to fetch available models from provider's API
+- Added provider model discovery: fetch available models from OpenAI-compatible APIs
+- Added model management UI: add, delete, and edit model configurations
+- Added context size editing for individual models
+- Added settings button in web UI sidebar (desktop and mobile)
+- Added `httpx` dependency for provider API calls
+- Added `ModelItem`, `SaveProviderSettings`, and `SaveSettingsRequest` Pydantic models for API validation
+
+### Fixed - 2026-05-01
+
+#### API Key Security
+- Fixed API key exposure by removing `api_key` from `GET /api/settings` response
+- Made `api_key` optional in `SaveProviderSettings` to allow updating settings without re-entering credentials
+- Settings save logic now preserves existing `api_key` when not provided in request
+
 ### Removed - 2026-04-30
 
 #### Legacy Static HTML + CDN Web UI

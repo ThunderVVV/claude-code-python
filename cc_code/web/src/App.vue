@@ -34,6 +34,20 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Sidebar Footer: Settings Button -->
+            <div class="p-2 border-t border-gray-200">
+                <button
+                    @click="showSettingsModal = true"
+                    class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors text-sm"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    设置
+                </button>
+            </div>
         </aside>
 
         <!-- Main Content -->
@@ -324,7 +338,130 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Mobile Sidebar Footer: Settings Button -->
+                <div class="p-2 border-t border-gray-200">
+                    <button
+                        @click="showSettingsModal = true; showMobileSidebar = false"
+                        class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors text-sm"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        设置
+                    </button>
+                </div>
             </aside>
+        </div>
+
+        <!-- Settings Modal -->
+        <div v-if="showSettingsModal" class="fixed inset-0 z-50 flex items-center justify-center">
+            <div class="absolute inset-0 bg-black/50" @click="showSettingsModal = false"></div>
+            <div class="relative bg-white rounded-2xl shadow-2xl w-[90vw] max-w-4xl max-h-[80vh] flex flex-col overflow-hidden">
+                <!-- Modal Header -->
+                <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-gray-900">设置</h2>
+                    <button @click="showSettingsModal = false" class="p-1 rounded-lg hover:bg-gray-100 text-gray-500">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Modal Body (Double Column) -->
+                <div class="flex flex-1 overflow-hidden">
+                    <!-- Left Sidebar -->
+                    <div class="w-48 border-r border-gray-200 bg-gray-50 p-2">
+                        <div class="space-y-1">
+                            <button
+                                @click="activeSettingsTab = 'models'"
+                                class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                                :class="{ 'bg-white shadow-sm text-gray-900': activeSettingsTab === 'models', 'text-gray-600 hover:bg-gray-100': activeSettingsTab !== 'models' }"
+                            >
+                                模型设置
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right Content -->
+                    <div class="flex-1 overflow-y-auto p-4">
+                        <!-- Model Settings -->
+                        <div v-if="activeSettingsTab === 'models'" class="space-y-4">
+                            <div v-if="settingsLoading" class="text-center text-gray-500 py-8">加载中...</div>
+                            <div v-else>
+                                <div class="space-y-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">供应商</label>
+                                            <select v-model="selectedProvider" class="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500">
+                                                <option v-for="(provider, id) in settings.providers" :key="id" :value="id">{{ id }}</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1 opacity-0">操作</label>
+                                            <button @click="fetchProviderModels" class="w-full h-10 px-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+                                                获取可用模型
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="availableModels.length > 0" class="space-y-2">
+                                        <label class="block text-sm font-medium text-gray-700">可用模型</label>
+                                        <div class="border border-gray-200 rounded-lg p-2 max-h-64 overflow-y-auto">
+                                            <div v-for="model in availableModels" :key="model.id" class="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded">
+                                                <input
+                                                    type="checkbox"
+                                                    :id="`model-${model.id}`"
+                                                    :value="model.id"
+                                                    v-model="selectedModels"
+                                                    class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                                >
+                                                <label :for="`model-${model.id}`" class="flex-1 text-sm text-gray-700 cursor-pointer">
+                                                    {{ model.name }}
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <button @click="addSelectedModels" class="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm">
+                                            添加选中模型
+                                        </button>
+                                    </div>
+
+                                    <div class="space-y-2">
+                                        <label class="block text-sm font-medium text-gray-700">已添加模型</label>
+                                        <div class="border border-gray-200 rounded-lg divide-y divide-gray-100">
+                                            <div v-for="(model, modelId) in currentProvider.models" :key="modelId" class="flex items-center justify-between px-3 py-2">
+                                                <div class="flex items-center gap-4">
+                                                    <div>
+                                                        <div class="text-sm font-medium text-gray-900">{{ model.model_name }}</div>
+                                                    </div>
+                                                    <div class="flex items-center gap-1.5">
+                                                        <span class="text-xs text-gray-500">上下文:</span>
+                                                        <input
+                                                            v-model.number="model.context"
+                                                            type="number"
+                                                            min="1"
+                                                            class="w-24 px-2 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                        >
+                                                        <span class="text-xs text-gray-500">tokens</span>
+                                                    </div>
+                                                </div>
+                                                <button @click="deleteModel(modelId)" class="text-red-500 hover:text-red-700 text-xs">删除</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="pt-4 border-t border-gray-200">
+                                        <button @click="saveSettings" class="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
+                                            保存设置
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -356,6 +493,14 @@ const {
     currentWorkspace,
     webSearchEnabled,
     sessionHasUsedWebSearch,
+    showSettingsModal,
+    activeSettingsTab,
+    settings,
+    settingsLoading,
+    selectedProvider,
+    availableModels,
+    selectedModels,
+    currentProvider,
     inputPlaceholder,
     messagesContainer,
     messageInput,
@@ -377,6 +522,10 @@ const {
     toggleTokenDetails,
     closeInfoPopovers,
     syncViewportMetrics,
+    fetchProviderModels,
+    addSelectedModels,
+    deleteModel,
+    saveSettings,
 } = useChat()
 
 // Global keyboard shortcuts
