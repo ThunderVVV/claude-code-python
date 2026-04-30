@@ -101,7 +101,7 @@ class ModelSelectModal(ModalScreen[Optional[str]]):
 
         for model in self.models:
             model_id = model.get("model_id", "")
-            model_label = f"{'→ ' if model_id == self.current_model_id else ''}{model_id.split(':', 1)[-1]}"
+            model_label = f"{'▶ ' if model_id == self.current_model_id else ''}{model_id.split(':', 1)[-1]}"
             table.add_row(
                 model.get("provider", ""),
                 model_label,
