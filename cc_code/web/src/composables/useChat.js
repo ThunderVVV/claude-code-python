@@ -547,7 +547,6 @@ export function useChat() {
             accumulatedText.value = ''
             pendingToolUses.value = {}
             scrollToBottom()
-            loadModels()
             return
         }
 
