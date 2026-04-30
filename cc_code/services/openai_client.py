@@ -73,7 +73,6 @@ class OpenAIClient:
     ) -> List[Dict[str, Any]]:
         """Convert internal message format to OpenAI format"""
         openai_messages = []
-        skipped_tool_call_ids: set[str] = set()
 
         for idx, msg in enumerate(messages):
             if msg.type.value == "system":
@@ -95,22 +94,18 @@ class OpenAIClient:
             elif msg.type.value == "assistant":
                 tool_uses = msg.get_tool_uses()
                 reasoning_content = self._get_reasoning_content(msg)
-                preserve_reasoning_content = (
-                    bool(reasoning_content)
-                    and self._is_reasoning_persistent_turn(messages, idx)
-                )
                 requires_reasoning_content = self._is_reasoning_persistent_turn(
                     messages, idx
                 )
 
+                # If reasoning is required but missing, use "empty" instead of skipping
                 if requires_reasoning_content and not reasoning_content:
-                    logger.warning(
-                        "Skipping assistant message without reasoning content in a tool turn"
-                    )
-                    skipped_tool_call_ids.update(
-                        tool_use.id for tool_use in tool_uses if tool_use.id
-                    )
-                    continue
+                    reasoning_content = "empty"
+
+                preserve_reasoning_content = (
+                    bool(reasoning_content)
+                    and self._is_reasoning_persistent_turn(messages, idx)
+                )
 
                 if tool_uses:
                     tool_calls = []
@@ -146,11 +141,6 @@ class OpenAIClient:
             elif msg.type.value == "tool":
                 for block in msg.content:
                     if block.type == "tool_result":
-                        if block.tool_use_id in skipped_tool_call_ids:
-                            logger.warning(
-                                "Skipping tool result for assistant message missing reasoning content"
-                            )
-                            continue
                         openai_messages.append(
                             {
                                 "role": "tool",

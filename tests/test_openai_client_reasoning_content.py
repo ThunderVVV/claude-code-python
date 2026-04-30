@@ -104,7 +104,7 @@ def test_parse_stream_chunk_accepts_reasoning_alias() -> None:
     assert tool_calls == []
 
 
-def test_convert_messages_skips_corrupted_tool_turn_without_reasoning() -> None:
+def test_convert_messages_uses_empty_reasoning_for_tool_turn_without_reasoning() -> None:
     client = _build_client()
     messages = [
         Message.user_message("Inspect the file."),
@@ -125,6 +125,26 @@ def test_convert_messages_skips_corrupted_tool_turn_without_reasoning() -> None:
 
     assert payload == [
         {"role": "user", "content": "Inspect the file."},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "Read",
+                        "arguments": '{"file_path": "/tmp/demo.py"}',
+                    },
+                }
+            ],
+            "reasoning_content": "empty",
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "file contents",
+        },
         {"role": "user", "content": "Continue."},
     ]
 
