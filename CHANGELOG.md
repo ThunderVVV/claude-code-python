@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed - 2026-05-01
 
+#### Web UI Chat Composable Refactor
+- Split the monolithic `cc_code/web/src/composables/useChat.js` into focused composables for chat streaming, sessions, models, workspace browsing, settings, and input history
+- Added `cc_code/web/src/messageMapper/` helpers for user message mapping, tool block summaries, tool result updates, and diff message generation
+- Kept the public `useChat()` return contract stable so existing Vue components continue to bind to the same state and methods
+- Updated `cc_code/web/README.md` to document the expanded Web UI source layout
+
 #### Web UI Stylesheet Architecture Refactor
 - Refactored `cc_code/web/src/style.css` into a layered stylesheet entrypoint that imports focused files from `cc_code/web/src/styles/`
 - Added `foundation/` stylesheet modules for vendor CSS, Tailwind directives, design tokens, base rules, and shared utilities

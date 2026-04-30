@@ -28,9 +28,23 @@ cc_code/web/
 │   │   ├── foundation/  # vendor / tailwind / tokens / base / utilities
 │   │   └── app/         # primitives / shell / markdown / overlays
 │   ├── components/      # Vue 组件
-│   │   └── MessageItem.vue
+│   │   ├── MessageItem.vue
+│   │   ├── chat/        # 顶栏、会话视图、输入区
+│   │   ├── layout/      # 桌面和移动侧边栏
+│   │   ├── navigation/  # 会话列表
+│   │   ├── settings/    # 设置弹窗
+│   │   └── workspace/   # 工作区选择弹窗
 │   ├── composables/     # 组合式函数
-│   │   └── useChat.js   # 聊天逻辑
+│   │   ├── useChat.js   # Web UI 状态编排入口
+│   │   ├── useChatStream.js
+│   │   ├── useInputHistory.js
+│   │   ├── useModels.js
+│   │   ├── useSessions.js
+│   │   ├── useSettings.js
+│   │   └── useWorkspaceBrowser.js
+│   ├── messageMapper/   # 消息和工具块映射
+│   │   ├── messages.js
+│   │   └── toolBlocks.js
 │   └── utils/           # 工具函数
 │       ├── markdown.js
 │       ├── format.js
