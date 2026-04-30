@@ -55,8 +55,17 @@ export function useChat() {
     const currentModelName = ref('')
     const currentModelContext = ref('128000')
     const currentWorkspace = ref('')
+    const serverWorkspace = ref('')
     const webSearchEnabled = ref(false)
     const sessionHasUsedWebSearch = ref(false)
+    const showNewSessionModal = ref(false)
+    const workspaceBrowserLoading = ref(false)
+    const workspaceBrowserError = ref('')
+    const workspaceBrowserPath = ref('')
+    const workspaceBrowserInput = ref('')
+    const workspaceBrowserParentPath = ref(null)
+    const workspaceBrowserDirectories = ref([])
+    const workspaceBrowserRoots = ref([])
 
     // Settings
     const showSettingsModal = ref(false)
@@ -419,6 +428,56 @@ export function useChat() {
         }
     }
 
+    const browseWorkspace = async (path = '') => {
+        workspaceBrowserLoading.value = true
+        workspaceBrowserError.value = ''
+
+        try {
+            const targetPath = typeof path === 'string' ? path.trim() : ''
+            const url = targetPath
+                ? `/api/workspace/browse?path=${encodeURIComponent(targetPath)}`
+                : '/api/workspace/browse'
+            const response = await fetch(url)
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Failed to browse workspace')
+            }
+
+            workspaceBrowserPath.value = data.path || ''
+            workspaceBrowserInput.value = data.path || ''
+            workspaceBrowserParentPath.value = data.parent_path || null
+            workspaceBrowserDirectories.value = data.directories || []
+            workspaceBrowserRoots.value = data.roots || []
+        } catch (error) {
+            workspaceBrowserError.value = error.message || 'Failed to browse workspace'
+        } finally {
+            workspaceBrowserLoading.value = false
+        }
+    }
+
+    const openNewSessionModal = async () => {
+        if (isStreaming.value) return
+        closeInfoPopovers()
+        showModelSelector.value = false
+        showNewSessionModal.value = true
+        await browseWorkspace(currentWorkspace.value || serverWorkspace.value || '')
+    }
+
+    const closeNewSessionModal = () => {
+        showNewSessionModal.value = false
+        workspaceBrowserError.value = ''
+    }
+
+    const browseWorkspaceParent = async () => {
+        if (!workspaceBrowserParentPath.value) return
+        await browseWorkspace(workspaceBrowserParentPath.value)
+    }
+
+    const submitWorkspaceBrowserPath = async () => {
+        await browseWorkspace(workspaceBrowserInput.value)
+    }
+
     const toggleWorkspaceDetails = () => {
         const nextState = !showWorkspaceDetails.value
         closeInfoPopovers()
@@ -546,6 +605,7 @@ export function useChat() {
             currentAssistantMessage.value = null
             accumulatedText.value = ''
             pendingToolUses.value = {}
+            void loadSessions()
             scrollToBottom()
             return
         }
@@ -651,10 +711,22 @@ export function useChat() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     session_id: sessionId.value,
-                    user_text: text
+                    user_text: text,
+                    working_directory: currentWorkspace.value || serverWorkspace.value || ''
                 }),
                 signal: requestAbortController.signal
             })
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to send message'
+                try {
+                    const errorData = await response.json()
+                    errorMessage = errorData.detail || errorMessage
+                } catch {
+                    // Ignore JSON parse failures for error responses.
+                }
+                throw new Error(errorMessage)
+            }
 
             const reader = response.body.getReader()
             const decoder = new TextDecoder()
@@ -686,6 +758,7 @@ export function useChat() {
                 // Request aborted
             } else {
                 console.error('Chat error:', error)
+                alert('发送消息失败: ' + error.message)
             }
         } finally {
             if (abortController.value === requestAbortController) {
@@ -727,6 +800,7 @@ export function useChat() {
             const response = await fetch('/api/workspace')
             const data = await response.json()
             if (data.workspace) {
+                serverWorkspace.value = data.workspace
                 currentWorkspace.value = data.workspace
             }
         } catch (error) {
@@ -734,15 +808,16 @@ export function useChat() {
         }
     }
 
-    const startNewSession = () => {
+    const startNewSession = (workingDirectory = '') => {
         messages.value = []
         sessionId.value = null
         accumulatedText.value = ''
         tokenUsed.value = 0
         autoFollowOutput.value = true
         sessionHasUsedWebSearch.value = false
+        currentWorkspace.value = workingDirectory || serverWorkspace.value || currentWorkspace.value
+        closeNewSessionModal()
         loadModels()
-        getCurrentWorkspace()
     }
 
     const loadSessions = async () => {
@@ -968,8 +1043,16 @@ export function useChat() {
         currentModelName,
         currentModelContext,
         currentWorkspace,
+        showNewSessionModal,
         webSearchEnabled,
         sessionHasUsedWebSearch,
+        workspaceBrowserLoading,
+        workspaceBrowserError,
+        workspaceBrowserPath,
+        workspaceBrowserInput,
+        workspaceBrowserParentPath,
+        workspaceBrowserDirectories,
+        workspaceBrowserRoots,
         showSettingsModal,
         activeSettingsTab,
         settings,
@@ -989,6 +1072,11 @@ export function useChat() {
         sendMessage,
         sendInterrupt,
         startNewSession,
+        openNewSessionModal,
+        closeNewSessionModal,
+        browseWorkspace,
+        browseWorkspaceParent,
+        submitWorkspaceBrowserPath,
         loadSession,
         switchModel,
         toggleCollapse,

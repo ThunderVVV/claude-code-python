@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-04-30
+
+#### Web UI Session Workspace Picker
+- Added `GET /api/workspace/browse` endpoint for browsing server-side directories from the Web UI
+- Added server-side working directory validation for `/api/chat` and `/api/compact`
+- Added Web UI new-session modal for browsing and selecting a working directory before starting a conversation
+- Added manual path entry, parent navigation, and root shortcuts in the Web UI workspace picker
+- Added Web UI regression tests for workspace browsing and invalid working directory rejection
+
+### Changed - 2026-04-30
+
+#### Deferred Web Session Creation With Selected Workspace
+- Changed Web UI new-session flow to defer session creation until the first user message is sent
+- Changed Web UI chat requests to always include the selected `working_directory`
+- Changed Web UI session list refresh to update automatically after a streamed turn completes
+- Disabled Web UI new-session actions while a response is actively streaming to avoid state conflicts
+
 ### Changed - 2026-05-01
 
 #### Multi-Provider Architecture Refactor

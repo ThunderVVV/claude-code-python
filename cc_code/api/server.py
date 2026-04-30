@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import string
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional, Dict, List
@@ -206,6 +207,79 @@ class SaveSettingsRequest(BaseModel):
     instructions: List[str] = []
 
 
+def _resolve_existing_directory(path: Optional[str]) -> str:
+    """Resolve and validate a directory path from API input."""
+    raw_path = (path or "").strip()
+    resolved = os.path.abspath(os.path.expanduser(raw_path or os.getcwd()))
+
+    if not os.path.exists(resolved):
+        raise HTTPException(status_code=404, detail="Directory not found")
+    if not os.path.isdir(resolved):
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+
+    return resolved
+
+
+def _list_directory_roots() -> list[dict[str, str]]:
+    """Return navigable filesystem roots for the current platform."""
+    roots: list[dict[str, str]] = []
+
+    if os.name == "nt":
+        for drive in string.ascii_uppercase:
+            drive_path = f"{drive}:\\"
+            if os.path.isdir(drive_path):
+                roots.append({"name": drive_path, "path": drive_path})
+    else:
+        roots.append({"name": "/", "path": "/"})
+
+    home_dir = str(Path.home())
+    if home_dir and not any(root["path"] == home_dir for root in roots):
+        roots.append({"name": "Home", "path": home_dir})
+
+    current_dir = os.getcwd()
+    if current_dir and not any(root["path"] == current_dir for root in roots):
+        roots.append({"name": "Current", "path": current_dir})
+
+    return roots
+
+
+def _build_directory_browser_payload(path: str) -> dict:
+    """Serialize directory browser metadata for the Web UI."""
+    current_path = _resolve_existing_directory(path)
+    current = Path(current_path)
+    parent_path = str(current.parent) if current.parent != current else None
+    directories = []
+
+    try:
+        with os.scandir(current_path) as entries:
+            for entry in entries:
+                try:
+                    if not entry.is_dir():
+                        continue
+                except OSError:
+                    continue
+
+                directories.append(
+                    {
+                        "name": entry.name,
+                        "path": os.path.abspath(entry.path),
+                        "is_symlink": entry.is_symlink(),
+                    }
+                )
+    except PermissionError:
+        directories = []
+
+    directories.sort(key=lambda item: item["name"].casefold())
+
+    return {
+        "path": current_path,
+        "name": current.name or current_path,
+        "parent_path": parent_path,
+        "roots": _list_directory_roots(),
+        "directories": directories,
+    }
+
+
 def _normalize_api_prefix(api_prefix: str) -> str:
     """Normalize an optional API prefix for route registration."""
     prefix = api_prefix.strip().strip("/")
@@ -254,6 +328,7 @@ async def chat(request: ChatRequest, http_request: Request):
     """Stream chat response via SSE"""
     if not request.user_text.strip():
         raise HTTPException(status_code=400, detail="user_text must not be empty")
+    request.working_directory = _resolve_existing_directory(request.working_directory)
     logger.info(
         f"POST /chat - session_id={request.session_id}, user_text={request.user_text[:50]}..."
     )
@@ -280,6 +355,7 @@ async def compact_session(request: CompactRequest, http_request: Request):
     preserves all history messages, and adds the summary marked as
     is_compact_summary.
     """
+    request.working_directory = _resolve_existing_directory(request.working_directory)
     logger.info(f"POST /compact - session_id={request.session_id}")
     session_manager = http_request.app.state.session_manager
     return StreamingResponse(
@@ -531,6 +607,19 @@ async def get_workspace(http_request: Request):
         }
     except Exception as e:
         logger.exception("Failed to get workspace")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/workspace/browse")
+async def browse_workspace(path: Optional[str] = None):
+    """Browse server-side directories for Web UI session creation."""
+    logger.info(f"GET /workspace/browse - path={path or ''}")
+    try:
+        return _build_directory_browser_payload(path or os.getcwd())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to browse workspace")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -4,7 +4,11 @@
         <aside class="w-80 h-full bg-gray-50 border-r border-gray-200 flex flex-col hidden md:flex">
             <!-- Sidebar Header -->
             <div class="p-4 border-b border-gray-200">
-                <button @click="startNewSession" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors text-sm font-medium">
+                <button
+                    @click="openNewSessionModal"
+                    :disabled="isStreaming"
+                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors text-sm font-medium disabled:text-gray-400 disabled:bg-gray-50 disabled:hover:bg-gray-50"
+                >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
@@ -312,7 +316,11 @@
 
                 <!-- Mobile Session List -->
                 <div class="flex-1 overflow-y-auto p-2">
-                    <button @click="startNewSession(); showMobileSidebar = false" class="w-full flex items-center gap-2 px-3 py-2 mb-3 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors text-sm">
+                    <button
+                        @click="openNewSessionModal(); showMobileSidebar = false"
+                        :disabled="isStreaming"
+                        class="w-full flex items-center gap-2 px-3 py-2 mb-3 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors text-sm disabled:text-gray-400 disabled:bg-gray-50 disabled:hover:bg-gray-50"
+                    >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                         </svg>
@@ -353,6 +361,119 @@
                     </button>
                 </div>
             </aside>
+        </div>
+
+        <!-- New Session Modal -->
+        <div v-if="showNewSessionModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-black/50" @click="closeNewSessionModal"></div>
+            <div class="relative bg-white rounded-2xl shadow-2xl w-[92vw] max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+                <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">选择工作目录</h2>
+                        <p class="text-sm text-gray-500 mt-1">确认后只保存目录，首次发送消息时再创建新会话。</p>
+                    </div>
+                    <button @click="closeNewSessionModal" class="p-1 rounded-lg hover:bg-gray-100 text-gray-500">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="p-4 border-b border-gray-200 space-y-3">
+                    <form class="flex flex-col gap-2 sm:flex-row" @submit.prevent="submitWorkspaceBrowserPath">
+                        <input
+                            v-model="workspaceBrowserInput"
+                            type="text"
+                            class="flex-1 h-11 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                            placeholder="输入目录路径"
+                        >
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                @click="browseWorkspaceParent"
+                                :disabled="workspaceBrowserLoading || !workspaceBrowserParentPath"
+                                class="h-11 px-3 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-white"
+                            >
+                                上一级
+                            </button>
+                            <button
+                                type="submit"
+                                :disabled="workspaceBrowserLoading"
+                                class="h-11 px-4 bg-gray-900 text-white rounded-lg text-sm font-medium disabled:bg-gray-300"
+                            >
+                                打开
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            v-for="root in workspaceBrowserRoots"
+                            :key="root.path"
+                            type="button"
+                            @click="browseWorkspace(root.path)"
+                            class="px-3 py-1.5 rounded-full border text-xs transition-colors"
+                            :class="root.path === workspaceBrowserPath ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-600 hover:bg-gray-100'"
+                        >
+                            {{ root.name }}
+                        </button>
+                    </div>
+
+                    <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2">
+                        <div class="text-xs text-gray-500 mb-1">当前目录</div>
+                        <div class="font-mono text-sm text-gray-800 break-all">{{ workspaceBrowserPath || '未选择' }}</div>
+                    </div>
+
+                    <div v-if="workspaceBrowserError" class="text-sm text-red-600">{{ workspaceBrowserError }}</div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 bg-gray-50/60">
+                    <div v-if="workspaceBrowserLoading" class="h-full min-h-40 flex items-center justify-center text-sm text-gray-500">
+                        正在加载目录...
+                    </div>
+                    <div v-else-if="workspaceBrowserDirectories.length === 0" class="h-full min-h-40 flex items-center justify-center text-sm text-gray-400">
+                        当前目录下没有可浏览的子目录
+                    </div>
+                    <div v-else class="space-y-2">
+                        <button
+                            v-for="directory in workspaceBrowserDirectories"
+                            :key="directory.path"
+                            type="button"
+                            @click="browseWorkspace(directory.path)"
+                            class="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-gray-200 bg-white text-left hover:border-gray-300 hover:bg-gray-100 transition-colors"
+                        >
+                            <div class="min-w-0">
+                                <div class="text-sm font-medium text-gray-800 truncate">{{ directory.name }}</div>
+                                <div class="text-xs text-gray-500 font-mono truncate mt-1">{{ directory.path }}</div>
+                            </div>
+                            <div class="flex items-center gap-2 text-gray-400 flex-shrink-0">
+                                <span v-if="directory.is_symlink" class="text-[11px] uppercase tracking-wide">Link</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-4 border-t border-gray-200 flex items-center justify-between gap-3">
+                    <div class="text-xs text-gray-500">
+                        新会话将使用当前目录作为工作目录，并在首条消息发送时创建。
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button @click="closeNewSessionModal" class="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-100">
+                            取消
+                        </button>
+                        <button
+                            @click="startNewSession(workspaceBrowserPath)"
+                            :disabled="workspaceBrowserLoading || !workspaceBrowserPath"
+                            class="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:bg-gray-300"
+                        >
+                            以此目录开始新会话
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Settings Modal -->
@@ -491,8 +612,16 @@ const {
     currentModelName,
     currentModelContext,
     currentWorkspace,
+    showNewSessionModal,
     webSearchEnabled,
     sessionHasUsedWebSearch,
+    workspaceBrowserLoading,
+    workspaceBrowserError,
+    workspaceBrowserPath,
+    workspaceBrowserInput,
+    workspaceBrowserParentPath,
+    workspaceBrowserDirectories,
+    workspaceBrowserRoots,
     showSettingsModal,
     activeSettingsTab,
     settings,
@@ -510,6 +639,11 @@ const {
     sendMessage,
     sendInterrupt,
     startNewSession,
+    openNewSessionModal,
+    closeNewSessionModal,
+    browseWorkspace,
+    browseWorkspaceParent,
+    submitWorkspaceBrowserPath,
     loadSession,
     switchModel,
     toggleCollapse,
@@ -569,7 +703,9 @@ const handleGlobalKeydown = async (e) => {
     }
 
     if (e.key === 'Escape') {
-        if (showModelSelector.value) {
+        if (showNewSessionModal.value) {
+            closeNewSessionModal()
+        } else if (showModelSelector.value) {
             showModelSelector.value = false
         } else if (showWorkspaceDetails.value || showTokenDetails.value) {
             closeInfoPopovers()

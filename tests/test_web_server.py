@@ -74,6 +74,7 @@ def test_create_api_app_uses_prefixed_routes_by_default():
     assert "/api/revert" in paths
     assert "/api/debug/{session_id}" in paths
     assert "/api/sessions" in paths
+    assert "/api/workspace/browse" in paths
     assert "/health" in paths
 
 
@@ -86,8 +87,58 @@ def test_create_api_app_can_build_unprefixed_routes():
     assert "/interrupt" in paths
     assert "/debug/{session_id}" in paths
     assert "/sessions" in paths
+    assert "/workspace/browse" in paths
     assert "/health" in paths
     assert "/api/chat" not in paths
+
+
+def test_workspace_browser_lists_directories(tmp_path):
+    child_a = tmp_path / "alpha"
+    child_b = tmp_path / "beta"
+    file_path = tmp_path / "notes.txt"
+    child_a.mkdir()
+    child_b.mkdir()
+    file_path.write_text("ignore me", encoding="utf-8")
+
+    app = create_api_app()
+    client = TestClient(app)
+    response = client.get("/api/workspace/browse", params={"path": str(tmp_path)})
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["path"] == str(tmp_path)
+    assert data["parent_path"] == str(tmp_path.parent)
+    assert [item["name"] for item in data["directories"]] == ["alpha", "beta"]
+    assert all("path" in item for item in data["directories"])
+
+
+def test_workspace_browser_rejects_missing_directory(tmp_path):
+    missing = tmp_path / "missing-dir"
+
+    app = create_api_app()
+    client = TestClient(app)
+    response = client.get("/api/workspace/browse", params={"path": str(missing)})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Directory not found"
+
+
+def test_chat_rejects_invalid_working_directory(tmp_path):
+    missing = tmp_path / "missing-dir"
+
+    app = create_api_app()
+    client = TestClient(app)
+    response = client.post(
+        "/api/chat",
+        json={
+            "user_text": "hello",
+            "working_directory": str(missing),
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Directory not found"
 
 
 def test_revert_restores_persisted_session_engine(tmp_path, monkeypatch):
