@@ -15,6 +15,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Kept `src/style.css` as the single Vite entrypoint so existing frontend imports and bundling behavior remain unchanged
 - Updated `cc_code/web/README.md` to document the new stylesheet layout
 
+#### Web UI Component Extraction and UX Polish
+- Extracted the settings dialog into `cc_code/web/src/components/settings/SettingsModal.vue`
+- Extracted the new-session workspace picker into `cc_code/web/src/components/workspace/NewSessionModal.vue`
+- Refactored `cc_code/web/src/App.vue` to compose those modal components instead of keeping the full dialog markup inline
+- Redesigned Web UI message rendering and tool blocks with richer status badges, collapsible output panels, and dedicated assistant/user presentation in `MessageItem.vue`
+- Updated Web UI copy in `useChat.js` and `App.vue` from Chinese prompts and alerts to English-language text
+- Enabled Vite dev server access from external hosts and polling file watching in `cc_code/web/vite.config.js` for more reliable development in mounted workspace environments
+
 ### Added - 2026-04-30
 
 #### Web UI Session Workspace Picker

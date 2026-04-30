@@ -1,41 +1,55 @@
 <template>
-    <!-- User Message -->
-    <div v-if="message.type === 'user'" class="flex justify-end fade-in">
-        <div class="max-w-[85%] min-w-0">
-            <div class="message-user max-w-full rounded-2xl rounded-tr-sm px-4 py-2">
-                <p class="text-gray-900 whitespace-pre-wrap leading-relaxed">{{ message.text }}</p>
+    <div v-if="message.type === 'user'" class="message-row message-row--user fade-in">
+        <div class="message-user-wrap">
+            <div class="message-user-bubble">
+                <p>{{ message.text }}</p>
             </div>
         </div>
     </div>
 
-    <!-- Assistant Message -->
-    <div v-else-if="message.type === 'assistant'" class="flex justify-start fade-in w-full mb-0 -my-3">
-        <div class="message-assistant min-w-0 flex-1 rounded-2xl rounded-tl-sm px-0 py-1 mb-0">
-            <div class="assistant-content min-w-0 break-words mb-0">
+    <div v-else-if="message.type === 'assistant'" class="message-row message-row--assistant fade-in">
+        <div class="assistant-avatar">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M4 13h16M6 17h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v9a2 2 0 002 2z"></path>
+            </svg>
+        </div>
+
+        <div class="assistant-column">
+            <div class="assistant-content">
                 <template v-for="(block, idx) in message.content" :key="idx">
-                    <div v-if="block.type === 'text'" class="text-container markdown-body min-w-0 break-words" v-html="renderMarkdown(block.text)"></div>
-                    <div v-else-if="block.type === 'thinking'" class="text-gray-500 italic thinking-block whitespace-pre-wrap break-words">{{ block.thinking }}</div>
-                    <div v-else-if="block.type === 'tool_block'" class="tool-block my-0.5 max-w-full rounded-lg p-2.5 bg-transparent border border-transparent">
-                        <div class="collapsible-header flex items-center justify-between rounded -m-2.5 p-2.5" @click="$emit('toggle-collapse', block.collapseId)">
-                            <div class="min-w-0 pr-3 text-sm font-medium tool-summary flex items-center gap-2 text-gray-700">
-                                <span v-if="block.result">
-                                    {{ block.isError ? '✗' : '✓' }}
-                                </span>
-                                {{ block.summary }}
+                    <div
+                        v-if="block.type === 'text'"
+                        class="text-container markdown-body"
+                        v-html="renderMarkdown(block.text)"
+                    ></div>
+
+                    <div v-else-if="block.type === 'thinking'" class="thinking-block">
+                        <div class="thinking-block__body">{{ block.thinking }}</div>
+                    </div>
+
+                    <div v-else-if="block.type === 'tool_block'" class="tool-block" :class="toolBlockClasses(block)">
+                        <div class="tool-header" @click="$emit('toggle-collapse', block.collapseId)">
+                            <div class="tool-header__main">
+                                <span class="tool-badge" :class="toolBadgeClass(block.toolName)">{{ toolBadgeLabel(block.toolName) }}</span>
+                                <div class="tool-title-group">
+                                    <div class="tool-summary">{{ block.summary }}</div>
+                                    <div class="tool-subtitle">
+                                        <span :class="['tool-state', block.result ? (block.isError ? 'tool-state--error' : 'tool-state--success') : 'tool-state--pending']"></span>
+                                        {{ block.result ? (block.isError ? 'Failed' : 'Completed') : 'Waiting for result' }}
+                                    </div>
+                                </div>
                             </div>
-                            <svg class="w-4 h-4 text-gray-400 collapse-icon" :class="{ rotated: block.expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="collapse-icon h-4 w-4" :class="{ rotated: block.expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                             </svg>
                         </div>
+
                         <div :id="block.collapseId" class="collapsible-content" :class="{ expanded: block.expanded }">
-                            <div v-if="block.result" class="mt-2 pt-2 border-t border-gray-200/50">
-                                <div class="tool-result-area">
-                                    <pre class="mono overflow-x-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-gray-700 border border-gray-200">{{ resultPreview(block.result) }}</pre>
-                                </div>
-                            </div>
+                            <pre v-if="block.result" class="tool-result-frame mono">{{ resultPreview(block.result) }}</pre>
                         </div>
                     </div>
-                    <div v-else-if="block.type === 'error'" class="text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 my-1 text-sm">
+
+                    <div v-else-if="block.type === 'error'" class="error-block">
                         {{ block.error }}
                     </div>
                 </template>
@@ -43,8 +57,7 @@
         </div>
     </div>
 
-    <!-- Diff Message -->
-    <div v-else-if="message.type === 'diff'" class="diff-message fade-in w-full">
+    <div v-else-if="message.type === 'diff'" class="diff-message fade-in">
         <div :id="message.diffId" class="cc-diff-viewer"></div>
     </div>
 </template>
@@ -70,7 +83,36 @@ const resultPreview = (result) => {
     return preview + (lines.length > 6 ? '\n...' : '')
 }
 
-// Render diff after DOM update
+const toolKind = (toolName = '') => {
+    const normalized = toolName.toLowerCase()
+    if (['edit', 'write'].includes(normalized)) return 'patch'
+    if (normalized === 'read') return 'read'
+    if (normalized === 'bash') return 'run'
+    if (['grep', 'glob'].includes(normalized)) return 'search'
+    return 'default'
+}
+
+const toolBadgeLabel = (toolName = '') => {
+    const normalized = toolName.toLowerCase()
+    if (normalized === 'bash') return 'RUN'
+    if (normalized === 'read') return 'READ'
+    if (normalized === 'edit') return 'EDIT'
+    if (normalized === 'write') return 'WRITE'
+    if (normalized === 'grep') return 'GREP'
+    if (normalized === 'glob') return 'GLOB'
+    return (toolName || 'TOOL').slice(0, 6).toUpperCase()
+}
+
+const toolBadgeClass = (toolName = '') => `tool-badge--${toolKind(toolName)}`
+
+const toolBlockClasses = (block) => [
+    `tool-block--${toolKind(block.toolName)}`,
+    {
+        'tool-block--error': block.isError,
+        'tool-block--pending': !block.result
+    }
+]
+
 const renderDiffBlock = () => {
     nextTick(() => {
         if (props.message.type === 'diff' && props.message.diffData) {
@@ -86,6 +128,5 @@ const renderDiffBlock = () => {
     })
 }
 
-// Watch for changes
 watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 </script>

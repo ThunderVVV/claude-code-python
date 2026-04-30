@@ -98,9 +98,7 @@ export function useChat() {
     const messageInput = ref(null)
 
     // Computed
-    const inputPlaceholder = computed(() =>
-        isCompactViewport.value ? '输入消息...' : '输入消息... (Shift+Enter 换行, ↑↓ 历史)'
-    )
+    const inputPlaceholder = computed(() => 'Message CC Code...')
 
     // Methods
     const isNearBottom = () => {
@@ -519,7 +517,7 @@ export function useChat() {
             }
         } catch (error) {
             console.error('Failed to fetch provider models:', error)
-            alert(`获取模型失败: ${error.message}`)
+            alert(`Failed to fetch models: ${error.message}`)
         }
     }
 
@@ -557,16 +555,16 @@ export function useChat() {
                 body: JSON.stringify(settings.value)
             })
             if (res.ok) {
-                alert('设置保存成功')
+                alert('Settings saved')
                 showSettingsModal.value = false
-                loadModels() // 重新加载模型列表
+                loadModels()
             } else {
                 const err = await res.json()
-                alert(`保存失败: ${err.detail || '未知错误'}`)
+                alert(`Failed to save settings: ${err.detail || 'Unknown error'}`)
             }
         } catch (error) {
             console.error('Failed to save settings:', error)
-            alert(`保存失败: ${error.message}`)
+            alert(`Failed to save settings: ${error.message}`)
         }
     }
 
@@ -763,7 +761,7 @@ export function useChat() {
                 // Request aborted
             } else {
                 console.error('Chat error:', error)
-                alert('发送消息失败: ' + error.message)
+                alert('Failed to send message: ' + error.message)
             }
         } finally {
             if (abortController.value === requestAbortController) {
@@ -900,7 +898,7 @@ export function useChat() {
             const data = await response.json()
 
             if (data.error) {
-                alert('加载会话失败: ' + data.error)
+                alert('Failed to load chat: ' + data.error)
                 return
             }
 
@@ -1021,7 +1019,7 @@ export function useChat() {
             }
         } catch (error) {
             console.error('Failed to load session:', error)
-            alert('加载会话失败: ' + error.message)
+            alert('Failed to load chat: ' + error.message)
         }
     }
 
