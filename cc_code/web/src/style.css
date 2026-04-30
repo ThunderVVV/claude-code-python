@@ -2,10 +2,8 @@
 @import './styles/foundation/tailwind.css';
 @import './styles/foundation/tokens.css';
 @import './styles/foundation/base.css';
+@import './styles/app/primitives.css';
 @import './styles/app/shell.css';
-@import './styles/app/chat.css';
 @import './styles/app/markdown.css';
-@import './styles/app/composer.css';
 @import './styles/app/overlays.css';
 @import './styles/foundation/utilities.css';
-@import './styles/app/responsive.css';

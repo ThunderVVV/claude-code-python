@@ -26,7 +26,7 @@ cc_code/web/
 │   ├── style.css        # 全局样式入口
 │   ├── styles/          # 分层样式模块
 │   │   ├── foundation/  # vendor / tailwind / tokens / base / utilities
-│   │   └── app/         # shell / chat / markdown / composer / overlays / responsive
+│   │   └── app/         # primitives / shell / markdown / overlays
 │   ├── components/      # Vue 组件
 │   │   └── MessageItem.vue
 │   ├── composables/     # 组合式函数

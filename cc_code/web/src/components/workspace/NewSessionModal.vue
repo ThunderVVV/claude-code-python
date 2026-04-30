@@ -162,3 +162,206 @@ const workspaceBrowserInputValue = computed({
     set: (value) => emit('update:workspaceBrowserInput', value),
 })
 </script>
+
+<style scoped>
+.workspace-toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.workspace-toolbar__actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.workspace-input {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid rgba(59, 66, 82, 0.12);
+    border-radius: var(--radius-sm);
+    background: #ffffff;
+    color: var(--text-strong);
+    padding: 0 10px;
+}
+
+.workspace-input:focus {
+    outline: none;
+    border-color: rgba(155, 128, 96, 0.22);
+    box-shadow: 0 0 0 4px rgba(155, 128, 96, 0.08);
+}
+
+.workspace-root-list {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.workspace-root-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(59, 66, 82, 0.12);
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--text-main);
+    cursor: pointer;
+    transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.workspace-root-pill:hover {
+    background: #f7f3ed;
+    border-color: var(--border-strong);
+}
+
+.workspace-root-pill--active {
+    background: #ddd0bf;
+    color: #4a3d31;
+    border-color: #ddd0bf;
+}
+
+.workspace-current {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xl);
+    background: #ffffff;
+}
+
+.workspace-current__label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+    font-weight: 700;
+}
+
+.workspace-current__path {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.79rem;
+    overflow-wrap: anywhere;
+    color: var(--text-muted);
+    line-height: 1.55;
+}
+
+.workspace-error {
+    margin-top: 8px;
+    color: #991b1b;
+    font-size: 0.9rem;
+}
+
+.workspace-browser {
+    max-height: min(42vh, 420px);
+    overflow-y: auto;
+    padding: 10px 12px 12px;
+    background: #f8fafc;
+}
+
+.workspace-list {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.workspace-browser__empty {
+    min-height: 10rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-main);
+}
+
+.workspace-browser__empty--muted {
+    color: var(--text-muted);
+}
+
+.workspace-entry {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 12px;
+    min-height: 42px;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid rgba(59, 66, 82, 0.08);
+    background: #ffffff;
+    color: inherit;
+    cursor: pointer;
+}
+
+.workspace-entry:last-child {
+    border-bottom: none;
+}
+
+.workspace-entry:hover {
+    background: #f7f7f8;
+}
+
+.workspace-entry__main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+
+.workspace-entry__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    background: #d5c4b1;
+    color: #6f5a45;
+    flex-shrink: 0;
+}
+
+.workspace-entry__title {
+    color: var(--text-strong);
+    font-weight: 700;
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-entry__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+}
+
+.workspace-entry__link {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+@media (max-width: 767px) {
+    .workspace-toolbar,
+    .workspace-toolbar__actions,
+    .modal-toolbar--footer {
+        flex-direction: column;
+    }
+
+    .workspace-toolbar__actions {
+        width: 100%;
+    }
+
+    .workspace-browser {
+        max-height: none;
+        flex: 1;
+    }
+}
+</style>

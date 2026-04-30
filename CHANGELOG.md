@@ -23,6 +23,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Updated Web UI copy in `useChat.js` and `App.vue` from Chinese prompts and alerts to English-language text
 - Enabled Vite dev server access from external hosts and polling file watching in `cc_code/web/vite.config.js` for more reliable development in mounted workspace environments
 
+#### Web UI Componentization Convergence
+- Further decomposed `cc_code/web/src/App.vue` into focused layout and chat view components for sidebar, topbar, conversation, composer, and session list rendering
+- Moved component-private styles into colocated Vue single-file components for message rendering, conversation layout, composer UI, settings management, workspace browsing, and session navigation
+- Added `cc_code/web/src/styles/app/primitives.css` for shared Web UI primitives such as buttons, menus, chips, and dropdown states
+- Reduced the global app stylesheet surface by deleting legacy `chat.css`, `composer.css`, and `responsive.css` layers after migrating their remaining concerns into component styles or shared primitives
+- Consolidated global Web UI styles around `shell.css`, `overlays.css`, `markdown.css`, and foundation styles while keeping diff viewer overrides in `vendor.css`
+- Updated `cc_code/web/README.md` to reflect the converged stylesheet structure
+
 ### Added - 2026-04-30
 
 #### Web UI Session Workspace Picker
