@@ -32,15 +32,18 @@ export function useSessions({
     }
 
     const loadSessions = async () => {
-        sessionsLoading.value = true
         try {
             const response = await fetch('/api/sessions')
             const data = await response.json()
-            sessions.value = data.sessions || []
+            const newSessions = data.sessions || []
+            
+            // 智能更新：只有当数据真正变化时才替换数组，避免不必要的重绘
+            const hasChanged = JSON.stringify(newSessions) !== JSON.stringify(sessions.value)
+            if (hasChanged) {
+                sessions.value = newSessions
+            }
         } catch (error) {
             console.error('Failed to load sessions:', error)
-        } finally {
-            sessionsLoading.value = false
         }
     }
 

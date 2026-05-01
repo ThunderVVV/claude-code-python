@@ -48,9 +48,14 @@
     color: var(--text-main);
 }
 
-.markdown-body ul,
+.markdown-body ul {
+    padding-left: 1.4em;
+    list-style-type: disc;
+}
+
 .markdown-body ol {
     padding-left: 1.4em;
+    list-style-type: decimal;
 }
 
 .markdown-body li {

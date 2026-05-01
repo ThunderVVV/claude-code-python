@@ -84,16 +84,16 @@
     border-collapse: collapse;
     border-spacing: 0;
     position: relative;
-    font-family: 'Menlo', 'Consolas', monospace !important;
-    font-size: 12px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
     line-height: normal;
     margin: 0;
 }
 
 .cc-diff-viewer .d2h-diff-table,
 .cc-diff-viewer .d2h-diff-table * {
-    font-family: 'Menlo', 'Consolas', monospace !important;
-    font-size: 12px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
 }
 
 .cc-diff-viewer .d2h-diff-table tr,
@@ -211,8 +211,8 @@
     border-width: 0 1px !important;
     cursor: pointer;
     direction: rtl;
-    font-family: 'Menlo', 'Consolas', monospace !important;
-    font-size: 12px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
     line-height: normal;
     left: 0;
     z-index: 2;
