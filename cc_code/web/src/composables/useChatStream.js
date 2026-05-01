@@ -183,6 +183,7 @@ export function useChatStream({
             sessionHasUsedWebSearch.value = true
         }
 
+        resetStreamState()
         addToHistory(text)
         messages.value.push(createUserMessage(text))
 
