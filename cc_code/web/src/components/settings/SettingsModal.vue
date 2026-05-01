@@ -243,7 +243,7 @@ onBeforeUnmount(() => {
     padding: 8px;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.64);
+    background: #f8fafc;
 }
 
 .settings-nav__item {
@@ -259,14 +259,14 @@ onBeforeUnmount(() => {
 }
 
 .settings-nav__item:hover {
-    background: #f7f3ed;
+    background: #ffffff;
     border-color: var(--border-strong);
 }
 
 .settings-nav__item--active {
-    background: #ffffff;
-    color: var(--text-strong);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    box-shadow: none;
 }
 
 .settings-content {
@@ -319,13 +319,13 @@ onBeforeUnmount(() => {
 
 .settings-select-trigger:hover {
     border-color: var(--border-interactive);
-    background: #fffdf9;
+    background: #f8fafc;
 }
 
 .settings-select-trigger:focus-visible {
     outline: none;
-    border-color: rgba(155, 128, 96, 0.22);
-    box-shadow: 0 0 0 4px rgba(155, 128, 96, 0.08);
+    border-color: rgba(37, 99, 235, 0.32);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .settings-select-menu {
@@ -413,8 +413,8 @@ onBeforeUnmount(() => {
 
 .settings-inline-input:focus {
     outline: none;
-    border-color: rgba(155, 128, 96, 0.22);
-    box-shadow: 0 0 0 4px rgba(155, 128, 96, 0.08);
+    border-color: rgba(37, 99, 235, 0.32);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .settings-delete {
@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
     justify-content: flex-end;
     padding: 12px 0 0;
     margin-top: 2px;
-    border-top: 1px solid rgba(59, 66, 82, 0.08);
+    border-top: 1px solid var(--border-subtle);
 }
 
 .settings-actions :deep(.primary-action) {
@@ -450,7 +450,7 @@ onBeforeUnmount(() => {
     .settings-nav {
         width: 100%;
         border-right: none;
-        border-bottom: 1px solid rgba(59, 66, 82, 0.08);
+        border-bottom: 1px solid var(--border-subtle);
     }
 }
 </style>

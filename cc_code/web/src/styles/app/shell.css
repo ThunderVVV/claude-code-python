@@ -1,16 +1,16 @@
 .app-shell {
     height: var(--app-height);
     min-height: var(--app-height);
-    padding: 4px;
+    padding: 0;
     overflow: hidden;
 }
 
 .app-frame {
     display: flex;
     width: 100%;
-    height: calc(var(--app-height) - 8px);
-    min-height: calc(var(--app-height) - 8px);
-    gap: 8px;
+    height: var(--app-height);
+    min-height: var(--app-height);
+    gap: 0;
     max-width: none;
     margin: 0 auto;
     overflow: hidden;
@@ -26,14 +26,16 @@
 }
 
 .sidebar-panel {
-    width: 284px;
+    width: 276px;
     height: 100%;
     flex-shrink: 0;
-    border-radius: var(--radius-lg);
-    padding: 10px 10px 10px;
+    border-width: 0 1px 0 0;
+    border-radius: 0;
+    padding: 8px;
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+    background: #f7f9fb;
 }
 
 .welcome-card h2,
@@ -41,14 +43,14 @@
     margin: 0;
     color: var(--text-strong);
     font-family: 'Manrope', var(--font-sans);
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
 }
 
 .sidebar-list {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 2px;
+    padding-right: 0;
 }
 
 .main-panel {
@@ -58,8 +60,10 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    border-radius: var(--radius-lg);
+    border: 0;
+    border-radius: 0;
     overflow: hidden;
+    background: var(--surface-2);
 }
 
 .topbar {
@@ -67,9 +71,9 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
-    padding: 8px 12px;
+    padding: 7px 10px;
     border-bottom: 1px solid var(--border-soft);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(251, 247, 241, 0.9));
+    background: #ffffff;
 }
 
 .modal-close {
@@ -78,11 +82,11 @@
     justify-content: center;
     width: 26px;
     height: 26px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     color: var(--text-muted);
     cursor: pointer;
 }
 
 .modal-close:hover {
-    background: rgba(59, 66, 82, 0.08);
+    background: rgba(15, 23, 42, 0.06);
 }

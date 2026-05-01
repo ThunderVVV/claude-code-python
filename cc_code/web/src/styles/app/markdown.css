@@ -1,6 +1,6 @@
 .markdown-body {
     color: var(--text-main);
-    line-height: 1.72;
+    line-height: 1.66;
 }
 
 .markdown-body h1,
@@ -13,7 +13,7 @@
     line-height: 1.2;
     margin: 0.85em 0 0.28em;
     font-family: 'Manrope', var(--font-sans);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
 }
 
 .markdown-body h1 {
@@ -45,7 +45,7 @@
 }
 
 .markdown-body p {
-    color: #2f3d4f;
+    color: var(--text-main);
 }
 
 .markdown-body ul,
@@ -60,7 +60,7 @@
 .markdown-body :not(pre) > code,
 .tool-result-frame code {
     padding: 0.15em 0.42em;
-    border-radius: 8px;
+    border-radius: var(--radius-xs);
     background: rgba(15, 23, 42, 0.06);
     color: #0f172a;
     white-space: break-spaces;
@@ -71,7 +71,7 @@
     margin: 0.8em 0;
     padding: 1em;
     overflow-x: auto;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border-subtle);
     background: #f8fafc !important;
     color: #0f172a;
@@ -101,7 +101,7 @@
     overflow-x: auto;
     margin: 0.5em 0;
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.8);
 }
 

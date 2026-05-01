@@ -272,12 +272,29 @@
 
 .cc-diff-viewer,
 .cc-diff-viewer .d2h-light-color-scheme {
-    --d2h-bg-color: rgba(255, 255, 255, 0.96);
-    --d2h-border-color: rgba(59, 66, 82, 0.11);
+    --d2h-bg-color: #ffffff;
+    --d2h-border-color: rgba(15, 23, 42, 0.11);
     --d2h-dim-color: rgba(15, 23, 42, 0.4);
-    --d2h-line-border-color: rgba(59, 66, 82, 0.08);
-    --d2h-file-header-bg-color: rgba(248, 250, 252, 0.98);
-    --d2h-file-header-border-color: rgba(59, 66, 82, 0.1);
+    --d2h-line-border-color: rgba(15, 23, 42, 0.08);
+    --d2h-file-header-bg-color: #f8fafc;
+    --d2h-file-header-border-color: rgba(15, 23, 42, 0.1);
     --d2h-empty-placeholder-bg-color: rgba(241, 245, 249, 0.9);
-    --d2h-empty-placeholder-border-color: rgba(59, 66, 82, 0.08);
+    --d2h-empty-placeholder-border-color: rgba(15, 23, 42, 0.08);
+    --d2h-ins-bg-color: #eaf8ef;
+    --d2h-ins-border-color: #b8e2c4;
+    --d2h-ins-highlight-bg-color: #b9f2c7;
+    --d2h-del-bg-color: #fff0f1;
+    --d2h-del-border-color: #f0c2c7;
+    --d2h-del-highlight-bg-color: #ffd0d6;
+}
+
+.cc-diff-viewer .d2h-file-wrapper {
+    margin-bottom: 10px;
+    border-color: var(--d2h-border-color);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.diff-message__header + .cc-diff-viewer .d2h-file-wrapper {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }

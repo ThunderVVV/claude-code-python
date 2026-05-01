@@ -1,7 +1,7 @@
 .eyebrow {
     font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     color: var(--text-faint);
     font-weight: 700;
 }
@@ -21,8 +21,8 @@
     gap: 8px;
     justify-content: center;
     border-radius: var(--radius-sm);
-    padding: 0 14px;
-    min-height: 38px;
+    padding: 0 12px;
+    min-height: 34px;
     font-size: 0.88rem;
     font-weight: 600;
     cursor: pointer;
@@ -30,9 +30,9 @@
 }
 
 .primary-action {
-    background: #d6c7b4;
-    color: #4a3d31;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    background: #1f2937;
+    color: #ffffff;
+    box-shadow: none;
 }
 
 .primary-action:hover,
@@ -53,14 +53,14 @@
 
 .primary-action--compact,
 .secondary-action {
-    min-height: 38px;
+    min-height: 34px;
 }
 
 .secondary-action {
     border: 1px solid var(--border-soft);
-    background: rgba(255, 255, 255, 0.7);
+    background: #ffffff;
     color: var(--text-main);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    box-shadow: none;
 }
 
 .secondary-action--ghost {
@@ -68,30 +68,30 @@
 }
 
 .secondary-action--success {
-    color: #5c4c3c;
-    border-color: rgba(194, 179, 159, 0.22);
-    background: rgba(194, 179, 159, 0.16);
+    color: var(--accent-strong);
+    border-color: var(--border-interactive);
+    background: var(--accent-soft);
 }
 
 .model-pill {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-height: 36px;
+    min-height: 34px;
     padding: 0 12px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-interactive);
-    background: #fefbf8;
+    background: #ffffff;
     color: var(--text-main);
     cursor: pointer;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    box-shadow: none;
 }
 
 .model-pill:hover,
 .status-chip:hover,
 .secondary-action:hover,
 .icon-button:hover {
-    background: #f7f3ed;
+    background: #f8fafc;
     border-color: var(--border-strong);
 }
 
@@ -119,17 +119,17 @@
     align-items: center;
     gap: 10px;
     border-radius: var(--radius-sm);
-    padding: 8px 10px;
+    padding: 7px 9px;
     color: inherit;
     cursor: pointer;
 }
 
 .dropdown-item:hover {
-    background: rgba(193, 173, 148, 0.08);
+    background: rgba(15, 23, 42, 0.04);
 }
 
 .dropdown-item--active {
-    background: rgba(193, 173, 148, 0.12);
+    background: var(--accent-soft-2);
 }
 
 .dropdown-item__title {
@@ -148,7 +148,7 @@
 
 .dropdown-badge {
     border-radius: 999px;
-    background: rgba(193, 173, 148, 0.14);
+    background: var(--accent-soft);
     color: var(--accent-strong);
     padding: 3px 8px;
     font-size: 0.7rem;
@@ -160,11 +160,11 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    min-height: 38px;
-    padding: 0 12px;
+    min-height: 34px;
+    padding: 0 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-soft);
-    background: rgba(255, 255, 255, 0.72);
+    background: #ffffff;
     color: var(--text-main);
     cursor: pointer;
 }
@@ -172,14 +172,14 @@
 .status-chip {
     font-size: 0.8rem;
     font-weight: 600;
-    min-height: 34px;
-    padding: 0 10px;
+    min-height: 30px;
+    padding: 0 9px;
     border-radius: var(--radius-sm);
-    background: #fffefd;
+    background: #ffffff;
 }
 
 .icon-button {
     justify-content: center;
-    min-width: 38px;
+    min-width: 34px;
     padding: 0;
 }

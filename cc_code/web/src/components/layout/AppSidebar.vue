@@ -76,15 +76,16 @@ defineEmits(['open-new-chat', 'select-session', 'open-settings'])
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 4px 6px;
+    padding: 10px 4px 6px;
     color: var(--text-faint);
     font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     font-weight: 700;
 }
 
 .sidebar-footer {
-    padding-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-subtle);
 }
 </style>

@@ -5,7 +5,7 @@
                 <div v-if="messages.length === 0" class="welcome-stage">
                     <div class="welcome-card">
                         <div class="welcome-icon">
-                            <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"></path>
                             </svg>
                         </div>
@@ -71,7 +71,7 @@ defineEmits(['toggle-collapse'])
     flex: 1;
     min-height: 0;
     flex-direction: column;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(252, 248, 242, 0.08));
+    background: #ffffff;
 }
 
 .messages-area {
@@ -87,11 +87,11 @@ defineEmits(['toggle-collapse'])
 }
 
 .conversation-column {
-    padding: 8px 16px 0;
+    padding: 12px 18px 0;
 }
 
 .welcome-stage {
-    padding: 0 0 6px;
+    padding: 8px 0 10px;
     display: flex;
     justify-content: center;
 }
@@ -99,50 +99,54 @@ defineEmits(['toggle-collapse'])
 .welcome-card,
 .typing-bubble {
     border: 1px solid var(--border-soft);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-md);
     background: #ffffff;
 }
 
 .welcome-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 2px;
+    align-items: start;
     max-width: 620px;
     width: 100%;
     margin: 0 auto;
-    padding: 18px 20px;
-    border-color: rgba(155, 128, 96, 0.12);
-    background: #fdfbf7;
-    text-align: center;
+    padding: 14px 16px;
+    border-color: var(--border-subtle);
+    background: #fbfcfe;
+    text-align: left;
 }
 
 .welcome-card h2 {
     margin: 0;
     color: var(--text-strong);
     font-family: 'Manrope', var(--font-sans);
-    font-size: clamp(1.64rem, 2.15vw, 2.2rem);
-    line-height: 1.04;
-    max-width: 13ch;
-    letter-spacing: -0.045em;
+    font-size: 1.08rem;
+    line-height: 1.25;
+    max-width: none;
+    letter-spacing: 0;
 }
 
 .welcome-card > p {
-    max-width: 28rem;
-    margin: 12px auto 0;
-    color: #748094;
+    grid-column: 2;
+    max-width: none;
+    margin: 0;
+    color: var(--text-muted);
     font-size: 0.9rem;
-    line-height: 1.5;
+    line-height: 1.45;
 }
 
 .welcome-icon {
     display: grid;
     place-items: center;
-    width: 52px;
-    height: 52px;
-    margin: 0 auto 16px;
-    border-radius: 16px;
-    color: white;
-    background: linear-gradient(135deg, #ddd1c1, #c2ad92);
+    width: 34px;
+    height: 34px;
+    grid-row: span 2;
+    margin: 1px 0 0;
+    border-radius: var(--radius-sm);
+    color: var(--accent-strong);
+    background: var(--accent-soft);
 }
 
 .typing-row {
@@ -165,11 +169,11 @@ defineEmits(['toggle-collapse'])
 }
 
 .typing-bubble {
-    padding: 12px 14px;
+    padding: 9px 11px;
 }
 
 .typing-indicator span {
-    background: rgba(155, 128, 96, 0.4);
+    background: rgba(100, 116, 139, 0.5);
     animation: blink 1.4s infinite both;
 }
 
@@ -190,16 +194,16 @@ defineEmits(['toggle-collapse'])
 
 @media (max-width: 767px) {
     .conversation-column {
-        padding: 20px 14px 12px;
+        padding: 14px 14px 12px;
     }
 
     .welcome-card {
-        padding: 22px;
+        padding: 14px;
     }
 
     .welcome-card h2 {
         max-width: none;
-        font-size: 2rem;
+        font-size: 1.05rem;
     }
 
     .typing-row {

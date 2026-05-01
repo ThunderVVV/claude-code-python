@@ -104,7 +104,7 @@ defineEmits([
 .topbar-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
     flex-wrap: wrap;
 }
@@ -119,8 +119,8 @@ defineEmits([
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-strong);
-    font-weight: 700;
-    letter-spacing: -0.015em;
+    font-weight: 650;
+    letter-spacing: 0;
 }
 
 .model-pill__chevron {
@@ -131,14 +131,14 @@ defineEmits([
 .topbar-sidebar-toggle {
     min-width: 36px;
     min-height: 36px;
-    border-color: var(--border-interactive);
-    background: #fffdf9;
+    border-color: var(--border-soft);
+    background: #ffffff;
     color: #5f6b7c;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    box-shadow: none;
 }
 
 .topbar-sidebar-toggle:hover {
-    background: #f8f3ec;
+    background: #f8fafc;
     color: var(--text-strong);
 }
 

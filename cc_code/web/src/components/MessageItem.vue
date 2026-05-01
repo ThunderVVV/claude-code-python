@@ -35,7 +35,7 @@
                                     <div class="tool-summary">{{ block.summary }}</div>
                                     <div class="tool-subtitle">
                                         <span :class="['tool-state', block.result ? (block.isError ? 'tool-state--error' : 'tool-state--success') : 'tool-state--pending']"></span>
-                                        {{ block.result ? (block.isError ? 'Failed' : 'Completed') : 'Waiting for result' }}
+                                        {{ block.result ? (block.isError ? 'Failed' : 'Done') : 'Running' }}
                                     </div>
                                 </div>
                             </div>
@@ -58,6 +58,10 @@
     </div>
 
     <div v-else-if="message.type === 'diff'" class="diff-message fade-in">
+        <div class="diff-message__header">
+            <span class="diff-message__label">Diff</span>
+            <span class="diff-message__path">{{ message.filePath }}</span>
+        </div>
         <div :id="message.diffId" class="cc-diff-viewer"></div>
     </div>
 </template>
@@ -134,8 +138,8 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 <style scoped>
 .message-row {
     display: flex;
-    gap: 12px;
-    margin-bottom: 8px;
+    gap: 10px;
+    margin-bottom: 7px;
     min-width: 0;
 }
 
@@ -152,10 +156,10 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 }
 
 .message-user-bubble {
-    padding: 10px 13px;
-    border-radius: var(--radius-md) var(--radius-md) 9px var(--radius-md);
-    background: #f7f2eb;
-    border: 1px solid var(--border-interactive);
+    padding: 8px 11px;
+    border-radius: var(--radius-md);
+    background: #eef6ff;
+    border: 1px solid rgba(37, 99, 235, 0.16);
 }
 
 .message-user-bubble p {
@@ -171,9 +175,10 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
     place-items: center;
     width: 28px;
     height: 28px;
-    border-radius: 11px;
-    color: white;
-    background: #b89f81;
+    border-radius: var(--radius-sm);
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid var(--border-subtle);
     flex-shrink: 0;
 }
 
@@ -194,16 +199,16 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 
 .text-container {
     font-size: 0.95rem;
-    line-height: 1.68;
-    color: #2f3d4f;
+    line-height: 1.64;
+    color: var(--text-main);
 }
 
 .thinking-block {
     position: relative;
-    padding: 9px 11px 9px 13px;
-    border-left: 2px solid rgba(194, 179, 159, 0.28);
-    border-radius: 0 14px 14px 0;
-    background: rgba(194, 179, 159, 0.09);
+    padding: 8px 10px 8px 12px;
+    border-left: 2px solid rgba(100, 116, 139, 0.24);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    background: #f8fafc;
 }
 
 .thinking-block__body {
@@ -215,25 +220,37 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 }
 
 .tool-block {
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border-soft);
-    background: #fffefd;
+    border-left-width: 3px;
+    background: #ffffff;
     overflow: hidden;
 }
 
 .tool-block--pending {
     border-color: rgba(15, 23, 42, 0.1);
+    border-left-color: #94a3b8;
 }
 
 .tool-block--error {
     border-color: rgba(220, 38, 38, 0.18);
+    border-left-color: var(--danger);
 }
 
-.tool-block--read,
-.tool-block--patch,
-.tool-block--run,
+.tool-block--read {
+    border-left-color: #64748b;
+}
+
+.tool-block--patch {
+    border-left-color: var(--success);
+}
+
+.tool-block--run {
+    border-left-color: var(--accent);
+}
+
 .tool-block--search {
-    background: #ffffff;
+    border-left-color: var(--warning);
 }
 
 .tool-header {
@@ -241,18 +258,18 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     cursor: pointer;
 }
 
 .tool-header:hover {
-    background: #fbf8f3;
+    background: #f8fafc;
 }
 
 .tool-header__main {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 9px;
     min-width: 0;
     flex: 1;
 }
@@ -262,16 +279,16 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
     align-items: center;
     justify-content: center;
     min-width: 52px;
-    height: 24px;
-    border-radius: 999px;
-    padding: 0 8px;
+    height: 22px;
+    border-radius: var(--radius-xs);
+    padding: 0 7px;
     font-size: 0.64rem;
     font-weight: 800;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
 }
 
 .tool-badge--read {
-    background: rgba(194, 179, 159, 0.15);
+    background: #f1f5f9;
     color: #4f5b6c;
 }
 
@@ -281,8 +298,8 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 }
 
 .tool-badge--run {
-    background: rgba(194, 179, 159, 0.15);
-    color: #6f5a45;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
 }
 
 .tool-badge--search {
@@ -303,8 +320,9 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 
 .tool-summary {
     color: var(--text-strong);
-    font-weight: 680;
-    line-height: 1.35;
+    font-size: 0.88rem;
+    font-weight: 650;
+    line-height: 1.3;
     overflow-wrap: anywhere;
 }
 
@@ -313,7 +331,7 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
     align-items: center;
     gap: 7px;
     margin-top: 2px;
-    color: #667487;
+    color: var(--text-muted);
     font-size: 0.74rem;
 }
 
@@ -345,7 +363,7 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 .collapsible-content.expanded {
     max-height: 5000px;
     overflow: visible;
-    border-top: 1px solid rgba(194, 179, 159, 0.12);
+    border-top: 1px solid var(--border-subtle);
 }
 
 .collapse-icon {
@@ -359,20 +377,20 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 }
 
 .tool-result-frame {
-    margin: 0 12px 12px;
-    padding: 10px 11px;
+    margin: 0 10px 10px;
+    padding: 9px 10px;
     overflow-x: auto;
     white-space: pre-wrap;
-    background: #fbf9f5;
+    background: #f8fafc;
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-xs);
     color: #243041;
-    line-height: 1.6;
+    line-height: 1.52;
 }
 
 .error-block {
-    padding: 14px 16px;
-    border-radius: 18px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
     border: 1px solid rgba(220, 38, 38, 0.16);
     background: rgba(220, 38, 38, 0.08);
     color: #991b1b;
@@ -381,7 +399,44 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 .diff-message {
     width: 100%;
     min-width: 0;
-    padding: 0 0 4px 40px;
+    padding: 0 0 8px 38px;
+}
+
+.diff-message__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 30px;
+    padding: 0 9px;
+    border: 1px solid var(--border-soft);
+    border-bottom: 0;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    background: #f8fafc;
+}
+
+.diff-message__label {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: var(--radius-xs);
+    background: rgba(15, 159, 110, 0.1);
+    color: var(--success);
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.diff-message__path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
 }
 
 @media (max-width: 767px) {

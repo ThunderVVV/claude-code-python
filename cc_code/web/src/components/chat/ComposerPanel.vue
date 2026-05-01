@@ -222,9 +222,10 @@ const toggleWebSearch = () => {
 
 <style scoped>
 .composer-shell {
-    padding: 0 16px 10px;
-    margin-top: -1px;
-    background: transparent;
+    padding: 8px 16px 8px;
+    margin-top: 0;
+    border-top: 1px solid var(--border-soft);
+    background: #fbfcfe;
 }
 
 .chat-container {
@@ -233,12 +234,11 @@ const toggleWebSearch = () => {
 }
 
 .composer-panel {
-    border: 1px solid rgba(143, 122, 100, 0.18);
-    border-radius: var(--radius-md) var(--radius-md) var(--radius-lg) var(--radius-lg);
-    padding: 8px 10px 9px;
-    background: linear-gradient(180deg, #fffefb, #fcf8f1);
-    box-shadow: var(--shadow-panel);
-    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    padding: 7px 8px 8px;
+    background: #ffffff;
+    box-shadow: none;
 }
 
 .composer-input {
@@ -246,12 +246,12 @@ const toggleWebSearch = () => {
     resize: none;
     border: none;
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.84);
+    background: #ffffff;
     color: #233042;
-    padding: 10px 12px;
+    padding: 9px 10px;
     font-size: 0.96rem;
     line-height: 1.5;
-    box-shadow: inset 0 0 0 1px rgba(59, 66, 82, 0.07);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
 }
 
 .composer-input::placeholder {
@@ -260,17 +260,17 @@ const toggleWebSearch = () => {
 
 .composer-input:focus {
     outline: none;
-    box-shadow: inset 0 0 0 1px rgba(143, 122, 100, 0.16), 0 0 0 3px rgba(194, 179, 159, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.35), 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .composer-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    padding-top: 8px;
+    gap: 8px;
+    padding-top: 7px;
     margin-top: 6px;
-    border-top: 1px solid rgba(59, 66, 82, 0.08);
+    border-top: 1px solid var(--border-subtle);
 }
 
 .composer-footer__left {
@@ -285,11 +285,11 @@ const toggleWebSearch = () => {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    min-height: 34px;
-    padding: 0 11px;
-    border-radius: 999px;
+    min-height: 30px;
+    padding: 0 9px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border-subtle);
-    background: rgba(255, 255, 255, 0.96);
+    background: #ffffff;
     color: var(--text-main);
     font-size: 0.78rem;
     font-weight: 700;
@@ -297,9 +297,9 @@ const toggleWebSearch = () => {
 }
 
 .feature-toggle--active {
-    border-color: rgba(194, 179, 159, 0.16);
-    background: #f4ede5;
-    color: var(--text-strong);
+    border-color: var(--border-interactive);
+    background: var(--accent-soft);
+    color: var(--accent-strong);
 }
 
 .send-button,
@@ -307,17 +307,17 @@ const toggleWebSearch = () => {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    min-height: 40px;
-    padding: 0 15px;
+    min-height: 34px;
+    padding: 0 12px;
     border-radius: var(--radius-sm);
     font-weight: 700;
     cursor: pointer;
 }
 
 .send-button {
-    background: linear-gradient(135deg, #cdb79c, #b99f81);
-    color: #fffdf9;
-    box-shadow: 0 10px 20px rgba(143, 122, 100, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    background: var(--accent);
+    color: #ffffff;
+    box-shadow: none;
 }
 
 .stop-button {
@@ -343,7 +343,7 @@ const toggleWebSearch = () => {
 }
 
 .composer-status-group :deep(.status-chip) {
-    background: #fffdfa;
+    background: #ffffff;
 }
 
 .meta-popover {
@@ -360,7 +360,7 @@ const toggleWebSearch = () => {
     justify-content: space-between;
     gap: 8px;
     padding: 10px 10px 8px;
-    border-bottom: 1px solid rgba(59, 66, 82, 0.08);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .meta-popover__header span {
@@ -380,13 +380,13 @@ const toggleWebSearch = () => {
     justify-content: center;
     width: 26px;
     height: 26px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     color: var(--text-muted);
     cursor: pointer;
 }
 
 .meta-popover__close:hover {
-    background: rgba(59, 66, 82, 0.08);
+    background: rgba(15, 23, 42, 0.06);
 }
 
 .token-popover-body {
@@ -411,9 +411,9 @@ const toggleWebSearch = () => {
 
 .token-meter {
     width: 100%;
-    height: 8px;
+    height: 6px;
     border-radius: 999px;
-    background: rgba(155, 128, 96, 0.14);
+    background: rgba(15, 23, 42, 0.08);
     overflow: hidden;
     margin-top: 4px;
 }
@@ -421,7 +421,7 @@ const toggleWebSearch = () => {
 .token-meter__fill {
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #d5c4b1, #b89f81);
+    background: var(--accent);
 }
 
 @media (max-width: 1024px) {
@@ -448,8 +448,8 @@ const toggleWebSearch = () => {
     }
 
     .composer-panel {
-        border-radius: 22px;
-        padding: 12px 14px 14px;
+        border-radius: var(--radius-md);
+        padding: 9px 10px 10px;
     }
 
     .composer-input {

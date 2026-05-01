@@ -188,8 +188,8 @@ const workspaceBrowserInputValue = computed({
 
 .workspace-input:focus {
     outline: none;
-    border-color: rgba(155, 128, 96, 0.22);
-    box-shadow: 0 0 0 4px rgba(155, 128, 96, 0.08);
+    border-color: rgba(37, 99, 235, 0.32);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .workspace-root-list {
@@ -205,37 +205,37 @@ const workspaceBrowserInputValue = computed({
     justify-content: center;
     min-height: 30px;
     padding: 0 10px;
-    border-radius: 999px;
+    border-radius: var(--radius-sm);
     border: 1px solid rgba(59, 66, 82, 0.12);
-    background: rgba(255, 255, 255, 0.7);
+    background: #ffffff;
     color: var(--text-main);
     cursor: pointer;
     transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .workspace-root-pill:hover {
-    background: #f7f3ed;
+    background: #f8fafc;
     border-color: var(--border-strong);
 }
 
 .workspace-root-pill--active {
-    background: #ddd0bf;
-    color: #4a3d31;
-    border-color: #ddd0bf;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    border-color: var(--border-interactive);
 }
 
 .workspace-current {
     margin-top: 8px;
     padding: 10px 12px;
     border: 1px solid var(--border-soft);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-sm);
     background: #ffffff;
 }
 
 .workspace-current__label {
     font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     color: var(--text-faint);
     font-weight: 700;
 }
@@ -291,7 +291,7 @@ const workspaceBrowserInputValue = computed({
     min-height: 42px;
     border-radius: 0;
     border: none;
-    border-bottom: 1px solid rgba(59, 66, 82, 0.08);
+    border-bottom: 1px solid var(--border-subtle);
     background: #ffffff;
     color: inherit;
     cursor: pointer;
@@ -319,9 +319,9 @@ const workspaceBrowserInputValue = computed({
     justify-content: center;
     width: 24px;
     height: 24px;
-    border-radius: 7px;
-    background: #d5c4b1;
-    color: #6f5a45;
+    border-radius: var(--radius-xs);
+    background: var(--accent-soft);
+    color: var(--accent-strong);
     flex-shrink: 0;
 }
 

@@ -20,12 +20,12 @@
     position: relative;
     z-index: 1;
     width: min(82vw, 332px);
-    margin: 10px;
-    padding: 14px;
-    border-radius: var(--radius-lg);
+    margin: 8px;
+    padding: 12px;
+    border-radius: var(--radius-md);
     display: flex;
     flex-direction: column;
-    min-height: calc(100% - 20px);
+    min-height: calc(100% - 16px);
 }
 
 .mobile-sidebar__header {
@@ -51,7 +51,7 @@
     position: relative;
     z-index: 1;
     width: min(92vw, 980px);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     overflow: hidden;
 }
 
@@ -76,13 +76,13 @@
     justify-content: space-between;
     gap: 12px;
     padding: 12px 14px;
-    border-bottom: 1px solid rgba(59, 66, 82, 0.08);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .modal-toolbar--footer {
     align-items: center;
     border-bottom: none;
-    border-top: 1px solid rgba(59, 66, 82, 0.08);
+    border-top: 1px solid var(--border-subtle);
 }
 
 .modal-title-group p {
@@ -94,7 +94,7 @@
 
 .modal-section {
     padding: 12px 14px;
-    border-bottom: 1px solid rgba(59, 66, 82, 0.08);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 @media (max-width: 767px) {
