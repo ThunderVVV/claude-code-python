@@ -8,7 +8,7 @@
 1. 此项目仅用于个人探究 CC Code 基本工具调用原理、系统提示词、工具提示词设计，仅用于个人学习，不保证更新和维护。
 2. 此项目的部分前端组件(例如代码diff view)来源于 [toad](https://github.com/batrachianai/toad)，也是一个Python AI TUI。
 
-`cc-py` 是根据 CC Code 提示词构建的 Python AI 编程终端，当前聚焦核心 agent 能力：Agent核心循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具，以及与上游保持一致的提示词和交互语义，其他高级特性（例如skills系统或其他高级特性）暂不考虑。
+`cc-py` 是根据 CC Code 提示词构建的 Python AI 编程终端，提供完整的 agent 能力：Agent核心循环、OpenAI 兼容 `/v1/chat/completions`、基础文件与 shell 工具、完整的 Skills 系统，以及与上游保持一致的提示词和交互语义。
 
 
 <table>
@@ -36,7 +36,8 @@
 - **TUI交互界面**：基于 Textual 的现代化终端用户界面
 - **流式响应**：支持流式响应、工具调用、工具结果回填
 - **OpenAI 兼容**：使用官方 OpenAI Python SDK，支持所有 OpenAI 兼容的 API
-- **工具集**：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`
+- **工具集**：`Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`、`Skill`
+- **完整 Skills 系统**：支持用户自定义 skill，从多个位置加载（用户目录、项目目录等），支持 YAML frontmatter 配置、条件加载、别名等特性
 - **系统提示词对齐**：与 TypeScript 版本保持一致的系统提示词和工具描述
 - **HTTP 前后端统一**：`cc-api` 同时提供 API 和浏览器界面，`cc-py` 通过 HTTP 连接
 
@@ -51,7 +52,7 @@
 - **文件引用扩展**：支持 `@file_path` 语法在消息中引用文件内容，自动展开并显示
 - **@web 搜索**：支持 `@web` 语法触发 Web 搜索能力（需配置 tavily skills，详见下方说明）
 
-### 浏览器界面特性 (实验)
+### 浏览器界面特性
 - **现代化浏览器界面**：由 `cc-api` 提供的 Vue + FastAPI 响应式界面
 - **Markdown 渲染**：支持完整的 Markdown 语法渲染，代码高亮显示
 - **流式响应**：实时显示 AI 响应流，支持流式输出
@@ -123,7 +124,7 @@ cc-py          # npm 安装
 cc-py-dev      # pip 开发安装
 ```
 
-### 浏览器界面模式（实验特性）
+### 浏览器界面模式
 
 启动 API 服务器，访问 http://localhost:8000/：
 
@@ -244,29 +245,93 @@ cc-py-dev --debug      # pip 开发安装
         - `model_name`：模型的实际名称（API 调用时使用）
         - `context`：模型的上下文窗口大小
 
-## 可选 Skills（@web 搜索功能）
+## Skills 系统
 
-项目支持 `@web` 语法触发 Web 搜索能力。此功能通过解析 `~/.claude/skills/` 目录下的 skill 文件实现，将搜索提示附加到输入消息中。
+项目支持完整的 Skills 系统，Skills 是用户定义的提示词扩展，提供专门的功能和领域知识。
 
-如需使用 `@web` Web 搜索功能，需准备以下 skills：
+### Skill 加载位置
 
-1. **tavily-search** - Web 搜索能力
-2. **tavily-extract** - Web 内容提取能力
+Skills 从以下位置按优先级加载（优先级从高到低）：
 
-安装方式：在用户主目录创建 `~/.claude/skills/` 目录，并将 skill 文件放入其中：
+1. **项目目录**：当前工作目录及上级目录的 `.claude/skills/`
+2. **用户目录**：`~/.claude/skills/`
+3. **托管/策略路径**：`~/.claude/.claude/skills/`
+4. **遗留命令目录**：`.claude/commands/`（向后兼容）
+
+### Skill 目录结构
+
+每个 Skill 是一个包含 `SKILL.md` 文件的目录：
 
 ```
 ~/.claude/
 └── skills/
-    ├── tavily-search/
+    ├── my-skill/
     │   └── SKILL.md
-    └── tavily-extract/
+    └── another-skill/
         └── SKILL.md
 ```
 
-> 注：
-> - skills 需要自行获取或编写，本项目不包含这些文件
-> - 本项目不支持完整的 skills 系统，仅通过解析固定路径的 `SKILL.md` 文件实现 @web 功能
+### SKILL.md 格式
+
+Skill 文件支持 YAML frontmatter 配置：
+
+```markdown
+---
+name: My Skill
+description: 我的自定义技能描述
+when_to_use: 当用户需要执行特定任务时使用
+arguments: [arg1, arg2]
+argument-hint: "<arg1> [arg2]"
+aliases: [my, ms]
+allowed-tools: [Read, Write]
+model: gpt-4
+paths: ["src/**", "*.py"]
+disable-model-invocation: false
+user-invocable: true
+---
+
+# My Skill
+
+这是 skill 的主要内容，支持 $ARGUMENTS 和 $ARG1、$ARG2 等参数替换。
+
+技能说明...
+```
+
+### Frontmatter 配置项
+
+| 配置项 | 说明 |
+|--------|------|
+| `name` | 技能显示名称 |
+| `description` | 技能描述 |
+| `when_to_use` | 何时使用该技能的说明 |
+| `arguments` | 参数名称列表 |
+| `argument-hint` | 参数使用提示 |
+| `aliases` | 别名列表 |
+| `allowed-tools` | 该技能允许使用的工具 |
+| `model` | 指定使用的模型 |
+| `paths` | 条件加载路径模式，匹配时自动激活 |
+| `disable-model-invocation` | 禁止模型直接调用 |
+| `user-invocable` | 用户可直接调用 |
+
+### Skill 使用方式
+
+1. **用户直接调用**：在对话中输入 `/skill_name args`
+2. **模型自动调用**：当任务匹配技能时，模型会自动调用 Skill 工具
+3. **条件激活**：当打开匹配 `paths` 模式的文件时自动加载
+
+### 示例：Web 搜索 Skill
+
+如需使用 `@web` 语法或 `/tavily-search` 等 Web 搜索能力，可以添加以下 skills：
+
+```
+~/.claude/skills/
+├── tavily-search/
+│   └── SKILL.md
+└── tavily-extract/
+    └── SKILL.md
+```
+
+> 注：skills 需要自行获取或编写，本项目不包含这些文件
 
 ## 架构说明
 
