@@ -324,8 +324,8 @@ onBeforeUnmount(() => {
 
 .settings-select-trigger:focus-visible {
     outline: none;
-    border-color: rgba(37, 99, 235, 0.32);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .settings-select-menu {
@@ -413,8 +413,8 @@ onBeforeUnmount(() => {
 
 .settings-inline-input:focus {
     outline: none;
-    border-color: rgba(37, 99, 235, 0.32);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+    border-color: var(--accent);
+    box-shadow: none;
 }
 
 .settings-delete {

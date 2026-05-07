@@ -24,7 +24,7 @@
                 <div v-if="isTyping" class="typing-row fade-in">
                     <div class="typing-avatar">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M4 13h16M6 17h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v9a2 2 0 002 2z"></path>
                         </svg>
                     </div>
                     <div class="typing-bubble">
@@ -162,9 +162,10 @@ defineEmits(['toggle-collapse'])
     place-items: center;
     width: 28px;
     height: 28px;
-    border-radius: 11px;
-    color: white;
-    background: #c6b098;
+    border-radius: var(--radius-sm);
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid var(--border-subtle);
     flex-shrink: 0;
 }
 

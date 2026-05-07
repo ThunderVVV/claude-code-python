@@ -260,7 +260,6 @@ const toggleWebSearch = () => {
 
 .composer-input:focus {
     outline: none;
-    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.35), 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .composer-footer {

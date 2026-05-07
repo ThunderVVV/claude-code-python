@@ -80,7 +80,7 @@
     min-height: 34px;
     padding: 0 12px;
     border-radius: var(--radius-sm);
-    border: 1px solid var(--border-interactive);
+    border: 1px solid var(--border-soft);
     background: #ffffff;
     color: var(--text-main);
     cursor: pointer;

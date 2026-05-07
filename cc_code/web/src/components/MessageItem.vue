@@ -158,8 +158,7 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 .message-user-bubble {
     padding: 8px 11px;
     border-radius: var(--radius-md);
-    background: #eef6ff;
-    border: 1px solid rgba(37, 99, 235, 0.16);
+    background: var(--accent-soft);
 }
 
 .message-user-bubble p {
@@ -357,13 +356,14 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
 .collapsible-content {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease-out;
+    border-top: 1px solid transparent;
+    transition: max-height 0.3s ease-out, border-top-color 0.3s ease-out;
 }
 
 .collapsible-content.expanded {
     max-height: 5000px;
-    overflow: visible;
-    border-top: 1px solid var(--border-subtle);
+    overflow: hidden;
+    border-top-color: var(--border-subtle);
 }
 
 .collapse-icon {
@@ -381,9 +381,6 @@ watch(() => props.message, renderDiffBlock, { deep: true, immediate: true })
     padding: 9px 10px;
     overflow-x: auto;
     white-space: pre-wrap;
-    background: #f8fafc;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-xs);
     color: #243041;
     line-height: 1.52;
 }

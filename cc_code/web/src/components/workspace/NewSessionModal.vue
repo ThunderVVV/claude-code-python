@@ -188,8 +188,8 @@ const workspaceBrowserInputValue = computed({
 
 .workspace-input:focus {
     outline: none;
-    border-color: rgba(37, 99, 235, 0.32);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+    border-color: var(--accent);
+    box-shadow: none;
 }
 
 .workspace-root-list {
